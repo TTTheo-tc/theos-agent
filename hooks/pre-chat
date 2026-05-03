@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Pre-chat hook: run reflex.js to activate relevant cognitive domains
+# Input (stdin): user message
+# Output (stdout): injected as hidden [🧠 Instinct] context before LLM call
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REFLEX="$REPO_ROOT/instinct/scripts/reflex.js"
+
+if [ ! -f "$REFLEX" ]; then
+  exit 0
+fi
+
+USER_MSG=$(cat)
+node "$REFLEX" "$USER_MSG"

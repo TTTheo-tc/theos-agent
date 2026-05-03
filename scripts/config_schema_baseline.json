@@ -1,0 +1,2051 @@
+{
+  "$defs": {
+    "AgentDefaults": {
+      "description": "Default agent configuration.",
+      "properties": {
+        "failoverModels": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Failovermodels",
+          "type": "array"
+        },
+        "maxTokens": {
+          "default": 16384,
+          "title": "Maxtokens",
+          "type": "integer"
+        },
+        "maxToolIterations": {
+          "default": 60,
+          "title": "Maxtooliterations",
+          "type": "integer"
+        },
+        "memoryWindow": {
+          "default": 100,
+          "title": "Memorywindow",
+          "type": "integer"
+        },
+        "model": {
+          "default": "anthropic/claude-opus-4-5",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "default": "auto",
+          "title": "Provider",
+          "type": "string"
+        },
+        "temperature": {
+          "default": 0.1,
+          "title": "Temperature",
+          "type": "number"
+        },
+        "workspace": {
+          "default": "~/.theos/workspace",
+          "title": "Workspace",
+          "type": "string"
+        }
+      },
+      "title": "AgentDefaults",
+      "type": "object"
+    },
+    "AgentRoleConfig": {
+      "description": "Configuration for a specialized agent role.",
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "isolation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Isolation"
+        },
+        "maxIterations": {
+          "default": 60,
+          "title": "Maxiterations",
+          "type": "integer"
+        },
+        "model": {
+          "default": "",
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt": {
+          "default": "",
+          "title": "Prompt",
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeoutseconds"
+        },
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "title": "AgentRoleConfig",
+      "type": "object"
+    },
+    "AgentsConfig": {
+      "description": "Agent configuration.",
+      "properties": {
+        "defaults": {
+          "$ref": "#/$defs/AgentDefaults"
+        },
+        "genver": {
+          "$ref": "#/$defs/GenVerConfig"
+        },
+        "mode": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "single",
+            "team",
+            "genver"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "orchestrator": {
+          "$ref": "#/$defs/OrchestratorConfig"
+        },
+        "reflector": {
+          "$ref": "#/$defs/ReflectorConfig"
+        },
+        "roles": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AgentRoleConfig"
+          },
+          "title": "Roles",
+          "type": "object"
+        },
+        "subagents": {
+          "$ref": "#/$defs/SubagentPolicyConfig"
+        }
+      },
+      "title": "AgentsConfig",
+      "type": "object"
+    },
+    "ApprovalGateConfig": {
+      "description": "Human escape-hatch approval gate configuration.",
+      "properties": {
+        "autoApprove": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Autoapprove",
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "timeoutSeconds": {
+          "default": 300,
+          "title": "Timeoutseconds",
+          "type": "integer"
+        }
+      },
+      "title": "ApprovalGateConfig",
+      "type": "object"
+    },
+    "AutonomyConfig": {
+      "description": "Autonomy level and guardrails for agent tool execution.",
+      "properties": {
+        "allowedCommands": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowedcommands",
+          "type": "array"
+        },
+        "alwaysAsk": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Alwaysask",
+          "type": "array"
+        },
+        "autoApprove": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Autoapprove",
+          "type": "array"
+        },
+        "forbiddenPaths": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Forbiddenpaths",
+          "type": "array"
+        },
+        "level": {
+          "$ref": "#/$defs/AutonomyLevel",
+          "default": "supervised"
+        },
+        "maxActionsPerHour": {
+          "default": 0,
+          "title": "Maxactionsperhour",
+          "type": "integer"
+        },
+        "maxCostPerDay": {
+          "default": 0.0,
+          "title": "Maxcostperday",
+          "type": "number"
+        },
+        "workspaceOnly": {
+          "default": true,
+          "title": "Workspaceonly",
+          "type": "boolean"
+        }
+      },
+      "title": "AutonomyConfig",
+      "type": "object"
+    },
+    "AutonomyLevel": {
+      "enum": [
+        "readonly",
+        "supervised",
+        "full"
+      ],
+      "title": "AutonomyLevel",
+      "type": "string"
+    },
+    "BrowserConfig": {
+      "description": "Browser automation tool configuration.",
+      "properties": {
+        "actionTimeoutMs": {
+          "default": 30000,
+          "title": "Actiontimeoutms",
+          "type": "integer"
+        },
+        "allowedDomains": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Alloweddomains",
+          "type": "array"
+        },
+        "defaultViewportHeight": {
+          "default": 720,
+          "title": "Defaultviewportheight",
+          "type": "integer"
+        },
+        "defaultViewportWidth": {
+          "default": 1280,
+          "title": "Defaultviewportwidth",
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "navigateTimeoutMs": {
+          "default": 60000,
+          "title": "Navigatetimeoutms",
+          "type": "integer"
+        }
+      },
+      "title": "BrowserConfig",
+      "type": "object"
+    },
+    "ChannelsConfig": {
+      "description": "Configuration for chat channels.",
+      "properties": {
+        "dingtalk": {
+          "$ref": "#/$defs/DingTalkConfig"
+        },
+        "discord": {
+          "$ref": "#/$defs/DiscordConfig"
+        },
+        "email": {
+          "$ref": "#/$defs/EmailConfig"
+        },
+        "feishu": {
+          "$ref": "#/$defs/FeishuConfig"
+        },
+        "matrix": {
+          "$ref": "#/$defs/MatrixConfig"
+        },
+        "mochat": {
+          "$ref": "#/$defs/MochatConfig"
+        },
+        "ownerIds": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Ownerids",
+          "type": "array"
+        },
+        "qq": {
+          "$ref": "#/$defs/QQConfig"
+        },
+        "sendProgress": {
+          "default": true,
+          "title": "Sendprogress",
+          "type": "boolean"
+        },
+        "sendToolHints": {
+          "default": false,
+          "title": "Sendtoolhints",
+          "type": "boolean"
+        },
+        "slack": {
+          "$ref": "#/$defs/SlackConfig"
+        },
+        "telegram": {
+          "$ref": "#/$defs/TelegramConfig"
+        },
+        "whatsapp": {
+          "$ref": "#/$defs/WhatsAppConfig"
+        }
+      },
+      "title": "ChannelsConfig",
+      "type": "object"
+    },
+    "DingTalkConfig": {
+      "description": "DingTalk channel configuration using Stream mode.",
+      "properties": {
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "clientId": {
+          "default": "",
+          "title": "Clientid",
+          "type": "string"
+        },
+        "clientSecret": {
+          "default": "",
+          "title": "Clientsecret",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "DingTalkConfig",
+      "type": "object"
+    },
+    "DiscordConfig": {
+      "description": "Discord channel configuration.",
+      "properties": {
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "gatewayUrl": {
+          "default": "wss://gateway.discord.gg/?v=10&encoding=json",
+          "title": "Gatewayurl",
+          "type": "string"
+        },
+        "intents": {
+          "default": 37377,
+          "title": "Intents",
+          "type": "integer"
+        },
+        "token": {
+          "default": "",
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "title": "DiscordConfig",
+      "type": "object"
+    },
+    "EmailConfig": {
+      "description": "Email channel configuration (IMAP inbound + SMTP outbound).",
+      "properties": {
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "autoReplyEnabled": {
+          "default": true,
+          "title": "Autoreplyenabled",
+          "type": "boolean"
+        },
+        "consentGranted": {
+          "default": false,
+          "title": "Consentgranted",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "fromAddress": {
+          "default": "",
+          "title": "Fromaddress",
+          "type": "string"
+        },
+        "imapHost": {
+          "default": "",
+          "title": "Imaphost",
+          "type": "string"
+        },
+        "imapMailbox": {
+          "default": "INBOX",
+          "title": "Imapmailbox",
+          "type": "string"
+        },
+        "imapPassword": {
+          "default": "",
+          "title": "Imappassword",
+          "type": "string"
+        },
+        "imapPort": {
+          "default": 993,
+          "title": "Imapport",
+          "type": "integer"
+        },
+        "imapUseSsl": {
+          "default": true,
+          "title": "Imapusessl",
+          "type": "boolean"
+        },
+        "imapUsername": {
+          "default": "",
+          "title": "Imapusername",
+          "type": "string"
+        },
+        "markSeen": {
+          "default": true,
+          "title": "Markseen",
+          "type": "boolean"
+        },
+        "maxBodyChars": {
+          "default": 12000,
+          "title": "Maxbodychars",
+          "type": "integer"
+        },
+        "pollIntervalSeconds": {
+          "default": 30,
+          "title": "Pollintervalseconds",
+          "type": "integer"
+        },
+        "smtpHost": {
+          "default": "",
+          "title": "Smtphost",
+          "type": "string"
+        },
+        "smtpPassword": {
+          "default": "",
+          "title": "Smtppassword",
+          "type": "string"
+        },
+        "smtpPort": {
+          "default": 587,
+          "title": "Smtpport",
+          "type": "integer"
+        },
+        "smtpUseSsl": {
+          "default": false,
+          "title": "Smtpusessl",
+          "type": "boolean"
+        },
+        "smtpUseTls": {
+          "default": true,
+          "title": "Smtpusetls",
+          "type": "boolean"
+        },
+        "smtpUsername": {
+          "default": "",
+          "title": "Smtpusername",
+          "type": "string"
+        },
+        "subjectPrefix": {
+          "default": "Re: ",
+          "title": "Subjectprefix",
+          "type": "string"
+        }
+      },
+      "title": "EmailConfig",
+      "type": "object"
+    },
+    "EmbeddingConfig": {
+      "description": "Embedding provider configuration for vector search.",
+      "properties": {
+        "apiKey": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Apikey"
+        },
+        "baseUrl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Baseurl"
+        },
+        "dimensions": {
+          "default": 1536,
+          "title": "Dimensions",
+          "type": "integer"
+        },
+        "model": {
+          "default": "text-embedding-3-small",
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "default": "none",
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "title": "EmbeddingConfig",
+      "type": "object"
+    },
+    "EventStoreConfig": {
+      "description": "Event sourcing persistence configuration.",
+      "properties": {
+        "dbName": {
+          "default": "theos.db",
+          "title": "Dbname",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "EventStoreConfig",
+      "type": "object"
+    },
+    "ExecToolConfig": {
+      "description": "Shell exec tool configuration.",
+      "properties": {
+        "envPassthrough": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Envpassthrough",
+          "type": "array"
+        },
+        "pathAppend": {
+          "default": "",
+          "title": "Pathappend",
+          "type": "string"
+        },
+        "timeout": {
+          "default": 120,
+          "title": "Timeout",
+          "type": "integer"
+        }
+      },
+      "title": "ExecToolConfig",
+      "type": "object"
+    },
+    "FeishuConfig": {
+      "description": "Feishu/Lark channel + document tools configuration.",
+      "properties": {
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "appId": {
+          "default": "",
+          "title": "Appid",
+          "type": "string"
+        },
+        "appSecret": {
+          "default": "",
+          "title": "Appsecret",
+          "type": "string"
+        },
+        "cacheDir": {
+          "default": "~/.theos/feishu_cache",
+          "title": "Cachedir",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "encryptKey": {
+          "default": "",
+          "title": "Encryptkey",
+          "type": "string"
+        },
+        "oauthRedirectUri": {
+          "default": "",
+          "title": "Oauthredirecturi",
+          "type": "string"
+        },
+        "reactEmoji": {
+          "default": "THUMBSUP",
+          "title": "Reactemoji",
+          "type": "string"
+        },
+        "tokenDir": {
+          "default": "~/.theos/feishu_tokens",
+          "title": "Tokendir",
+          "type": "string"
+        },
+        "verificationToken": {
+          "default": "",
+          "title": "Verificationtoken",
+          "type": "string"
+        }
+      },
+      "title": "FeishuConfig",
+      "type": "object"
+    },
+    "GatewayConfig": {
+      "description": "Gateway/server configuration.",
+      "properties": {
+        "heartbeat": {
+          "$ref": "#/$defs/HeartbeatConfig"
+        },
+        "host": {
+          "default": "0.0.0.0",
+          "title": "Host",
+          "type": "string"
+        },
+        "pollers": {
+          "$ref": "#/$defs/PollersConfig"
+        },
+        "port": {
+          "default": 18790,
+          "title": "Port",
+          "type": "integer"
+        },
+        "ui": {
+          "$ref": "#/$defs/UIConfig"
+        }
+      },
+      "title": "GatewayConfig",
+      "type": "object"
+    },
+    "GenVerConfig": {
+      "description": "Generator-Verifier mode configuration.",
+      "properties": {
+        "autoPhaseSelection": {
+          "default": true,
+          "title": "Autophaseselection",
+          "type": "boolean"
+        },
+        "explorerModel": {
+          "default": "",
+          "title": "Explorermodel",
+          "type": "string"
+        },
+        "generatorMaxIterations": {
+          "default": 60,
+          "title": "Generatormaxiterations",
+          "type": "integer"
+        },
+        "generatorModel": {
+          "default": "",
+          "title": "Generatormodel",
+          "type": "string"
+        },
+        "maxRetries": {
+          "default": 3,
+          "title": "Maxretries",
+          "type": "integer"
+        },
+        "maxReviewRounds": {
+          "default": 1,
+          "title": "Maxreviewrounds",
+          "type": "integer"
+        },
+        "phases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Phases",
+          "type": "array"
+        },
+        "planMaxIterations": {
+          "default": 20,
+          "title": "Planmaxiterations",
+          "type": "integer"
+        },
+        "reviewMaxIterations": {
+          "default": 30,
+          "title": "Reviewmaxiterations",
+          "type": "integer"
+        },
+        "specMaxIterations": {
+          "default": 20,
+          "title": "Specmaxiterations",
+          "type": "integer"
+        },
+        "verifierCommands": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verifiercommands",
+          "type": "array"
+        },
+        "verifierMaxIterations": {
+          "default": 30,
+          "title": "Verifiermaxiterations",
+          "type": "integer"
+        },
+        "verifierModel": {
+          "default": "",
+          "title": "Verifiermodel",
+          "type": "string"
+        },
+        "workspaceSubdir": {
+          "default": ".genver",
+          "title": "Workspacesubdir",
+          "type": "string"
+        }
+      },
+      "title": "GenVerConfig",
+      "type": "object"
+    },
+    "HeartbeatConfig": {
+      "description": "Heartbeat service configuration.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "intervalS": {
+          "default": 1800,
+          "title": "Intervals",
+          "type": "integer"
+        }
+      },
+      "title": "HeartbeatConfig",
+      "type": "object"
+    },
+    "KnowledgeGraphConfig": {
+      "description": "Knowledge graph storage configuration.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "halfLifeResearchDays": {
+          "default": 90.0,
+          "title": "Halfliferesearchdays",
+          "type": "number"
+        },
+        "halfLifeRuleDays": {
+          "default": 60.0,
+          "title": "Halfliferuledays",
+          "type": "number"
+        },
+        "halfLifeTaskDays": {
+          "default": 30.0,
+          "title": "Halflifetaskdays",
+          "type": "number"
+        },
+        "maxNodes": {
+          "default": 100000,
+          "title": "Maxnodes",
+          "type": "integer"
+        }
+      },
+      "title": "KnowledgeGraphConfig",
+      "type": "object"
+    },
+    "MCPServerConfig": {
+      "description": "MCP server connection configuration (stdio or HTTP).",
+      "properties": {
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Args",
+          "type": "array"
+        },
+        "command": {
+          "default": "",
+          "title": "Command",
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "toolTimeout": {
+          "default": 30,
+          "title": "Tooltimeout",
+          "type": "integer"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "title": "MCPServerConfig",
+      "type": "object"
+    },
+    "MatrixConfig": {
+      "description": "Matrix (Element) channel configuration.",
+      "properties": {
+        "accessToken": {
+          "default": "",
+          "title": "Accesstoken",
+          "type": "string"
+        },
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "allowRoomMentions": {
+          "default": false,
+          "title": "Allowroommentions",
+          "type": "boolean"
+        },
+        "deviceId": {
+          "default": "",
+          "title": "Deviceid",
+          "type": "string"
+        },
+        "e2EeEnabled": {
+          "default": true,
+          "title": "E2Eeenabled",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "groupAllowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Groupallowfrom",
+          "type": "array"
+        },
+        "groupPolicy": {
+          "default": "open",
+          "enum": [
+            "open",
+            "mention",
+            "allowlist"
+          ],
+          "title": "Grouppolicy",
+          "type": "string"
+        },
+        "homeserver": {
+          "default": "https://matrix.org",
+          "title": "Homeserver",
+          "type": "string"
+        },
+        "maxMediaBytes": {
+          "default": 20971520,
+          "title": "Maxmediabytes",
+          "type": "integer"
+        },
+        "syncStopGraceSeconds": {
+          "default": 2,
+          "title": "Syncstopgraceseconds",
+          "type": "integer"
+        },
+        "userId": {
+          "default": "",
+          "title": "Userid",
+          "type": "string"
+        }
+      },
+      "title": "MatrixConfig",
+      "type": "object"
+    },
+    "MemoryCompactionConfig": {
+      "description": "Emergency compaction when context window approaches limits.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "maxConsecutiveFailures": {
+          "default": 3,
+          "title": "Maxconsecutivefailures",
+          "type": "integer"
+        },
+        "maxRetries": {
+          "default": 2,
+          "title": "Maxretries",
+          "type": "integer"
+        },
+        "restoreMaxCharsPerFile": {
+          "default": 20000,
+          "title": "Restoremaxcharsperfile",
+          "type": "integer"
+        },
+        "restoreMaxFiles": {
+          "default": 5,
+          "title": "Restoremaxfiles",
+          "type": "integer"
+        },
+        "safetyMargin": {
+          "default": 1.2,
+          "title": "Safetymargin",
+          "type": "number"
+        },
+        "thresholdRatio": {
+          "default": 0.85,
+          "title": "Thresholdratio",
+          "type": "number"
+        }
+      },
+      "title": "MemoryCompactionConfig",
+      "type": "object"
+    },
+    "MemoryConfig": {
+      "description": "Top-level memory configuration.",
+      "properties": {
+        "compaction": {
+          "$ref": "#/$defs/MemoryCompactionConfig"
+        },
+        "flush": {
+          "$ref": "#/$defs/MemoryFlushConfig"
+        },
+        "gc": {
+          "$ref": "#/$defs/MemoryGCConfig"
+        },
+        "injection": {
+          "$ref": "#/$defs/MemoryInjectionConfig"
+        },
+        "search": {
+          "$ref": "#/$defs/MemorySearchConfig"
+        }
+      },
+      "title": "MemoryConfig",
+      "type": "object"
+    },
+    "MemoryFlushConfig": {
+      "description": "Pre-compaction memory flush settings.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "softThresholdTokens": {
+          "default": 4000,
+          "title": "Softthresholdtokens",
+          "type": "integer"
+        }
+      },
+      "title": "MemoryFlushConfig",
+      "type": "object"
+    },
+    "MemoryGCConfig": {
+      "description": "Memory garbage collection / time decay.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "maxAgeDays": {
+          "default": 90,
+          "title": "Maxagedays",
+          "type": "integer"
+        },
+        "maxSections": {
+          "default": 20,
+          "title": "Maxsections",
+          "type": "integer"
+        }
+      },
+      "title": "MemoryGCConfig",
+      "type": "object"
+    },
+    "MemoryInjectionConfig": {
+      "description": "Controls how long-term memory is injected into the system prompt.",
+      "properties": {
+        "fallbackToFull": {
+          "default": true,
+          "title": "Fallbacktofull",
+          "type": "boolean"
+        },
+        "maxContextTokens": {
+          "default": 400,
+          "title": "Maxcontexttokens",
+          "type": "integer"
+        },
+        "mode": {
+          "default": "retrieval",
+          "enum": [
+            "full",
+            "retrieval"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "title": "MemoryInjectionConfig",
+      "type": "object"
+    },
+    "MemorySearchConfig": {
+      "description": "Memory search (FTS + optional hybrid) configuration.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "hybrid": {
+          "$ref": "#/$defs/MemorySearchHybridConfig"
+        },
+        "maxResults": {
+          "default": 6,
+          "title": "Maxresults",
+          "type": "integer"
+        },
+        "minScore": {
+          "default": 0.0,
+          "title": "Minscore",
+          "type": "number"
+        }
+      },
+      "title": "MemorySearchConfig",
+      "type": "object"
+    },
+    "MemorySearchHybridConfig": {
+      "description": "Hybrid search configuration (for future embedding support).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "textWeight": {
+          "default": 0.3,
+          "title": "Textweight",
+          "type": "number"
+        },
+        "vectorWeight": {
+          "default": 0.7,
+          "title": "Vectorweight",
+          "type": "number"
+        }
+      },
+      "title": "MemorySearchHybridConfig",
+      "type": "object"
+    },
+    "MemoryTiersConfig": {
+      "description": "Three-tier memory configuration.",
+      "properties": {
+        "consolidationThreshold": {
+          "default": 200,
+          "title": "Consolidationthreshold",
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "immediateQueueSize": {
+          "default": 50,
+          "title": "Immediatequeuesize",
+          "type": "integer"
+        }
+      },
+      "title": "MemoryTiersConfig",
+      "type": "object"
+    },
+    "MochatConfig": {
+      "description": "Mochat channel configuration.",
+      "properties": {
+        "agentUserId": {
+          "default": "",
+          "title": "Agentuserid",
+          "type": "string"
+        },
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "baseUrl": {
+          "default": "https://mochat.io",
+          "title": "Baseurl",
+          "type": "string"
+        },
+        "clawToken": {
+          "default": "",
+          "title": "Clawtoken",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "groups": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MochatGroupRule"
+          },
+          "title": "Groups",
+          "type": "object"
+        },
+        "maxRetryAttempts": {
+          "default": 0,
+          "title": "Maxretryattempts",
+          "type": "integer"
+        },
+        "mention": {
+          "$ref": "#/$defs/MochatMentionConfig"
+        },
+        "panels": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Panels",
+          "type": "array"
+        },
+        "refreshIntervalMs": {
+          "default": 30000,
+          "title": "Refreshintervalms",
+          "type": "integer"
+        },
+        "replyDelayMode": {
+          "default": "non-mention",
+          "title": "Replydelaymode",
+          "type": "string"
+        },
+        "replyDelayMs": {
+          "default": 120000,
+          "title": "Replydelayms",
+          "type": "integer"
+        },
+        "retryDelayMs": {
+          "default": 500,
+          "title": "Retrydelayms",
+          "type": "integer"
+        },
+        "sessions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sessions",
+          "type": "array"
+        },
+        "socketConnectTimeoutMs": {
+          "default": 10000,
+          "title": "Socketconnecttimeoutms",
+          "type": "integer"
+        },
+        "socketDisableMsgpack": {
+          "default": false,
+          "title": "Socketdisablemsgpack",
+          "type": "boolean"
+        },
+        "socketMaxReconnectDelayMs": {
+          "default": 10000,
+          "title": "Socketmaxreconnectdelayms",
+          "type": "integer"
+        },
+        "socketPath": {
+          "default": "/socket.io",
+          "title": "Socketpath",
+          "type": "string"
+        },
+        "socketReconnectDelayMs": {
+          "default": 1000,
+          "title": "Socketreconnectdelayms",
+          "type": "integer"
+        },
+        "socketUrl": {
+          "default": "",
+          "title": "Socketurl",
+          "type": "string"
+        },
+        "watchLimit": {
+          "default": 100,
+          "title": "Watchlimit",
+          "type": "integer"
+        },
+        "watchTimeoutMs": {
+          "default": 25000,
+          "title": "Watchtimeoutms",
+          "type": "integer"
+        }
+      },
+      "title": "MochatConfig",
+      "type": "object"
+    },
+    "MochatGroupRule": {
+      "description": "Mochat per-group mention requirement.",
+      "properties": {
+        "requireMention": {
+          "default": false,
+          "title": "Requiremention",
+          "type": "boolean"
+        }
+      },
+      "title": "MochatGroupRule",
+      "type": "object"
+    },
+    "MochatMentionConfig": {
+      "description": "Mochat mention behavior configuration.",
+      "properties": {
+        "requireInGroups": {
+          "default": false,
+          "title": "Requireingroups",
+          "type": "boolean"
+        }
+      },
+      "title": "MochatMentionConfig",
+      "type": "object"
+    },
+    "NeuroSymbolicConfig": {
+      "description": "Neuro-symbolic file risk controller configuration.",
+      "properties": {
+        "blacklistPatterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Blacklistpatterns",
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "whitelistPatterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Whitelistpatterns",
+          "type": "array"
+        }
+      },
+      "title": "NeuroSymbolicConfig",
+      "type": "object"
+    },
+    "OrchestratorConfig": {
+      "description": "Orchestrator state machine configuration.",
+      "properties": {
+        "approvalGate": {
+          "$ref": "#/$defs/ApprovalGateConfig"
+        },
+        "cacheKeepaliveThresholdS": {
+          "default": 240,
+          "title": "Cachekeepalivethresholds",
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "eventLogEnabled": {
+          "default": true,
+          "title": "Eventlogenabled",
+          "type": "boolean"
+        },
+        "eventStore": {
+          "$ref": "#/$defs/EventStoreConfig"
+        },
+        "maxRetries": {
+          "default": 3,
+          "title": "Maxretries",
+          "type": "integer"
+        },
+        "memoryTiers": {
+          "$ref": "#/$defs/MemoryTiersConfig"
+        },
+        "neuroSymbolic": {
+          "$ref": "#/$defs/NeuroSymbolicConfig"
+        },
+        "reviewMode": {
+          "default": "auto",
+          "title": "Reviewmode",
+          "type": "string"
+        }
+      },
+      "title": "OrchestratorConfig",
+      "type": "object"
+    },
+    "PollersConfig": {
+      "description": "Poller services configuration.",
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/XPollerConfig"
+        }
+      },
+      "title": "PollersConfig",
+      "type": "object"
+    },
+    "ProviderConfig": {
+      "description": "LLM provider configuration.",
+      "properties": {
+        "apiBase": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Apibase"
+        },
+        "apiKey": {
+          "default": "",
+          "title": "Apikey",
+          "type": "string"
+        },
+        "extraHeaders": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Extraheaders"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Models",
+          "type": "array"
+        }
+      },
+      "title": "ProviderConfig",
+      "type": "object"
+    },
+    "ProvidersConfig": {
+      "description": "Configuration for LLM providers.",
+      "properties": {
+        "aihubmix": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "anthropic": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "custom": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "dashscope": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "deepseek": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "gemini": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "githubCopilot": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "groq": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "minimax": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "moonshot": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "openai": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "openaiCodex": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "openrouter": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "siliconflow": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "vllm": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "volcengine": {
+          "$ref": "#/$defs/ProviderConfig"
+        },
+        "zhipu": {
+          "$ref": "#/$defs/ProviderConfig"
+        }
+      },
+      "title": "ProvidersConfig",
+      "type": "object"
+    },
+    "QQConfig": {
+      "description": "QQ channel configuration using botpy SDK.",
+      "properties": {
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "appId": {
+          "default": "",
+          "title": "Appid",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "secret": {
+          "default": "",
+          "title": "Secret",
+          "type": "string"
+        }
+      },
+      "title": "QQConfig",
+      "type": "object"
+    },
+    "ReflectorConfig": {
+      "description": "LLM-powered post-task reflector configuration.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "model": {
+          "default": "minimax/MiniMax-M2.5",
+          "title": "Model",
+          "type": "string"
+        }
+      },
+      "title": "ReflectorConfig",
+      "type": "object"
+    },
+    "ResponseCacheConfig": {
+      "description": "Response cache configuration.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "maxDbEntries": {
+          "default": 5000,
+          "title": "Maxdbentries",
+          "type": "integer"
+        },
+        "maxMemoryEntries": {
+          "default": 256,
+          "title": "Maxmemoryentries",
+          "type": "integer"
+        },
+        "ttlSeconds": {
+          "default": 3600,
+          "title": "Ttlseconds",
+          "type": "integer"
+        }
+      },
+      "title": "ResponseCacheConfig",
+      "type": "object"
+    },
+    "SecurityConfig": {
+      "description": "Security and isolation configuration.",
+      "properties": {
+        "autonomy": {
+          "$ref": "#/$defs/AutonomyConfig"
+        },
+        "groupMemoryEnabled": {
+          "default": false,
+          "title": "Groupmemoryenabled",
+          "type": "boolean"
+        },
+        "leakSensitivity": {
+          "default": 0.7,
+          "title": "Leaksensitivity",
+          "type": "number"
+        },
+        "networkIsolated": {
+          "default": true,
+          "title": "Networkisolated",
+          "type": "boolean"
+        },
+        "scrubSessionHistory": {
+          "default": true,
+          "title": "Scrubsessionhistory",
+          "type": "boolean"
+        },
+        "scrubToolArgsLog": {
+          "default": true,
+          "title": "Scrubtoolargslog",
+          "type": "boolean"
+        }
+      },
+      "title": "SecurityConfig",
+      "type": "object"
+    },
+    "SlackConfig": {
+      "description": "Slack channel configuration.",
+      "properties": {
+        "appToken": {
+          "default": "",
+          "title": "Apptoken",
+          "type": "string"
+        },
+        "botToken": {
+          "default": "",
+          "title": "Bottoken",
+          "type": "string"
+        },
+        "dm": {
+          "$ref": "#/$defs/SlackDMConfig"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "groupAllowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Groupallowfrom",
+          "type": "array"
+        },
+        "groupPolicy": {
+          "default": "mention",
+          "title": "Grouppolicy",
+          "type": "string"
+        },
+        "mode": {
+          "default": "socket",
+          "title": "Mode",
+          "type": "string"
+        },
+        "reactEmoji": {
+          "default": "eyes",
+          "title": "Reactemoji",
+          "type": "string"
+        },
+        "replyInThread": {
+          "default": true,
+          "title": "Replyinthread",
+          "type": "boolean"
+        },
+        "userTokenReadOnly": {
+          "default": true,
+          "title": "Usertokenreadonly",
+          "type": "boolean"
+        },
+        "webhookPath": {
+          "default": "/slack/events",
+          "title": "Webhookpath",
+          "type": "string"
+        }
+      },
+      "title": "SlackConfig",
+      "type": "object"
+    },
+    "SlackDMConfig": {
+      "description": "Slack DM policy configuration.",
+      "properties": {
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "policy": {
+          "default": "open",
+          "title": "Policy",
+          "type": "string"
+        }
+      },
+      "title": "SlackDMConfig",
+      "type": "object"
+    },
+    "StockConfig": {
+      "description": "Stock analysis configuration (daily_stock_analysis integration).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "model": {
+          "default": "",
+          "title": "Model",
+          "type": "string"
+        },
+        "schedule": {
+          "default": "0 18 * * 1-5",
+          "title": "Schedule",
+          "type": "string"
+        },
+        "stockList": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Stocklist",
+          "type": "array"
+        },
+        "tavilyApiKey": {
+          "default": "",
+          "title": "Tavilyapikey",
+          "type": "string"
+        },
+        "tushareToken": {
+          "default": "",
+          "title": "Tusharetoken",
+          "type": "string"
+        }
+      },
+      "title": "StockConfig",
+      "type": "object"
+    },
+    "SubagentPolicyConfig": {
+      "description": "Policy limits for team/delegation subagent spawning.",
+      "properties": {
+        "keepCompleted": {
+          "default": 20,
+          "title": "Keepcompleted",
+          "type": "integer"
+        },
+        "loopHardLimit": {
+          "default": 5,
+          "title": "Loophardlimit",
+          "type": "integer"
+        },
+        "loopWarnThreshold": {
+          "default": 3,
+          "title": "Loopwarnthreshold",
+          "type": "integer"
+        },
+        "maxChildrenPerAgent": {
+          "default": 3,
+          "title": "Maxchildrenperagent",
+          "type": "integer"
+        },
+        "maxConcurrent": {
+          "default": 3,
+          "title": "Maxconcurrent",
+          "type": "integer"
+        },
+        "maxDepth": {
+          "default": 2,
+          "title": "Maxdepth",
+          "type": "integer"
+        },
+        "timeoutSeconds": {
+          "default": 900,
+          "title": "Timeoutseconds",
+          "type": "integer"
+        }
+      },
+      "title": "SubagentPolicyConfig",
+      "type": "object"
+    },
+    "TelegramConfig": {
+      "description": "Telegram channel configuration.",
+      "properties": {
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "proxy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proxy"
+        },
+        "replyToMessage": {
+          "default": false,
+          "title": "Replytomessage",
+          "type": "boolean"
+        },
+        "token": {
+          "default": "",
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "title": "TelegramConfig",
+      "type": "object"
+    },
+    "ToolsConfig": {
+      "description": "Tools configuration.",
+      "properties": {
+        "browser": {
+          "$ref": "#/$defs/BrowserConfig"
+        },
+        "exec": {
+          "$ref": "#/$defs/ExecToolConfig"
+        },
+        "mcpServers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MCPServerConfig"
+          },
+          "title": "Mcpservers",
+          "type": "object"
+        },
+        "restrictToWorkspace": {
+          "default": false,
+          "title": "Restricttoworkspace",
+          "type": "boolean"
+        },
+        "stock": {
+          "$ref": "#/$defs/StockConfig"
+        },
+        "web": {
+          "$ref": "#/$defs/WebToolsConfig"
+        }
+      },
+      "title": "ToolsConfig",
+      "type": "object"
+    },
+    "UIConfig": {
+      "description": "Dashboard UI server configuration.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "host": {
+          "default": "127.0.0.1",
+          "title": "Host",
+          "type": "string"
+        },
+        "port": {
+          "default": 8080,
+          "title": "Port",
+          "type": "integer"
+        }
+      },
+      "title": "UIConfig",
+      "type": "object"
+    },
+    "WebFetchConfig": {
+      "description": "Web fetch tool configuration.",
+      "properties": {
+        "allowedDomains": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Alloweddomains",
+          "type": "array"
+        },
+        "blockedDomains": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Blockeddomains",
+          "type": "array"
+        },
+        "extractor": {
+          "default": "auto",
+          "title": "Extractor",
+          "type": "string"
+        },
+        "firecrawlApiKey": {
+          "default": "",
+          "title": "Firecrawlapikey",
+          "type": "string"
+        },
+        "firecrawlApiUrl": {
+          "default": "https://api.firecrawl.dev/v1",
+          "title": "Firecrawlapiurl",
+          "type": "string"
+        },
+        "firecrawlEnabled": {
+          "default": false,
+          "title": "Firecrawlenabled",
+          "type": "boolean"
+        },
+        "jinaApiKey": {
+          "default": "",
+          "title": "Jinaapikey",
+          "type": "string"
+        },
+        "maxChars": {
+          "default": 50000,
+          "title": "Maxchars",
+          "type": "integer"
+        }
+      },
+      "title": "WebFetchConfig",
+      "type": "object"
+    },
+    "WebSearchConfig": {
+      "description": "Web search tool configuration.",
+      "properties": {
+        "apiKey": {
+          "default": "",
+          "title": "Apikey",
+          "type": "string"
+        },
+        "maxResults": {
+          "default": 5,
+          "title": "Maxresults",
+          "type": "integer"
+        },
+        "provider": {
+          "default": "duckduckgo",
+          "title": "Provider",
+          "type": "string"
+        },
+        "tavilyApiKey": {
+          "default": "",
+          "title": "Tavilyapikey",
+          "type": "string"
+        }
+      },
+      "title": "WebSearchConfig",
+      "type": "object"
+    },
+    "WebToolsConfig": {
+      "description": "Web tools configuration.",
+      "properties": {
+        "fetch": {
+          "$ref": "#/$defs/WebFetchConfig"
+        },
+        "search": {
+          "$ref": "#/$defs/WebSearchConfig"
+        }
+      },
+      "title": "WebToolsConfig",
+      "type": "object"
+    },
+    "WhatsAppConfig": {
+      "description": "WhatsApp channel configuration.",
+      "properties": {
+        "allowFrom": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowfrom",
+          "type": "array"
+        },
+        "bridgeToken": {
+          "default": "",
+          "title": "Bridgetoken",
+          "type": "string"
+        },
+        "bridgeUrl": {
+          "default": "ws://localhost:3001",
+          "title": "Bridgeurl",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "WhatsAppConfig",
+      "type": "object"
+    },
+    "XPollerConfig": {
+      "description": "X/Twitter poller configuration.",
+      "properties": {
+        "authToken": {
+          "default": "",
+          "title": "Authtoken",
+          "type": "string"
+        },
+        "ct0": {
+          "default": "",
+          "title": "Ct0",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "intervalS": {
+          "default": 60.0,
+          "title": "Intervals",
+          "type": "number"
+        },
+        "notifyChannel": {
+          "default": "feishu",
+          "title": "Notifychannel",
+          "type": "string"
+        },
+        "notifyChatId": {
+          "default": "",
+          "title": "Notifychatid",
+          "type": "string"
+        },
+        "usernames": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Usernames",
+          "type": "array"
+        }
+      },
+      "title": "XPollerConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root configuration for TheOS.",
+  "properties": {
+    "agents": {
+      "$ref": "#/$defs/AgentsConfig"
+    },
+    "channels": {
+      "$ref": "#/$defs/ChannelsConfig"
+    },
+    "embedding": {
+      "$ref": "#/$defs/EmbeddingConfig"
+    },
+    "gateway": {
+      "$ref": "#/$defs/GatewayConfig"
+    },
+    "hooks": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hooks"
+    },
+    "knowledgeGraph": {
+      "$ref": "#/$defs/KnowledgeGraphConfig"
+    },
+    "memory": {
+      "$ref": "#/$defs/MemoryConfig"
+    },
+    "providers": {
+      "$ref": "#/$defs/ProvidersConfig"
+    },
+    "proxy": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Proxy"
+    },
+    "responseCache": {
+      "$ref": "#/$defs/ResponseCacheConfig"
+    },
+    "security": {
+      "$ref": "#/$defs/SecurityConfig"
+    },
+    "tools": {
+      "$ref": "#/$defs/ToolsConfig"
+    }
+  },
+  "title": "Config",
+  "type": "object"
+}

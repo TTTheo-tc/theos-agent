@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from src.store.dashboard_writer import DashboardWriter
+
+
+@pytest.fixture
+async def writer(tmp_path: Path):
+    w = DashboardWriter(tmp_path / "test.db")
+    await w.connect()
+    yield w
+    await w.close()
+
+
+async def test_emit_event_calls_callback(writer: DashboardWriter):
+    """emit_event should invoke the callback with a complete event record including id."""
+    received = []
+
+    async def on_event(event: dict):
+        received.append(event)
+
+    writer.set_event_callback(on_event)
+
+    sid = await writer.upsert_session("test:key", "cli")
+    await writer.emit_event("test:key", "agent_started", agent_id="a1", payload={"name": "main"})
+
+    assert len(received) == 1
+    evt = received[0]
+    assert isinstance(evt["id"], int)
+    assert evt["id"] > 0
+    assert evt["session_id"] == sid
+    assert evt["agent_id"] == "a1"
+    assert evt["event_type"] == "agent_started"
+    assert "name" in evt["payload"]
+    assert evt["timestamp"]
+
+
+async def test_emit_event_works_without_callback(writer: DashboardWriter):
+    """emit_event still works when no callback is set."""
+    await writer.upsert_session("test:key", "cli")
+    await writer.emit_event("test:key", "task_created")
+    # No error raised — success
+
+
+async def test_callback_error_does_not_block(writer: DashboardWriter):
+    """A failing callback must not prevent the event from being written."""
+
+    async def bad_callback(event: dict):
+        raise RuntimeError("callback exploded")
+
+    writer.set_event_callback(bad_callback)
+    await writer.upsert_session("test:key", "cli")
+    await writer.emit_event("test:key", "agent_started")
+    # No error raised, AND the event was actually written to DB
+    import aiosqlite
+
+    async with aiosqlite.connect(str(writer._db_path)) as conn:
+        cursor = await conn.execute(
+            "SELECT event_type FROM events WHERE event_type = 'agent_started'"
+        )
+        row = await cursor.fetchone()
+        assert row is not None, "Event should be persisted despite callback failure"

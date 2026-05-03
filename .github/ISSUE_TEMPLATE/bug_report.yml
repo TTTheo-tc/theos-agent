@@ -1,0 +1,32 @@
+name: Bug Report
+description: Report a bug
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps to reproduce the issue
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Output of `ariesclaw --version`"
+  - type: input
+    id: python
+    attributes:
+      label: Python Version
+      description: "Output of `python --version`"
+  - type: input
+    id: os
+    attributes:
+      label: Operating System

@@ -1,0 +1,159 @@
+[project]
+name = "theos-agent"
+version = "1.0.0"
+description = "Theo's Agentic Operating System: a personal agentic OS for code, memory, tools, and automation."
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "TheOS contributors"}
+]
+keywords = ["ai", "agent", "chatbot"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+readme = "README.md"
+
+dependencies = [
+    "typer>=0.20.0,<1.0.0",
+    "pydantic>=2.12.0,<3.0.0",
+    "pydantic-settings>=2.12.0,<3.0.0",
+    "websockets>=16.0,<17.0",
+    "websocket-client>=1.9.0,<2.0.0",
+    "httpx>=0.28.0,<1.0.0",
+    "oauth-cli-kit>=0.1.3,<1.0.0",
+    "loguru>=0.7.3,<1.0.0",
+    "readability-lxml>=0.8.4,<1.0.0",
+    "rich>=14.0.0,<15.0.0",
+    "croniter>=6.0.0,<7.0.0",
+    "dingtalk-stream>=0.24.0,<1.0.0",
+    "python-telegram-bot[socks]>=22.0,<23.0",
+    "lark-oapi>=1.5.0,<2.0.0",
+    "socksio>=1.0.0,<2.0.0",
+    "python-socketio>=5.16.0,<6.0.0",
+    "msgpack>=1.1.0,<2.0.0",
+    "slack-sdk>=3.39.0,<4.0.0",
+    "slackify-markdown>=0.2.0,<1.0.0",
+    "qq-botpy>=1.2.0,<2.0.0",
+    "python-socks[asyncio]>=2.8.0,<3.0.0",
+    "prompt-toolkit>=3.0.50,<4.0.0",
+    "mcp>=1.26.0,<2.0.0",
+    "json-repair>=0.57.0,<1.0.0",
+    "pyyaml>=6.0,<7.0",
+    "aiosqlite>=0.20.0,<1.0.0",
+    "keyring>=25.0.0,<26.0.0",
+    "pypdf>=6.0.0,<7.0.0",
+    "filelock>=3.0,<4.0",
+    "tiktoken>=0.9.0,<1.0.0",
+    "sqlite-vec>=0.1.6,<1.0.0",
+    "anthropic>=0.52.0,<1.0.0",
+    "openai>=2.8.0,<3.0.0",
+    "aiohttp>=3.9.0,<4.0.0",
+    "duckduckgo-search>=7.0,<8.0",
+    "starlette>=0.41,<1",
+    "uvicorn>=0.32,<1",
+    "pillow>=12.1.1",
+    "twscrape>=0.17.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/LLLiuTC/theos-agent"
+Repository = "https://github.com/LLLiuTC/theos-agent.git"
+Issues = "https://github.com/LLLiuTC/theos-agent/issues"
+Documentation = "https://github.com/LLLiuTC/theos-agent#readme"
+
+[project.optional-dependencies]
+matrix = [
+    "matrix-nio[e2e]>=0.25.2",
+    "mistune>=3.0.0,<4.0.0",
+    "nh3>=0.2.17,<1.0.0",
+]
+stock = [
+    "akshare>=1.12.0",
+    "efinance>=0.5.5",
+    "tushare>=1.4.0",
+    "baostock>=0.8.0",
+    "yfinance>=0.2.0",
+    "pytdx>=1.72",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "exchange-calendars>=4.5.0",
+    "tavily-python>=0.3.0",
+    "schedule>=1.2.0",
+    "newspaper3k>=0.2.8",
+    "lxml_html_clean",
+    "fake-useragent>=1.4.0",
+    "imgkit>=1.2.0",
+    "markdown2>=2.4.0",
+    "google-search-results>=2.4.0",
+]
+dev = [
+    "pytest>=9.0.0,<10.0.0",
+    "pytest-asyncio>=1.3.0,<2.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+theos = "src.cli.commands:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+# Include non-Python files in templates
+[tool.hatch.build]
+include = [
+    "src/**/*.py",
+    "src/templates/**/*.md",
+    "skills/**/*.md",
+    "skills/**/*.sh",
+    "instinct/**/*.md",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "bridge/",
+    "skills/",
+    "ui/",
+    "README.md",
+    "LICENSE",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"bridge" = "src/bridge"
+"instinct" = "src/instinct"
+"skills" = "src/skills"
+"ui/dist" = "src/ui/ui_static"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[dependency-groups]
+dev = [
+    "black>=24.0.0",
+    "pre-commit>=4.0.0",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0,<2.0.0",
+    "ruff>=0.9.0",
+    "typer>=0.20.0,<1.0.0",
+]

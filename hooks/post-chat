@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Post-chat hook:
+#   1. Always run reflect.js --mode post-task for structured reflection
+#   2. On code changes → append new git commits to CHANGELOG.md
+# Input (stdin): JSON {"session_key": "...", "response": "...", "error": "..."}
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REFLECT="$REPO_ROOT/instinct/scripts/reflect.js"
+EVOLVE="$REPO_ROOT/instinct/scripts/evolve.js"
+
+INPUT=$(cat)
+
+# --- 1. Structured reflection (always-on) ---
+if [ -f "$REFLECT" ]; then
+  # Pass full JSON via stdin to reflect.js --mode post-task
+  printf '%s' "$INPUT" | node "$REFLECT" --mode post-task || true
+fi
+
+if [ -f "$EVOLVE" ]; then
+  INSTINCT_EVOLVE_MIN_INTERVAL_SECONDS="${INSTINCT_EVOLVE_MIN_INTERVAL_SECONDS:-600}" \
+    node "$EVOLVE" || true
+fi
+
+# --- 2. Changelog auto-append (from real git commits) ---
+python3 "$REPO_ROOT/hooks/changelog.py" "$REPO_ROOT"

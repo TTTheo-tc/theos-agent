@@ -1,0 +1,45 @@
+# Environment & Secrets
+.env
+.theos
+.agent-worktrees/
+
+# Python bytecode
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Build artifacts
+dist/
+build/
+*.egg
+*.egg-info/
+
+# Virtual environment
+.venv/
+
+# Dependencies
+poetry.lock
+
+# Testing
+.pytest_cache/
+
+# IDE & local assets
+.assets
+.DS_Store
+
+# Logs
+botpy.log
+
+# Git worktrees
+.worktrees/
+
+
+# Local databases
+data/*.db
+data/*.db-wal
+data/*.db-shm
+# Local instruction symlinks created by `theos init`
+/CLAUDE.md
+/GEMINI.md
+/AGENTS.md

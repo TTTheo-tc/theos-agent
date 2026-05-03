@@ -1,0 +1,35 @@
+x-common-config: &common-config
+  build:
+    context: .
+    dockerfile: Dockerfile
+  volumes:
+    # Mount the config and data folder
+    - ~/.theos:/home/theos/.theos
+
+services:
+  theos-gateway:
+    container_name: theos-gateway
+    <<: *common-config
+    # Explicitly use the gateway command (default in Dockerfile, but good practice to state here)
+    command: ["gateway"]
+    restart: unless-stopped
+    ports:
+      - "18790:18790"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  theos-cli:
+    container_name: theos-cli
+    <<: *common-config
+    profiles:
+      - cli
+    # Changed from 'status' to 'agent' to drop into the interactive CLI
+    command: ["agent"]
+    stdin_open: true
+    tty: true

@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: mkdir -p ui/dist
+      - run: uv sync --group dev
+      - run: uv run ruff check .
+      - run: uv run pytest tests/ -q --ignore=tests/test_matrix_channel.py
+      - run: uv run python scripts/check_config_schema.py check
