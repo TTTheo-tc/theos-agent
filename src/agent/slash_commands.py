@@ -286,7 +286,8 @@ async def handle_model_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
             config.agents.roles[role_name].model = new_model
             save_config(config)
         loop.roles[role_name].model = new_model
-        loop.subagents.roles = loop.roles
+        if getattr(loop, "_subagents", None) is not None:
+            loop.subagents.roles = loop.roles
         return OutboundMessage(
             channel=msg.channel,
             chat_id=msg.chat_id,
@@ -305,7 +306,8 @@ async def handle_model_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
     # /model <name> — switch default model
     new_model = resolve_model_alias(parts[1])
     loop.model = new_model
-    loop.subagents.model = new_model
+    if getattr(loop, "_subagents", None) is not None:
+        loop.subagents.model = new_model
     config = load_config()
     config.agents.defaults.model = new_model
     save_config(config)
@@ -315,7 +317,8 @@ async def handle_model_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
         from src.providers.factory import make_provider
 
         loop.provider = make_provider(config)
-        loop.subagents.provider = loop.provider
+        if getattr(loop, "_subagents", None) is not None:
+            loop.subagents.provider = loop.provider
     except Exception as e:
         logger.warning("Failed to recreate provider for {}: {}", new_model, e)
 

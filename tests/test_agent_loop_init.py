@@ -51,6 +51,44 @@ def test_default_config_construction(tmp_path: Path):
     assert loop.memory_window == 100
 
 
+def test_default_runtime_does_not_eagerly_create_optional_managers(tmp_path: Path):
+    """Default single/minimal runtime avoids optional manager setup."""
+    config = _make_test_config(tmp_path)
+
+    loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+
+    assert loop.mode == "single"
+    assert loop._subagents is None
+    assert loop._mcp is None
+    assert loop._genver_handler is None
+    assert loop.hooks.hooks_dir is None
+
+
+def test_coding_profile_initializes_subagents_for_agent_tool(tmp_path: Path):
+    """Profiles exposing agent tools still initialize subagent support."""
+    config = _make_test_config(tmp_path)
+    config.tools.profile = "coding"
+
+    loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+
+    assert loop._subagents is not None
+    assert loop.tools.has("agent") is True
+
+
+@pytest.mark.asyncio
+async def test_stop_does_not_create_subagents_when_none_exist(tmp_path: Path):
+    """Stopping a default session should not instantiate subagent machinery."""
+    config = _make_test_config(tmp_path)
+    loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+    loop._dispatcher.cancel_group = MagicMock(return_value=False)
+
+    await loop._handle_stop(
+        InboundMessage(channel="cli", sender_id="user", chat_id="direct", content="/stop")
+    )
+
+    assert loop._subagents is None
+
+
 # --- Test 2: Config values propagated ---
 
 

@@ -17,8 +17,6 @@ from src.agent.loop_core import run_tool_loop
 from src.agent.loop_finalize import TurnFinalizer
 from src.agent.loop_genver import GenVerHandler
 from src.agent.loop_memory import MemoryHandler
-from src.agent.mcp_manager import MCPManager
-from src.agent.subagent import SubagentManager
 from src.agent.tools.context import ToolContext
 from src.agent.tools.message import MessageTool
 from src.agent.tools.registry import ToolRegistry
@@ -33,6 +31,8 @@ from src.utils.text import strip_think as _strip_think_fn
 from src.utils.text import tool_hint as _tool_hint_fn
 
 if TYPE_CHECKING:
+    from src.agent.mcp_manager import MCPManager
+    from src.agent.subagent import SubagentManager
     from src.config.schema import (
         AgentRoleConfig,
         ChannelsConfig,
@@ -44,6 +44,18 @@ if TYPE_CHECKING:
     from src.hooks.reflector import Reflector
     from src.safety.layer import SafetyLayer
     from src.store.dashboard_writer import DashboardWriter
+
+
+class _NoopHookRunner:
+    """Minimal hook runner used when no hook directory is configured."""
+
+    hooks_dir = None
+
+    async def run_pre_chat(self, user_message: str, workspace: Path | None = None) -> str | None:
+        return None
+
+    async def run_post_chat(self, *args: Any, **kwargs: Any) -> None:
+        return None
 
 
 class AgentLoop:
@@ -98,7 +110,6 @@ class AgentLoop:
         channel_env: dict[str, str] | None = None,
     ):
         from src.config.schema import ExecToolConfig
-        from src.hooks.runner import HookRunner
         from src.security.secret_refs import resolve_data_secret_refs, resolve_secret_ref
 
         self.reflector = reflector
@@ -141,6 +152,12 @@ class AgentLoop:
         self._provider_keys = config.get_provider_keys()
         self._channel_env = channel_env or {}
         self._knowledge_graph_enabled = config.knowledge_graph.enabled
+        self._mcp_server_configs = resolve_data_secret_refs(config.tools.mcp_servers)
+        self._mcp_server_count = len(self._mcp_server_configs)
+        self._mcp: "MCPManager | None" = None
+        self._subagents: "SubagentManager | None" = None
+        self._subagent_policy = getattr(config.agents, "subagents", None)
+        self._genver_handler: GenVerHandler | None = None
 
         channels_config = channels_config_override or resolve_data_secret_refs(config.channels)
         self.channels_config = channels_config
@@ -173,32 +190,20 @@ class AgentLoop:
                 timeout=float(orchestrator_config.approval_gate.timeout_seconds),
             )
         self.tools = ToolRegistry(approval_gate=_gate)
-        _subagent_policy = getattr(config.agents, "subagents", None)
-        self.subagents = SubagentManager(
-            provider=provider,
-            workspace=workspace,
-            bus=bus,
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            brave_api_key=self.brave_api_key,
-            web_search_provider=self._web_search_provider,
-            tavily_api_key=self._tavily_api_key,
-            exec_config=self.exec_config,
-            restrict_to_workspace=self.restrict_to_workspace,
-            roles=self.roles,
-            policy=_subagent_policy,
-        )
 
         hooks_dir = Path(config.hooks).expanduser() if config.hooks else None
-        self.hooks = HookRunner(hooks_dir)
+        if hooks_dir:
+            from src.hooks.runner import HookRunner
+
+            self.hooks = HookRunner(hooks_dir)
+        else:
+            self.hooks = _NoopHookRunner()
 
         # Owner-only tools use explicit owner IDs, not channel allowlists.
         owner_ids = channels_config.owner_ids if channels_config else []
         self._owner_ids: set[str] = {str(owner_id) for owner_id in owner_ids if owner_id}
 
         self._running = False
-        self._mcp = MCPManager(resolve_data_secret_refs(config.tools.mcp_servers))
         self._pending_reflector: asyncio.Task | None = None  # awaitable reflector task
         self._orchestrator_config = orchestrator_config
         self._memory_config: MemoryConfig | None = config.memory
@@ -217,13 +222,6 @@ class AgentLoop:
             workspace=workspace, roles=self.roles, recall_service=self._memory.recall
         )
         self.context = self._context.global_context  # backward-compat alias
-        # Composed GenVer handler
-        self._genver = GenVerHandler(
-            provider=provider,
-            workspace=workspace,
-            bus=bus,
-            turn_store=self.turns,
-        )
         # Composed turn finalizer
         # Use lambda so tests can patch AgentLoop._get_safety after construction
         self._finalizer = TurnFinalizer(
@@ -252,6 +250,68 @@ class AgentLoop:
         self._lifecycle = TurnLifecycle(self, policies=policies)
         self._dispatcher = PerGroupDispatcher(self._lifecycle.handle_message)
         self._register_default_tools()
+
+    @property
+    def subagents(self) -> "SubagentManager":
+        """Lazily create the subagent manager when a subagent feature is used."""
+        if self._subagents is None:
+            from src.agent.subagent import SubagentManager
+
+            self._subagents = SubagentManager(
+                provider=self.provider,
+                workspace=self.workspace,
+                bus=self.bus,
+                model=self.model,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                brave_api_key=self.brave_api_key,
+                web_search_provider=self._web_search_provider,
+                tavily_api_key=self._tavily_api_key,
+                exec_config=self.exec_config,
+                restrict_to_workspace=self.restrict_to_workspace,
+                roles=self.roles,
+                policy=self._subagent_policy,
+            )
+        return self._subagents
+
+    @property
+    def _genver(self) -> GenVerHandler:
+        """Lazily create GenVer state when GenVer is enabled or directly used."""
+        if self._genver_handler is None:
+            self._genver_handler = GenVerHandler(
+                provider=self.provider,
+                workspace=self.workspace,
+                bus=self.bus,
+                turn_store=self.turns,
+            )
+        return self._genver_handler
+
+    def _get_mcp_manager(self) -> "MCPManager":
+        if self._mcp is None:
+            from src.agent.mcp_manager import MCPManager
+
+            self._mcp = MCPManager(self._mcp_server_configs)
+        return self._mcp
+
+    def _profile_allows_any(self, names: set[str]) -> bool:
+        if self._tool_profile is None:
+            return True
+        try:
+            from src.agent.tools.tool_profiles import resolve_profile
+
+            profile_set = resolve_profile(self._tool_profile)
+        except ValueError:
+            return True
+        if profile_set is None:
+            return True
+        return any(name in profile_set for name in names)
+
+    def _needs_subagents_for_registration(self) -> bool:
+        if self._root_agent_mode == "team" or self._is_genver:
+            return True
+        return self._profile_allows_any(
+            {"agent", "subagent_wait", "subagent_kill", "subagents_list"}
+        )
 
     def _is_owner(self, sender_id: str, channel: str = "") -> bool:
         """Check if a sender is the bot owner (fallback for legacy paths)."""
@@ -301,6 +361,8 @@ class AgentLoop:
 
         allowed_dir = self.workspace if self.restrict_to_workspace else None
         ns_config = self._orchestrator_config.neuro_symbolic if self._orchestrator_config else None
+        subagents = self.subagents if self._needs_subagents_for_registration() else None
+        mcp_manager = self._get_mcp_manager() if self._mcp_server_count else None
 
         config = ToolRegistrationConfig(
             workspace=self.workspace,
@@ -324,11 +386,11 @@ class AgentLoop:
             bus_publish=self.bus.publish_outbound,
             bus=self.bus,
             cron_service=self.cron_service,
-            executor=self.subagents.executor,
-            subagent_manager=self.subagents,
+            executor=subagents.executor if subagents is not None else None,
+            subagent_manager=subagents,
             session_manager=self.sessions,
             turn_store=self.turns,
-            subagent_store=self.subagents.store,
+            subagent_store=subagents.store if subagents is not None else None,
             memory_index_resolver=self._memory.resolve_index_for_tools,
             memory_search_enabled=self._memory.search_enabled(),
             memory_search_max_results=self._memory.search_max_results(),
@@ -336,14 +398,18 @@ class AgentLoop:
             structured_memory_enabled=self._knowledge_graph_enabled,
             structured_workspace_resolver=lambda sk: self._memory.resolve_structured_workspace_for_tools(
                 sk,
-                genver_workspace_resolver=lambda k: self._genver.get_active_workspace(k),
+                genver_workspace_resolver=lambda k: (
+                    self._genver_handler.get_active_workspace(k)
+                    if self._genver_handler is not None
+                    else None
+                ),
             ),
             stock_config=self._stock_config,
             provider_keys=self._provider_keys,
             channel_env=self._channel_env,
             provider=self.provider,
             browser_config=self._browser_config,
-            mcp_manager=self._mcp,
+            mcp_manager=mcp_manager,
         )
         register_standard_tools(self.tools, config)
 
@@ -361,7 +427,9 @@ class AgentLoop:
 
     async def _connect_mcp(self) -> None:
         """Connect to configured MCP servers (one-time, lazy)."""
-        await self._mcp.connect(self.tools)
+        if not self._mcp_server_count:
+            return
+        await self._get_mcp_manager().connect(self.tools)
 
     _strip_think = staticmethod(_strip_think_fn)
     _tool_hint = staticmethod(_tool_hint_fn)
@@ -467,7 +535,9 @@ class AgentLoop:
 
         DEPRECATED: use self._genver.pop_handoff() directly.
         """
-        return self._genver.pop_handoff(session_key)
+        if self._genver_handler is None:
+            return None
+        return self._genver_handler.pop_handoff(session_key)
 
     async def _genver_ask_user(
         self,
@@ -511,7 +581,8 @@ class AgentLoop:
         self._context.rebuild_global(roles=self.roles)
         self.context = self._context.global_context
         # Update subagent manager
-        self.subagents.roles = self.roles
+        if self._subagents is not None:
+            self._subagents.roles = self.roles
         if self.mode == "genver":
             mode = "genver"
         elif self.mode == "team":
@@ -551,7 +622,9 @@ class AgentLoop:
             "tool_names": self.tools.tool_names,
             "max_iterations": self.max_iterations,
             "memory_window": self.memory_window,
-            "mcp_servers": self._mcp.server_count,
+            "mcp_servers": (
+                self._mcp.server_count if self._mcp is not None else self._mcp_server_count
+            ),
             "orchestrator": bool(self._lifecycle.policies),
             "hooks": str(self.hooks.hooks_dir) if self.hooks.hooks_dir else None,
         }
@@ -586,11 +659,18 @@ class AgentLoop:
                 except asyncio.TimeoutError:
                     continue
 
-                if pending := self._genver.get_pending_question(msg.session_key):
+                pending = (
+                    self._genver_handler.get_pending_question(msg.session_key)
+                    if self._genver_handler is not None
+                    else None
+                )
+                if pending:
                     if pending.done():
-                        self._genver.clear_pending_question(msg.session_key)
+                        self._genver_handler.clear_pending_question(msg.session_key)
                     else:
-                        pending_turn_id = self._genver.get_pending_turn_id(msg.session_key)
+                        pending_turn_id = self._genver_handler.get_pending_turn_id(
+                            msg.session_key
+                        )
                         if pending_turn_id:
                             session = self.sessions.get_or_create(msg.session_key)
                             reply_entry = {
@@ -636,7 +716,11 @@ class AgentLoop:
     async def _handle_stop(self, msg: InboundMessage) -> None:
         """Cancel active worker and subagents for the session."""
         cancelled = self._dispatcher.cancel_group(msg.session_key)
-        sub_cancelled = await self.subagents.cancel_by_session(msg.session_key)
+        sub_cancelled = (
+            await self._subagents.cancel_by_session(msg.session_key)
+            if self._subagents is not None
+            else 0
+        )
 
         total = (1 if cancelled else 0) + sub_cancelled
         content = f"⏹ Stopped {total} task(s)." if total else "No active task to stop."
@@ -768,7 +852,8 @@ class AgentLoop:
 
     async def close_mcp(self) -> None:
         """Close MCP connections."""
-        await self._mcp.close()
+        if self._mcp is not None:
+            await self._mcp.close()
 
     async def close(self) -> None:
         """Close all async resources: lifecycle policies, memory DBs, MCP."""
@@ -888,7 +973,7 @@ class AgentLoop:
         runtime = build_session_runtime_state(
             key,
             turn_store=self.turns,
-            subagent_store=self.subagents.store,
+            subagent_store=self._subagents.store if self._subagents is not None else None,
             recent_background_limit=3,
         )
         checkpoint = runtime.latest_turn
