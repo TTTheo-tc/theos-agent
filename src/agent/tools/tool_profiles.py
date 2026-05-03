@@ -94,35 +94,15 @@ TOOL_GROUPS: dict[str, set[str]] = {
 
 ALWAYS_ON_TOOLS: frozenset[str] = frozenset(
     {
-        # Core filesystem
+        # Core read-only filesystem
         "read_file",
-        "write_file",
-        "edit_file",
         "list_dir",
         "glob",
         "grep",
-        # Core execution
-        "bash",
-        # Core web
-        "web_search",
-        "web_fetch",
         # Core memory
         "memory_search",
-        # Core communication
-        "message",
-        "agent",
-        # Task management
-        "todo",
-        "task_create",
-        "task_list",
-        "task_update",
-        "task_get",
         # Discovery (always-on so model can find deferred tools)
         "tool_search",
-        "capability_search",
-        # Plan mode (always-on so model can toggle plan mode)
-        "enter_plan_mode",
-        "exit_plan_mode",
     }
 )
 
@@ -150,14 +130,12 @@ def expand_groups(names: set[str] | None) -> set[str] | None:
 PROFILES: dict[str, set[str] | None] = {
     "full": None,  # No restrictions
     "minimal": {
-        "bash",
         "read_file",
         "list_dir",
-        "web_search",
+        "glob",
+        "grep",
+        "memory_search",
         "tool_search",
-        "capability_search",
-        "skill_search",
-        "mcp_search",
     },
     "coding": {
         # fs
@@ -192,6 +170,8 @@ PROFILES: dict[str, set[str] | None] = {
         "capability_search",
         "skill_search",
         "mcp_search",
+        "enter_plan_mode",
+        "exit_plan_mode",
         # feishu (read-only)
         "feishu_read",
         "feishu_search",
@@ -221,6 +201,8 @@ PROFILES: dict[str, set[str] | None] = {
         "capability_search",
         "skill_search",
         "mcp_search",
+        "enter_plan_mode",
+        "exit_plan_mode",
         # feishu (knowledge retrieval + messaging)
         "feishu_read",
         "feishu_search",
@@ -242,6 +224,8 @@ PROFILES: dict[str, set[str] | None] = {
         "capability_search",
         "skill_search",
         "mcp_search",
+        "enter_plan_mode",
+        "exit_plan_mode",
     },
 }
 

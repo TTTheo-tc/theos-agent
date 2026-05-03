@@ -18,6 +18,7 @@ from src.providers.base import LLMResponse, ToolCallRequest
 def _make_test_config(workspace: Path) -> Config:
     cfg = Config()
     cfg.agents.defaults.workspace = str(workspace)
+    cfg.knowledge_graph.enabled = True
     return cfg
 
 

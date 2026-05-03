@@ -29,10 +29,6 @@ from src.agent.tools.todo import (
     TodoTool,
 )
 from src.agent.tools.tool_profiles import ALWAYS_ON_TOOLS, expand_groups, resolve_profile
-from src.agent.tools.web_fetch import WebFetchTool
-from src.agent.tools.web_http import HttpRequestTool
-from src.agent.tools.web_image_search import ImageSearchTool
-from src.agent.tools.web_search import WebSearchTool
 
 if TYPE_CHECKING:
     from src.agent.tools.base import Tool
@@ -84,6 +80,7 @@ def register_standard_tools(
     memory_search_enabled = config.memory_search_enabled
     memory_search_max_results = config.memory_search_max_results
     memory_search_min_score = config.memory_search_min_score
+    structured_memory_enabled = config.structured_memory_enabled
     structured_workspace_resolver = config.structured_workspace_resolver
     stock_config = config.stock_config
     provider_keys = config.provider_keys
@@ -207,6 +204,8 @@ def register_standard_tools(
 
     # --- web ---
     if _should("web_search"):
+        from src.agent.tools.web_search import WebSearchTool
+
         _reg(
             WebSearchTool(
                 api_key=brave_api_key,
@@ -216,6 +215,8 @@ def register_standard_tools(
             )
         )
     if _should("web_fetch"):
+        from src.agent.tools.web_fetch import WebFetchTool
+
         _reg(
             WebFetchTool(
                 max_chars=config.web_fetch_max_chars,
@@ -229,8 +230,12 @@ def register_standard_tools(
             )
         )
     if _should("http_request"):
+        from src.agent.tools.web_http import HttpRequestTool
+
         _reg(HttpRequestTool())
     if _should("image_search"):
+        from src.agent.tools.web_image_search import ImageSearchTool
+
         _reg(ImageSearchTool())
     if mode != "verifier" and _should("capability_search"):
         from src.agent.tools.capability_search import CapabilitySearchTool
@@ -276,7 +281,11 @@ def register_standard_tools(
             from src.agent.tools.memory_search import MemoryGetTool
 
             _reg(MemoryGetTool(index_resolver=memory_index_resolver))
-    if structured_workspace_resolver is not None and mode not in ("verifier",):
+    if (
+        structured_memory_enabled
+        and structured_workspace_resolver is not None
+        and mode not in ("verifier",)
+    ):
         if _should("structured_memory_search"):
             from src.agent.tools.structured_memory import StructuredMemorySearchTool
 
@@ -345,8 +354,11 @@ def register_standard_tools(
         from src.security.autonomy import AutonomyLevel
 
         browser_cfg = config.browser_config
-        readonly = bool(config.autonomy_level and config.autonomy_level == AutonomyLevel.READONLY)
-        _reg(BrowserTool(workspace=workspace, config=browser_cfg, readonly=readonly))
+        if browser_cfg is None or getattr(browser_cfg, "enabled", True):
+            readonly = bool(
+                config.autonomy_level and config.autonomy_level == AutonomyLevel.READONLY
+            )
+            _reg(BrowserTool(workspace=workspace, config=browser_cfg, readonly=readonly))
 
     # --- communication (only in loop modes) ---
     if mode in ("single", "team"):

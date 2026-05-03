@@ -264,170 +264,6 @@ wheels = [
 ]
 
 [[package]]
-name = "theos-agent"
-version = "1.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "aiosqlite" },
-    { name = "anthropic" },
-    { name = "croniter" },
-    { name = "dingtalk-stream" },
-    { name = "duckduckgo-search" },
-    { name = "filelock" },
-    { name = "httpx" },
-    { name = "json-repair" },
-    { name = "keyring" },
-    { name = "lark-oapi" },
-    { name = "loguru" },
-    { name = "mcp" },
-    { name = "msgpack" },
-    { name = "oauth-cli-kit" },
-    { name = "openai" },
-    { name = "pillow" },
-    { name = "prompt-toolkit" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pypdf" },
-    { name = "python-socketio" },
-    { name = "python-socks" },
-    { name = "python-telegram-bot", extra = ["socks"] },
-    { name = "pyyaml" },
-    { name = "qq-botpy" },
-    { name = "readability-lxml" },
-    { name = "rich" },
-    { name = "slack-sdk" },
-    { name = "slackify-markdown" },
-    { name = "socksio" },
-    { name = "sqlite-vec" },
-    { name = "starlette" },
-    { name = "tiktoken" },
-    { name = "twscrape" },
-    { name = "typer" },
-    { name = "uvicorn" },
-    { name = "websocket-client" },
-    { name = "websockets" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-matrix = [
-    { name = "matrix-nio", extra = ["e2e"] },
-    { name = "mistune" },
-    { name = "nh3" },
-]
-stock = [
-    { name = "akshare" },
-    { name = "baostock" },
-    { name = "efinance" },
-    { name = "exchange-calendars" },
-    { name = "fake-useragent" },
-    { name = "google-search-results" },
-    { name = "imgkit" },
-    { name = "lxml-html-clean" },
-    { name = "markdown2" },
-    { name = "newspaper3k" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "pytdx" },
-    { name = "schedule" },
-    { name = "tavily-python" },
-    { name = "tushare" },
-    { name = "yfinance" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-    { name = "typer" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = ">=3.9.0,<4.0.0" },
-    { name = "aiosqlite", specifier = ">=0.20.0,<1.0.0" },
-    { name = "akshare", marker = "extra == 'stock'", specifier = ">=1.12.0" },
-    { name = "anthropic", specifier = ">=0.52.0,<1.0.0" },
-    { name = "baostock", marker = "extra == 'stock'", specifier = ">=0.8.0" },
-    { name = "croniter", specifier = ">=6.0.0,<7.0.0" },
-    { name = "dingtalk-stream", specifier = ">=0.24.0,<1.0.0" },
-    { name = "duckduckgo-search", specifier = ">=7.0,<8.0" },
-    { name = "efinance", marker = "extra == 'stock'", specifier = ">=0.5.5" },
-    { name = "exchange-calendars", marker = "extra == 'stock'", specifier = ">=4.5.0" },
-    { name = "fake-useragent", marker = "extra == 'stock'", specifier = ">=1.4.0" },
-    { name = "filelock", specifier = ">=3.0,<4.0" },
-    { name = "google-search-results", marker = "extra == 'stock'", specifier = ">=2.4.0" },
-    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
-    { name = "imgkit", marker = "extra == 'stock'", specifier = ">=1.2.0" },
-    { name = "json-repair", specifier = ">=0.57.0,<1.0.0" },
-    { name = "keyring", specifier = ">=25.0.0,<26.0.0" },
-    { name = "lark-oapi", specifier = ">=1.5.0,<2.0.0" },
-    { name = "loguru", specifier = ">=0.7.3,<1.0.0" },
-    { name = "lxml-html-clean", marker = "extra == 'stock'" },
-    { name = "markdown2", marker = "extra == 'stock'", specifier = ">=2.4.0" },
-    { name = "matrix-nio", extras = ["e2e"], marker = "extra == 'matrix'", specifier = ">=0.25.2" },
-    { name = "mcp", specifier = ">=1.26.0,<2.0.0" },
-    { name = "mistune", marker = "extra == 'matrix'", specifier = ">=3.0.0,<4.0.0" },
-    { name = "msgpack", specifier = ">=1.1.0,<2.0.0" },
-    { name = "newspaper3k", marker = "extra == 'stock'", specifier = ">=0.2.8" },
-    { name = "nh3", marker = "extra == 'matrix'", specifier = ">=0.2.17,<1.0.0" },
-    { name = "numpy", marker = "extra == 'stock'", specifier = ">=1.24.0" },
-    { name = "oauth-cli-kit", specifier = ">=0.1.3,<1.0.0" },
-    { name = "openai", specifier = ">=2.8.0,<3.0.0" },
-    { name = "pandas", marker = "extra == 'stock'", specifier = ">=2.0.0" },
-    { name = "pillow", specifier = ">=12.1.1" },
-    { name = "prompt-toolkit", specifier = ">=3.0.50,<4.0.0" },
-    { name = "pydantic", specifier = ">=2.12.0,<3.0.0" },
-    { name = "pydantic-settings", specifier = ">=2.12.0,<3.0.0" },
-    { name = "pypdf", specifier = ">=6.0.0,<7.0.0" },
-    { name = "pytdx", marker = "extra == 'stock'", specifier = ">=1.72" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.0,<10.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.3.0,<2.0.0" },
-    { name = "python-socketio", specifier = ">=5.16.0,<6.0.0" },
-    { name = "python-socks", extras = ["asyncio"], specifier = ">=2.8.0,<3.0.0" },
-    { name = "python-telegram-bot", extras = ["socks"], specifier = ">=22.0,<23.0" },
-    { name = "pyyaml", specifier = ">=6.0,<7.0" },
-    { name = "qq-botpy", specifier = ">=1.2.0,<2.0.0" },
-    { name = "readability-lxml", specifier = ">=0.8.4,<1.0.0" },
-    { name = "rich", specifier = ">=14.0.0,<15.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "schedule", marker = "extra == 'stock'", specifier = ">=1.2.0" },
-    { name = "slack-sdk", specifier = ">=3.39.0,<4.0.0" },
-    { name = "slackify-markdown", specifier = ">=0.2.0,<1.0.0" },
-    { name = "socksio", specifier = ">=1.0.0,<2.0.0" },
-    { name = "sqlite-vec", specifier = ">=0.1.6,<1.0.0" },
-    { name = "starlette", specifier = ">=0.41,<1" },
-    { name = "tavily-python", marker = "extra == 'stock'", specifier = ">=0.3.0" },
-    { name = "tiktoken", specifier = ">=0.9.0,<1.0.0" },
-    { name = "tushare", marker = "extra == 'stock'", specifier = ">=1.4.0" },
-    { name = "twscrape", specifier = ">=0.17.0" },
-    { name = "typer", specifier = ">=0.20.0,<1.0.0" },
-    { name = "uvicorn", specifier = ">=0.32,<1" },
-    { name = "websocket-client", specifier = ">=1.9.0,<2.0.0" },
-    { name = "websockets", specifier = ">=16.0,<17.0" },
-    { name = "yfinance", marker = "extra == 'stock'", specifier = ">=0.2.0" },
-]
-provides-extras = ["matrix", "stock", "dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=24.0.0" },
-    { name = "pre-commit", specifier = ">=4.0.0" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0,<2.0.0" },
-    { name = "ruff", specifier = ">=0.9.0" },
-    { name = "typer", specifier = ">=0.20.0,<1.0.0" },
-]
-
-[[package]]
 name = "atomicwrites"
 version = "1.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3576,6 +3412,210 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6e/87/995a176c81887000a14556b810be986530d723224a71e10ccb312b480637/tavily_python-0.7.22.tar.gz", hash = "sha256:050c0113309b516f58fbdc484d6091efa7ce6c016c2a2cd9f111581269f00dfe", size = 22393, upload-time = "2026-02-26T15:05:00.794Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/14/43/9f977f236c641c7903939788b088c3575e9a5dba0b9ca9a5586a1f02bb9e/tavily_python-0.7.22-py3-none-any.whl", hash = "sha256:25d05f02be3fa2508ff1c114196b714e069d75312c26ddf747c9f5bdc617bbb3", size = 18136, upload-time = "2026-02-26T15:04:59.608Z" },
+]
+
+[[package]]
+name = "theos-agent"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "aiosqlite" },
+    { name = "anthropic" },
+    { name = "httpx" },
+    { name = "json-repair" },
+    { name = "loguru" },
+    { name = "openai" },
+    { name = "prompt-toolkit" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+auth-oauth = [
+    { name = "filelock" },
+    { name = "keyring" },
+    { name = "oauth-cli-kit" },
+]
+browser = [
+    { name = "pillow" },
+]
+channels-dingtalk = [
+    { name = "dingtalk-stream" },
+]
+channels-discord = [
+    { name = "websockets" },
+]
+channels-feishu = [
+    { name = "aiohttp" },
+    { name = "filelock" },
+    { name = "lark-oapi" },
+]
+channels-mochat = [
+    { name = "msgpack" },
+    { name = "python-socketio" },
+]
+channels-qq = [
+    { name = "qq-botpy" },
+]
+channels-slack = [
+    { name = "slack-sdk" },
+    { name = "slackify-markdown" },
+]
+channels-telegram = [
+    { name = "python-socks" },
+    { name = "python-telegram-bot", extra = ["socks"] },
+    { name = "socksio" },
+]
+channels-whatsapp = [
+    { name = "websockets" },
+]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+gateway = [
+    { name = "croniter" },
+]
+image = [
+    { name = "pillow" },
+]
+matrix = [
+    { name = "matrix-nio", extra = ["e2e"] },
+    { name = "mistune" },
+    { name = "nh3" },
+]
+mcp = [
+    { name = "mcp" },
+]
+memory-kg = [
+    { name = "sqlite-vec" },
+    { name = "tiktoken" },
+]
+pdf = [
+    { name = "pypdf" },
+]
+pollers = [
+    { name = "twscrape" },
+]
+stock = [
+    { name = "akshare" },
+    { name = "baostock" },
+    { name = "efinance" },
+    { name = "exchange-calendars" },
+    { name = "fake-useragent" },
+    { name = "google-search-results" },
+    { name = "imgkit" },
+    { name = "lxml-html-clean" },
+    { name = "markdown2" },
+    { name = "newspaper3k" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pytdx" },
+    { name = "schedule" },
+    { name = "tavily-python" },
+    { name = "tushare" },
+    { name = "yfinance" },
+]
+ui = [
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
+web = [
+    { name = "duckduckgo-search" },
+    { name = "readability-lxml" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", marker = "extra == 'channels-feishu'", specifier = ">=3.9.0,<4.0.0" },
+    { name = "aiosqlite", specifier = ">=0.20.0,<1.0.0" },
+    { name = "akshare", marker = "extra == 'stock'", specifier = ">=1.12.0" },
+    { name = "anthropic", specifier = ">=0.52.0,<1.0.0" },
+    { name = "baostock", marker = "extra == 'stock'", specifier = ">=0.8.0" },
+    { name = "croniter", marker = "extra == 'gateway'", specifier = ">=6.0.0,<7.0.0" },
+    { name = "dingtalk-stream", marker = "extra == 'channels-dingtalk'", specifier = ">=0.24.0,<1.0.0" },
+    { name = "duckduckgo-search", marker = "extra == 'web'", specifier = ">=7.0,<8.0" },
+    { name = "efinance", marker = "extra == 'stock'", specifier = ">=0.5.5" },
+    { name = "exchange-calendars", marker = "extra == 'stock'", specifier = ">=4.5.0" },
+    { name = "fake-useragent", marker = "extra == 'stock'", specifier = ">=1.4.0" },
+    { name = "filelock", marker = "extra == 'auth-oauth'", specifier = ">=3.0,<4.0" },
+    { name = "filelock", marker = "extra == 'channels-feishu'", specifier = ">=3.0,<4.0" },
+    { name = "google-search-results", marker = "extra == 'stock'", specifier = ">=2.4.0" },
+    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
+    { name = "imgkit", marker = "extra == 'stock'", specifier = ">=1.2.0" },
+    { name = "json-repair", specifier = ">=0.57.0,<1.0.0" },
+    { name = "keyring", marker = "extra == 'auth-oauth'", specifier = ">=25.0.0,<26.0.0" },
+    { name = "lark-oapi", marker = "extra == 'channels-feishu'", specifier = ">=1.5.0,<2.0.0" },
+    { name = "loguru", specifier = ">=0.7.3,<1.0.0" },
+    { name = "lxml-html-clean", marker = "extra == 'stock'" },
+    { name = "markdown2", marker = "extra == 'stock'", specifier = ">=2.4.0" },
+    { name = "matrix-nio", extras = ["e2e"], marker = "extra == 'matrix'", specifier = ">=0.25.2" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.26.0,<2.0.0" },
+    { name = "mistune", marker = "extra == 'matrix'", specifier = ">=3.0.0,<4.0.0" },
+    { name = "msgpack", marker = "extra == 'channels-mochat'", specifier = ">=1.1.0,<2.0.0" },
+    { name = "newspaper3k", marker = "extra == 'stock'", specifier = ">=0.2.8" },
+    { name = "nh3", marker = "extra == 'matrix'", specifier = ">=0.2.17,<1.0.0" },
+    { name = "numpy", marker = "extra == 'stock'", specifier = ">=1.24.0" },
+    { name = "oauth-cli-kit", marker = "extra == 'auth-oauth'", specifier = ">=0.1.3,<1.0.0" },
+    { name = "openai", specifier = ">=2.8.0,<3.0.0" },
+    { name = "pandas", marker = "extra == 'stock'", specifier = ">=2.0.0" },
+    { name = "pillow", marker = "extra == 'browser'", specifier = ">=12.1.1" },
+    { name = "pillow", marker = "extra == 'image'", specifier = ">=12.1.1" },
+    { name = "prompt-toolkit", specifier = ">=3.0.50,<4.0.0" },
+    { name = "pydantic", specifier = ">=2.12.0,<3.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.12.0,<3.0.0" },
+    { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=6.0.0,<7.0.0" },
+    { name = "pytdx", marker = "extra == 'stock'", specifier = ">=1.72" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.0,<10.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.3.0,<2.0.0" },
+    { name = "python-socketio", marker = "extra == 'channels-mochat'", specifier = ">=5.16.0,<6.0.0" },
+    { name = "python-socks", extras = ["asyncio"], marker = "extra == 'channels-telegram'", specifier = ">=2.8.0,<3.0.0" },
+    { name = "python-telegram-bot", extras = ["socks"], marker = "extra == 'channels-telegram'", specifier = ">=22.0,<23.0" },
+    { name = "pyyaml", specifier = ">=6.0,<7.0" },
+    { name = "qq-botpy", marker = "extra == 'channels-qq'", specifier = ">=1.2.0,<2.0.0" },
+    { name = "readability-lxml", marker = "extra == 'web'", specifier = ">=0.8.4,<1.0.0" },
+    { name = "rich", specifier = ">=14.0.0,<15.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "schedule", marker = "extra == 'stock'", specifier = ">=1.2.0" },
+    { name = "slack-sdk", marker = "extra == 'channels-slack'", specifier = ">=3.39.0,<4.0.0" },
+    { name = "slackify-markdown", marker = "extra == 'channels-slack'", specifier = ">=0.2.0,<1.0.0" },
+    { name = "socksio", marker = "extra == 'channels-telegram'", specifier = ">=1.0.0,<2.0.0" },
+    { name = "sqlite-vec", marker = "extra == 'memory-kg'", specifier = ">=0.1.6,<1.0.0" },
+    { name = "starlette", marker = "extra == 'ui'", specifier = ">=0.41,<1" },
+    { name = "tavily-python", marker = "extra == 'stock'", specifier = ">=0.3.0" },
+    { name = "tiktoken", marker = "extra == 'memory-kg'", specifier = ">=0.9.0,<1.0.0" },
+    { name = "tushare", marker = "extra == 'stock'", specifier = ">=1.4.0" },
+    { name = "twscrape", marker = "extra == 'pollers'", specifier = ">=0.17.0" },
+    { name = "typer", specifier = ">=0.20.0,<1.0.0" },
+    { name = "uvicorn", marker = "extra == 'ui'", specifier = ">=0.32,<1" },
+    { name = "websockets", marker = "extra == 'channels-discord'", specifier = ">=16.0,<17.0" },
+    { name = "websockets", marker = "extra == 'channels-whatsapp'", specifier = ">=16.0,<17.0" },
+    { name = "yfinance", marker = "extra == 'stock'", specifier = ">=0.2.0" },
+]
+provides-extras = ["auth-oauth", "browser", "channels-dingtalk", "channels-discord", "channels-feishu", "channels-mochat", "channels-qq", "channels-slack", "channels-telegram", "channels-whatsapp", "gateway", "image", "matrix", "mcp", "memory-kg", "pdf", "pollers", "stock", "ui", "web", "dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=24.0.0" },
+    { name = "pre-commit", specifier = ">=4.0.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0,<2.0.0" },
+    { name = "ruff", specifier = ">=0.9.0" },
+    { name = "typer", specifier = ">=0.20.0,<1.0.0" },
 ]
 
 [[package]]

@@ -79,6 +79,7 @@ def test_roles_do_not_force_multi_mode(tmp_path: Path):
             tools=["read_file", "write_file"],
         )
     }
+    config.tools.profile = "coding"
 
     loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
 

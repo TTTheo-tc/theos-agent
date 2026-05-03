@@ -21,20 +21,11 @@ def test_always_on_tools_is_a_set():
 def test_always_on_tools_contains_core_tools():
     for name in (
         "read_file",
-        "write_file",
-        "edit_file",
-        "bash",
         "grep",
         "glob",
         "list_dir",
-        "web_search",
-        "web_fetch",
         "memory_search",
-        "message",
-        "agent",
         "tool_search",
-        "todo",
-        "capability_search",
     ):
         assert name in ALWAYS_ON_TOOLS, f"{name} should be always-on"
 
@@ -49,6 +40,17 @@ def test_always_on_tools_excludes_deferred_tools():
         "image_analyze",
         "vendor_study",
         "http_request",
+        "write_file",
+        "edit_file",
+        "bash",
+        "web_search",
+        "web_fetch",
+        "message",
+        "agent",
+        "todo",
+        "capability_search",
+        "enter_plan_mode",
+        "exit_plan_mode",
     ):
         assert name not in ALWAYS_ON_TOOLS, f"{name} should be deferred"
 
@@ -89,12 +91,14 @@ def test_resolve_profile_full():
 def test_resolve_profile_minimal():
     result = resolve_profile("minimal")
     assert result is not None
-    assert "bash" in result
     assert "read_file" in result
+    assert "list_dir" in result
+    assert "glob" in result
+    assert "grep" in result
+    assert "memory_search" in result
     assert "tool_search" in result
-    assert "capability_search" in result
-    assert "skill_search" in result
-    assert "mcp_search" in result
+    assert "bash" not in result
+    assert "web_search" not in result
     assert "write_file" not in result
 
 
@@ -129,7 +133,7 @@ def test_resolve_profile_unknown_raises():
 def test_resolve_profile_extra_allow():
     result = resolve_profile("minimal", extra_allow={"group:memory"})
     assert result is not None
-    assert "bash" in result  # from minimal
+    assert "read_file" in result  # from minimal
     assert "memory_search" in result  # from extra_allow
 
 
@@ -171,13 +175,15 @@ def test_register_standard_tools_explicit_profile_filters_tools(tmp_path: Path):
         registry, ToolRegistrationConfig(workspace=tmp_path, mode="single", profile="minimal")
     )
     assert "read_file" in registry.tool_names
-    assert "capability_search" in registry.tool_names
-    assert "skill_search" in registry.tool_names
+    assert "glob" in registry.tool_names
+    assert "grep" in registry.tool_names
     assert "mcp_search" not in registry.tool_names
+    assert "capability_search" not in registry.tool_names
+    assert "skill_search" not in registry.tool_names
     assert "write_file" not in registry.tool_names
 
 
-def test_register_standard_tools_registers_mcp_search_when_manager_present(tmp_path: Path):
+def test_register_standard_tools_registers_mcp_search_when_profile_allows(tmp_path: Path):
     class _FakeManager:
         def catalog_snapshot(self):
             return []
@@ -188,7 +194,7 @@ def test_register_standard_tools_registers_mcp_search_when_manager_present(tmp_p
         ToolRegistrationConfig(
             workspace=tmp_path,
             mode="single",
-            profile="minimal",
+            profile="readonly",
             mcp_manager=_FakeManager(),
         ),
     )
@@ -206,8 +212,10 @@ def test_register_standard_tools_defers_non_always_on(tmp_path: Path):
 
     # Always-on tools must be in definitions
     assert "read_file" in def_names
-    assert "bash" in def_names
-    assert "web_search" in def_names
+    assert "list_dir" in def_names
+    assert "glob" in def_names
+    assert "grep" in def_names
+    assert "tool_search" in def_names
 
     # Deferred tools must NOT be in definitions
     deferred_summary = registry.get_deferred_summary()

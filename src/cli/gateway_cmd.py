@@ -151,9 +151,10 @@ def _run_startup_checks(config) -> None:
 
     # 1. Check critical Python dependencies
     critical_deps = {
-        "lark_oapi": "Feishu/Lark API integration",
         "json_repair": "JSON parsing for tool calls",
     }
+    if getattr(config.channels.feishu, "enabled", False):
+        critical_deps["lark_oapi"] = "Feishu/Lark API integration"
     optional_deps = {
         "playwright": "Browser automation (browser tool)",
     }
@@ -172,14 +173,15 @@ def _run_startup_checks(config) -> None:
             logger.warning("Startup check: optional dependency '{}' not installed ({})", mod, desc)
             checks_warned += 1
 
-    # 2. Check Feishu client importability
-    try:
-        from src.feishu.client import FeishuClient  # noqa: F401
+    # 2. Check Feishu client importability only when that channel is enabled.
+    if getattr(config.channels.feishu, "enabled", False):
+        try:
+            from src.feishu.client import FeishuClient  # noqa: F401
 
-        checks_passed += 1
-    except ImportError as e:
-        logger.warning("Startup check: cannot import FeishuClient: {}", e)
-        checks_warned += 1
+            checks_passed += 1
+        except ImportError as e:
+            logger.warning("Startup check: cannot import FeishuClient: {}", e)
+            checks_warned += 1
 
     # 3. Check skill directory integrity (both workspace and builtin)
     from src.agent.skills import BUILTIN_SKILLS_DIR
@@ -226,12 +228,13 @@ def _run_startup_checks(config) -> None:
     else:
         api_checks["Web search (DuckDuckGo)"] = True
 
-    # Check Feishu credentials
+    # Check Feishu credentials only when that channel is enabled.
     try:
         fs_cfg = config.channels.feishu
-        api_checks["Feishu"] = bool(fs_cfg.app_id and fs_cfg.app_secret)
+        if fs_cfg.enabled:
+            api_checks["Feishu"] = bool(fs_cfg.app_id and fs_cfg.app_secret)
     except Exception:
-        api_checks["Feishu"] = False
+        pass
 
     for name, ok in api_checks.items():
         if ok:
@@ -397,9 +400,11 @@ def gateway(
         return response
 
     cron.on_job = on_cron_job
-    from src.memory.rule_cleanup import ensure_structured_rule_cleanup_job
 
-    ensure_structured_rule_cleanup_job(cron)
+    if config.knowledge_graph.enabled:
+        from src.memory.rule_cleanup import ensure_structured_rule_cleanup_job
+
+        ensure_structured_rule_cleanup_job(cron)
 
     # Register Feishu token auto-refresh (every 6 hours)
     if config.channels.feishu.enabled:

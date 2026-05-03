@@ -137,8 +137,10 @@ class AgentLoop:
         type(self)._entropy_sensitivity = config.security.leak_sensitivity
         self._stock_config = config.tools.stock
         self._browser_config = config.tools.browser
+        self._tool_profile = config.tools.profile
         self._provider_keys = config.get_provider_keys()
         self._channel_env = channel_env or {}
+        self._knowledge_graph_enabled = config.knowledge_graph.enabled
 
         channels_config = channels_config_override or resolve_data_secret_refs(config.channels)
         self.channels_config = channels_config
@@ -208,6 +210,7 @@ class AgentLoop:
             orchestrator_config=orchestrator_config,
             group_memory_enabled=config.security.group_memory_enabled,
             groups_base_dir=workspace.parent / "groups",
+            structured_memory_enabled=self._knowledge_graph_enabled,
         )
         # Context assembler — must be after _memory so recall service is available
         self._context = TurnContextAssembler(
@@ -302,6 +305,7 @@ class AgentLoop:
         config = ToolRegistrationConfig(
             workspace=self.workspace,
             mode=self._root_agent_mode,
+            profile=self._tool_profile,
             allowed_dir=allowed_dir,
             exec_config=self.exec_config,
             brave_api_key=self.brave_api_key,
@@ -329,6 +333,7 @@ class AgentLoop:
             memory_search_enabled=self._memory.search_enabled(),
             memory_search_max_results=self._memory.search_max_results(),
             memory_search_min_score=self._memory.search_min_score(),
+            structured_memory_enabled=self._knowledge_graph_enabled,
             structured_workspace_resolver=lambda sk: self._memory.resolve_structured_workspace_for_tools(
                 sk,
                 genver_workspace_resolver=lambda k: self._genver.get_active_workspace(k),

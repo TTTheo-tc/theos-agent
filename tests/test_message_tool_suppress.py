@@ -21,6 +21,7 @@ def _make_loop(tmp_path: Path, *, owner_ids: list[str] | None = None) -> AgentLo
     cfg = Config()
     cfg.agents.defaults.workspace = str(tmp_path)
     cfg.agents.defaults.memory_window = 10
+    cfg.tools.profile = "messaging"
     return AgentLoop(
         bus=bus,
         provider=provider,
@@ -44,6 +45,7 @@ class TestMessageToolSuppressLogic:
             [
                 LLMResponse(content="", tool_calls=[tool_call]),
                 LLMResponse(content="Done", tool_calls=[]),
+                LLMResponse(content="", tool_calls=[]),
             ]
         )
         loop.provider.chat = AsyncMock(side_effect=lambda *a, **kw: next(calls))
@@ -76,6 +78,7 @@ class TestMessageToolSuppressLogic:
             [
                 LLMResponse(content="", tool_calls=[tool_call]),
                 LLMResponse(content="I've sent the email.", tool_calls=[]),
+                LLMResponse(content="", tool_calls=[]),
             ]
         )
         loop.provider.chat = AsyncMock(side_effect=lambda *a, **kw: next(calls))

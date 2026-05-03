@@ -42,6 +42,7 @@ class ToolRegistrationConfig:
     memory_search_enabled: bool = True
     memory_search_max_results: int = 6
     memory_search_min_score: float = 0.0
+    structured_memory_enabled: bool = True
     structured_workspace_resolver: Callable | None = None
     stock_config: Any = None
     provider_keys: dict[str, str] = field(default_factory=dict)

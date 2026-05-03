@@ -131,14 +131,14 @@ class MemoryCompactionConfig(Base):
 class MemoryFlushConfig(Base):
     """Pre-compaction memory flush settings."""
 
-    enabled: bool = True
+    enabled: bool = False
     soft_threshold_tokens: int = 4000
 
 
 class MemoryGCConfig(Base):
     """Memory garbage collection / time decay."""
 
-    enabled: bool = True
+    enabled: bool = False
     max_age_days: int = 90
     max_sections: int = 20
 
@@ -156,7 +156,7 @@ class MemoryConfig(Base):
 class KnowledgeGraphConfig(Base):
     """Knowledge graph storage configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     half_life_task_days: float = Field(default=30.0, alias="halfLifeTaskDays")
     half_life_rule_days: float = Field(default=60.0, alias="halfLifeRuleDays")
     half_life_research_days: float = Field(default=90.0, alias="halfLifeResearchDays")
@@ -230,7 +230,7 @@ class OrchestratorConfig(Base):
 class ReflectorConfig(Base):
     """LLM-powered post-task reflector configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     model: str = "minimax/MiniMax-M2.5"
 
 
@@ -249,7 +249,7 @@ class SubagentPolicyConfig(Base):
 class AgentsConfig(Base):
     """Agent configuration."""
 
-    mode: Literal["auto", "single", "team", "genver"] = "auto"
+    mode: Literal["auto", "single", "team", "genver"] = "single"
     defaults: AgentDefaults = Field(default_factory=AgentDefaults)
     roles: dict[str, AgentRoleConfig] = Field(default_factory=dict)
     genver: GenVerConfig = Field(default_factory=GenVerConfig)
@@ -292,7 +292,7 @@ class ProvidersConfig(Base):
 class HeartbeatConfig(Base):
     """Heartbeat service configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     interval_s: int = 30 * 60  # 30 minutes
 
 
@@ -317,7 +317,7 @@ class PollersConfig(Base):
 class UIConfig(Base):
     """Dashboard UI server configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     port: int = 8080
     host: str = "127.0.0.1"
 
@@ -394,7 +394,7 @@ class StockConfig(Base):
 class BrowserConfig(Base):
     """Browser automation tool configuration."""
 
-    enabled: bool = True
+    enabled: bool = False
     allowed_domains: list[str] = Field(default_factory=list, alias="allowedDomains")
     default_viewport_width: int = Field(1280, alias="defaultViewportWidth")
     default_viewport_height: int = Field(720, alias="defaultViewportHeight")
@@ -405,6 +405,7 @@ class BrowserConfig(Base):
 class ToolsConfig(Base):
     """Tools configuration."""
 
+    profile: Literal["minimal", "coding", "messaging", "readonly", "full"] = "minimal"
     web: WebToolsConfig = Field(default_factory=WebToolsConfig)
     exec: ExecToolConfig = Field(default_factory=ExecToolConfig)
     stock: StockConfig = Field(default_factory=StockConfig)

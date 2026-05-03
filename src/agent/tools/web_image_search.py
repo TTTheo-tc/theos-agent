@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 
-from duckduckgo_search import DDGS
+try:
+    from duckduckgo_search import DDGS
+except ImportError:
+    DDGS = None  # type: ignore[assignment]
 
 from src.agent.tools.base import Tool
 
@@ -51,6 +54,11 @@ class ImageSearchTool(Tool):
         type_image = kwargs.get("type_image")
 
         try:
+            if DDGS is None:
+                return (
+                    "Image search failed: DuckDuckGo image search requires the web extra. "
+                    "Install it with: pip install 'theos-agent[web]'"
+                )
             ddgs = DDGS(timeout=30)
             search_kwargs: dict = {"keywords": query, "max_results": max_results}
             if size:

@@ -214,7 +214,13 @@ class WebFetchTool(Tool):
         self, url: str, extract_mode: str = "markdown", **kwargs: Any
     ) -> tuple[str, str]:
         """Extract content via HTTP fetch + readability. Returns (text, extractor_name)."""
-        from readability import Document
+        try:
+            from readability import Document
+        except ImportError as exc:
+            raise RuntimeError(
+                "readability extraction requires the web extra. "
+                "Install it with: pip install 'theos-agent[web]'"
+            ) from exc
 
         prepared_url, headers = self._credential_injector.prepare_url_and_headers(
             url,

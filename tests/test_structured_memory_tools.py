@@ -233,6 +233,7 @@ async def test_agent_loop_injects_structured_recall(tmp_path: Path) -> None:
     provider.chat = AsyncMock(return_value=LLMResponse(content="ok", tool_calls=[]))
     cfg = Config()
     cfg.agents.defaults.workspace = str(tmp_path)
+    cfg.knowledge_graph.enabled = True
     loop = AgentLoop(bus=bus, provider=provider, config=cfg)
     loop.tools.get_definitions = MagicMock(return_value=[])
     loop.hooks.run_pre_chat = AsyncMock(

@@ -10,7 +10,11 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from duckduckgo_search import DDGS
+
+try:
+    from duckduckgo_search import DDGS
+except ImportError:
+    DDGS = None  # type: ignore[assignment]
 
 from src.agent.tools.base import Tool
 from src.security.credential_injector import (
@@ -136,6 +140,11 @@ class WebSearchTool(Tool):
         blocked_domains: list[str] | None = None,
     ) -> str:
         try:
+            if DDGS is None:
+                return (
+                    "Error: DuckDuckGo web search requires the web extra. "
+                    "Install it with: pip install 'theos-agent[web]'"
+                )
             n = min(max(count or self.max_results, 1), 10)
             # Fetch extra results to allow post-filtering
             fetch_count = n * 3 if (allowed_domains or blocked_domains) else n

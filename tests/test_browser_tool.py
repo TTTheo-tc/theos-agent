@@ -990,7 +990,7 @@ class TestBrowserConfig:
         from src.config.schema import BrowserConfig
 
         cfg = BrowserConfig()
-        assert cfg.enabled is True
+        assert cfg.enabled is False
         assert cfg.allowed_domains == []
         assert cfg.default_viewport_width == 1280
         assert cfg.default_viewport_height == 720
@@ -1002,7 +1002,7 @@ class TestBrowserConfig:
 
         tools = ToolsConfig()
         assert hasattr(tools, "browser")
-        assert tools.browser.enabled is True
+        assert tools.browser.enabled is False
 
     def test_browser_config_camel_case(self):
         from src.config.schema import BrowserConfig

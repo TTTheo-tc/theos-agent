@@ -21,42 +21,15 @@ dependencies = [
     "typer>=0.20.0,<1.0.0",
     "pydantic>=2.12.0,<3.0.0",
     "pydantic-settings>=2.12.0,<3.0.0",
-    "websockets>=16.0,<17.0",
-    "websocket-client>=1.9.0,<2.0.0",
     "httpx>=0.28.0,<1.0.0",
-    "oauth-cli-kit>=0.1.3,<1.0.0",
     "loguru>=0.7.3,<1.0.0",
-    "readability-lxml>=0.8.4,<1.0.0",
     "rich>=14.0.0,<15.0.0",
-    "croniter>=6.0.0,<7.0.0",
-    "dingtalk-stream>=0.24.0,<1.0.0",
-    "python-telegram-bot[socks]>=22.0,<23.0",
-    "lark-oapi>=1.5.0,<2.0.0",
-    "socksio>=1.0.0,<2.0.0",
-    "python-socketio>=5.16.0,<6.0.0",
-    "msgpack>=1.1.0,<2.0.0",
-    "slack-sdk>=3.39.0,<4.0.0",
-    "slackify-markdown>=0.2.0,<1.0.0",
-    "qq-botpy>=1.2.0,<2.0.0",
-    "python-socks[asyncio]>=2.8.0,<3.0.0",
     "prompt-toolkit>=3.0.50,<4.0.0",
-    "mcp>=1.26.0,<2.0.0",
     "json-repair>=0.57.0,<1.0.0",
     "pyyaml>=6.0,<7.0",
     "aiosqlite>=0.20.0,<1.0.0",
-    "keyring>=25.0.0,<26.0.0",
-    "pypdf>=6.0.0,<7.0.0",
-    "filelock>=3.0,<4.0",
-    "tiktoken>=0.9.0,<1.0.0",
-    "sqlite-vec>=0.1.6,<1.0.0",
     "anthropic>=0.52.0,<1.0.0",
     "openai>=2.8.0,<3.0.0",
-    "aiohttp>=3.9.0,<4.0.0",
-    "duckduckgo-search>=7.0,<8.0",
-    "starlette>=0.41,<1",
-    "uvicorn>=0.32,<1",
-    "pillow>=12.1.1",
-    "twscrape>=0.17.0",
 ]
 
 [project.urls]
@@ -66,10 +39,67 @@ Issues = "https://github.com/TTTheo-tc/theos-agent/issues"
 Documentation = "https://github.com/TTTheo-tc/theos-agent#readme"
 
 [project.optional-dependencies]
+auth-oauth = [
+    "oauth-cli-kit>=0.1.3,<1.0.0",
+    "keyring>=25.0.0,<26.0.0",
+    "filelock>=3.0,<4.0",
+]
+browser = [
+    "pillow>=12.1.1",
+]
+channels-dingtalk = [
+    "dingtalk-stream>=0.24.0,<1.0.0",
+]
+channels-discord = [
+    "websockets>=16.0,<17.0",
+]
+channels-feishu = [
+    "aiohttp>=3.9.0,<4.0.0",
+    "filelock>=3.0,<4.0",
+    "lark-oapi>=1.5.0,<2.0.0",
+]
+channels-mochat = [
+    "msgpack>=1.1.0,<2.0.0",
+    "python-socketio>=5.16.0,<6.0.0",
+]
+channels-qq = [
+    "qq-botpy>=1.2.0,<2.0.0",
+]
+channels-slack = [
+    "slack-sdk>=3.39.0,<4.0.0",
+    "slackify-markdown>=0.2.0,<1.0.0",
+]
+channels-telegram = [
+    "python-socks[asyncio]>=2.8.0,<3.0.0",
+    "python-telegram-bot[socks]>=22.0,<23.0",
+    "socksio>=1.0.0,<2.0.0",
+]
+channels-whatsapp = [
+    "websockets>=16.0,<17.0",
+]
+gateway = [
+    "croniter>=6.0.0,<7.0.0",
+]
+image = [
+    "pillow>=12.1.1",
+]
 matrix = [
     "matrix-nio[e2e]>=0.25.2",
     "mistune>=3.0.0,<4.0.0",
     "nh3>=0.2.17,<1.0.0",
+]
+mcp = [
+    "mcp>=1.26.0,<2.0.0",
+]
+memory-kg = [
+    "sqlite-vec>=0.1.6,<1.0.0",
+    "tiktoken>=0.9.0,<1.0.0",
+]
+pdf = [
+    "pypdf>=6.0.0,<7.0.0",
+]
+pollers = [
+    "twscrape>=0.17.0",
 ]
 stock = [
     "akshare>=1.12.0",
@@ -89,6 +119,14 @@ stock = [
     "imgkit>=1.2.0",
     "markdown2>=2.4.0",
     "google-search-results>=2.4.0",
+]
+ui = [
+    "starlette>=0.41,<1",
+    "uvicorn>=0.32,<1",
+]
+web = [
+    "duckduckgo-search>=7.0,<8.0",
+    "readability-lxml>=0.8.4,<1.0.0",
 ]
 dev = [
     "pytest>=9.0.0,<10.0.0",
@@ -113,13 +151,13 @@ include = [
     "src/templates/**/*.md",
     "skills/**/*.md",
     "skills/**/*.sh",
-    "instinct/**/*.md",
 ]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src/",
     "bridge/",
+    "instinct/",
     "skills/",
     "ui/",
     "README.md",
@@ -127,10 +165,7 @@ include = [
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
-"bridge" = "src/bridge"
-"instinct" = "src/instinct"
 "skills" = "src/skills"
-"ui/dist" = "src/ui/ui_static"
 
 [tool.ruff]
 line-length = 100

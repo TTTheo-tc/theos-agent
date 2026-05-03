@@ -22,19 +22,29 @@ A personal agentic OS for code, memory, tools, and automation.
 ```bash
 git clone https://github.com/TTTheo-tc/theos-agent
 cd theos-agent
-make install-full
+make install-core
 ```
 
-这会自动构建 UI 前端、安装全部依赖（含 dev）并配置 pre-commit hooks。
+这会安装默认 core 运行时：本地 CLI、provider、基础工具、session、memory 和安全层。
 
 也可以分步执行:
 
 ```bash
-make build-ui   # 构建前端
-make install     # 安装 Python 依赖 + pre-commit hooks
+make install-dev      # core + dev tools + pre-commit
+make install-gateway  # core + gateway scheduling support
+make install-full     # UI build + all extras + dev tools
 ```
 
-不安装直接运行（仅开发时使用，需先 `make build-ui`）:
+按需安装 extras:
+
+```bash
+uv sync --extra web
+uv sync --extra ui
+uv sync --extra channels-telegram
+uv sync --extra channels-feishu
+```
+
+不安装直接运行（仅开发时使用）:
 
 ```bash
 uv run theos --help
@@ -43,7 +53,7 @@ uv run theos --help
 ### 2. Initialize
 
 ```bash
-theos init
+uv run theos init
 ```
 
 初始化会创建:
@@ -63,9 +73,9 @@ theos init
 ### 3. Run
 
 ```bash
-theos agent
-theos gateway
-theos status
+uv run theos agent
+uv run theos gateway
+uv run theos status
 ```
 
 ## Common Commands

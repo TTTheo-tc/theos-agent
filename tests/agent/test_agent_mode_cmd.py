@@ -31,6 +31,7 @@ def _make_config(workspace: Path) -> Config:
         )
     }
     cfg.agents.mode = "team"
+    cfg.tools.profile = "full"
     return cfg
 
 

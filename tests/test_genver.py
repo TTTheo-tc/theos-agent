@@ -936,9 +936,9 @@ def test_parse_handoff_dev_log_absent():
 
 
 def test_agents_config_mode_default():
-    """AgentsConfig.mode should default to 'auto'."""
+    """AgentsConfig.mode should default to the slim single-agent runtime."""
     from src.config.schema import AgentsConfig
 
     config = AgentsConfig()
-    assert config.mode == "auto"
+    assert config.mode == "single"
     assert isinstance(config.genver, GenVerConfig)

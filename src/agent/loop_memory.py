@@ -233,12 +233,14 @@ class MemoryHandler:
         orchestrator_config: Any,
         group_memory_enabled: bool,
         groups_base_dir: Path,
+        structured_memory_enabled: bool = True,
     ):
         from src.memory.tiers import MemoryTierManager
 
         self._scope = MemoryScopeResolver(workspace, groups_base_dir, group_memory_enabled)
         self._memory_config = memory_config
         self._orchestrator_config = orchestrator_config
+        self._structured_memory_enabled = structured_memory_enabled
         self._recall = MemoryRecallService(scope=self._scope, memory_config=memory_config)
         self._consolidation = MemoryConsolidationService(
             scope=self._scope, memory_config=memory_config
@@ -351,6 +353,9 @@ class MemoryHandler:
         workspace_override: Path | None = None,
     ) -> None:
         """Persist high-value task knowledge as structured JSON objects."""
+        if not self._structured_memory_enabled:
+            return
+
         from src.memory.structured import StructuredMemoryStore
 
         workspace = workspace_override or self._scope.resolve_structured_workspace(session_key)
@@ -478,6 +483,9 @@ class MemoryHandler:
         workspace_override: Path | None = None,
     ) -> str | None:
         """Build a concise structured-memory recall block for the current turn."""
+        if not self._structured_memory_enabled:
+            return None
+
         return await self._recall.build_structured_recall(
             session_key=session_key,
             query=query,

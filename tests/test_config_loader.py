@@ -58,3 +58,17 @@ def test_ui_dashboard_defaults_to_loopback():
     config = Config()
 
     assert config.gateway.ui.host == "127.0.0.1"
+
+
+def test_slim_runtime_defaults():
+    config = Config()
+
+    assert config.agents.mode == "single"
+    assert config.agents.reflector.enabled is False
+    assert config.knowledge_graph.enabled is False
+    assert config.gateway.heartbeat.enabled is False
+    assert config.gateway.ui.enabled is False
+    assert config.tools.browser.enabled is False
+    assert config.tools.profile == "minimal"
+    assert config.memory.flush.enabled is False
+    assert config.memory.gc.enabled is False

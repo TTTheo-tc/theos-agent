@@ -326,7 +326,7 @@ class TestEndToEnd:
 
         # Always-on tools in definitions
         assert "read_file" in def_names
-        assert "bash" in def_names
+        assert "bash" in deferred_names
         assert "tool_search" in def_names
 
         # Deferred tools not in definitions

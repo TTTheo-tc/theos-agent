@@ -4,15 +4,18 @@ from types import SimpleNamespace
 
 import pytest
 
-import src.channels.matrix as matrix_module
 from src.bus.events import OutboundMessage
 from src.bus.queue import MessageBus
-from src.channels.matrix import (
-    MATRIX_HTML_FORMAT,
-    TYPING_NOTICE_TIMEOUT_MS,
-    MatrixChannel,
-)
 from src.config.schema import MatrixConfig
+
+matrix_module = pytest.importorskip(
+    "src.channels.matrix",
+    reason="Matrix channel optional dependencies are not installed",
+    exc_type=ImportError,
+)
+MATRIX_HTML_FORMAT = matrix_module.MATRIX_HTML_FORMAT
+TYPING_NOTICE_TIMEOUT_MS = matrix_module.TYPING_NOTICE_TIMEOUT_MS
+MatrixChannel = matrix_module.MatrixChannel
 
 _ROOM_SEND_UNSET = object()
 
