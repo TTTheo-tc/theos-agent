@@ -44,6 +44,12 @@ def test_with_memory(store_with_memory: MemoryStore) -> None:
     assert "Project Architecture" in result
 
 
+def test_memory_disabled_skips_context_injection(store_with_memory: MemoryStore) -> None:
+    result = store_with_memory.get_memory_context(memory_config=MemoryConfig(enabled=False))
+
+    assert result == ""
+
+
 def test_without_memory(store: MemoryStore) -> None:
     result = store.get_memory_context()
     assert result == ""

@@ -162,7 +162,7 @@ class TurnFinalizer:
         genver_last_handoff: Any | None,
         tools: Any,
         workspace: Path,
-        memory_tiers: "MemoryTierManager",
+        memory_tiers: "MemoryTierManager | None",
         turn_id: str | None = None,
         persisted_user_message: bool = False,
     ) -> OutboundMessage | None:

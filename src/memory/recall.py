@@ -211,6 +211,8 @@ class MemoryRecallService:
         target_workspace = workspace or self._scope.workspace
         store = MemoryStore(target_workspace)
         effective_config = memory_config if memory_config is not None else self._memory_config
+        if effective_config is not None and not getattr(effective_config, "enabled", True):
+            return ""
 
         long_term = store.read_long_term()
         if not long_term:

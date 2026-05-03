@@ -80,6 +80,7 @@ def register_standard_tools(
     memory_search_enabled = config.memory_search_enabled
     memory_search_max_results = config.memory_search_max_results
     memory_search_min_score = config.memory_search_min_score
+    memory_recall_telemetry_enabled = config.memory_recall_telemetry_enabled
     structured_memory_enabled = config.structured_memory_enabled
     structured_workspace_resolver = config.structured_workspace_resolver
     stock_config = config.stock_config
@@ -275,6 +276,7 @@ def register_standard_tools(
                     workspace_resolver=structured_workspace_resolver,
                     default_max_results=memory_search_max_results,
                     default_min_score=memory_search_min_score,
+                    recall_telemetry_enabled=memory_recall_telemetry_enabled,
                 )
             )
         if _should("memory_get"):
@@ -293,6 +295,7 @@ def register_standard_tools(
                 StructuredMemorySearchTool(
                     workspace_resolver=structured_workspace_resolver,
                     default_max_results=memory_search_max_results,
+                    recall_telemetry_enabled=memory_recall_telemetry_enabled,
                 )
             )
         if _should("research_note_get"):
@@ -306,7 +309,12 @@ def register_standard_tools(
         if _should("domain_rule_get"):
             from src.agent.tools.structured_memory import DomainRuleGetTool
 
-            _reg(DomainRuleGetTool(workspace_resolver=structured_workspace_resolver))
+            _reg(
+                DomainRuleGetTool(
+                    workspace_resolver=structured_workspace_resolver,
+                    recall_telemetry_enabled=memory_recall_telemetry_enabled,
+                )
+            )
 
     # --- stock analysis ---
     if mode in ("single", "team") and _should("stock_analysis"):

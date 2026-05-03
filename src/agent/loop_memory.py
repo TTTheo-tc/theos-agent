@@ -235,8 +235,6 @@ class MemoryHandler:
         groups_base_dir: Path,
         structured_memory_enabled: bool = True,
     ):
-        from src.memory.tiers import MemoryTierManager
-
         self._scope = MemoryScopeResolver(workspace, groups_base_dir, group_memory_enabled)
         self._memory_config = memory_config
         self._orchestrator_config = orchestrator_config
@@ -247,7 +245,10 @@ class MemoryHandler:
         )
 
         # Three-tier memory (lazy init when memory_tiers.enabled)
-        self._memory_tiers = MemoryTierManager(workspace, orchestrator_config)
+        self._memory_tiers: MemoryTierManager | None = None
+        self._memory_tiers_enabled = bool(
+            orchestrator_config and orchestrator_config.memory_tiers.enabled
+        )
         self._memory_index: MemoryIndex | None = None  # global index
         self._memory_indexes: dict[str, MemoryIndex] = {}  # per-session indexes
         self._memory_dbs: dict[str, Database] = {}  # scope -> db handle
@@ -266,7 +267,23 @@ class MemoryHandler:
     @property
     def tiers(self) -> "MemoryTierManager":
         """Access the underlying MemoryTierManager."""
+        if self._memory_tiers is None:
+            from src.memory.tiers import MemoryTierManager
+
+            self._memory_tiers = MemoryTierManager(
+                self._scope.workspace, self._orchestrator_config
+            )
         return self._memory_tiers
+
+    def tiers_enabled(self) -> bool:
+        """Return whether the short-term tier pipeline is enabled."""
+        return self._memory_tiers_enabled
+
+    def tiers_or_none(self) -> "MemoryTierManager | None":
+        """Return the tier manager only when full memory tiers are enabled."""
+        if not self._memory_tiers_enabled:
+            return None
+        return self.tiers
 
     @property
     def scope(self) -> MemoryScopeResolver:
@@ -353,7 +370,7 @@ class MemoryHandler:
         workspace_override: Path | None = None,
     ) -> None:
         """Persist high-value task knowledge as structured JSON objects."""
-        if not self._structured_memory_enabled:
+        if not self.memory_enabled() or not self._structured_memory_enabled:
             return
 
         from src.memory.structured import StructuredMemoryStore
@@ -483,7 +500,7 @@ class MemoryHandler:
         workspace_override: Path | None = None,
     ) -> str | None:
         """Build a concise structured-memory recall block for the current turn."""
-        if not self._structured_memory_enabled:
+        if not self.memory_enabled() or not self._structured_memory_enabled:
             return None
 
         return await self._recall.build_structured_recall(
@@ -495,10 +512,21 @@ class MemoryHandler:
 
     # -- search config accessors ----------------------------------------------
 
+    def memory_enabled(self) -> bool:
+        if self._memory_config is None:
+            return True
+        return bool(getattr(self._memory_config, "enabled", True))
+
     def search_enabled(self) -> bool:
         if self._memory_config is None:
             return True
-        return bool(self._memory_config.search.enabled)
+        return self.memory_enabled() and bool(self._memory_config.search.enabled)
+
+    def recall_telemetry_enabled(self) -> bool:
+        if not self.memory_enabled() or self._memory_config is None:
+            return False
+        telemetry = getattr(self._memory_config, "telemetry", None)
+        return bool(telemetry and telemetry.recall_enabled)
 
     def search_max_results(self) -> int:
         if self._memory_config is None:
@@ -542,7 +570,10 @@ class MemoryHandler:
         from src.memory.index import MemoryIndex
         from src.store.database import Database
 
-        await self._memory_tiers.ensure_db()
+        if not self.memory_enabled():
+            return
+        if self._memory_tiers_enabled:
+            await self.tiers.ensure_db()
         if not self.search_enabled():
             return
         scope_key, scope_workspace = self.resolve_scope(session_key)
@@ -555,7 +586,11 @@ class MemoryHandler:
 
         # Reuse short-term DB in global mode when tiers DB is available.
         db: Database
-        if not self._scope.group_memory_enabled and self._memory_tiers._db is not None:
+        if (
+            not self._scope.group_memory_enabled
+            and self._memory_tiers is not None
+            and self._memory_tiers._db is not None
+        ):
             db = self._memory_tiers._db
         else:
             existing = self._memory_dbs.get(scope_key)
@@ -595,6 +630,8 @@ class MemoryHandler:
         """Delegate to MemoryConsolidationService. Returns True on success."""
         from src.memory.store import MemoryStore
 
+        if not self.memory_enabled():
+            return False
         workspace = self._scope.resolve_structured_workspace(session.key)
         await self.ensure_db(session.key)
         index = self.resolve_index_for_tools(session.key)
@@ -606,7 +643,9 @@ class MemoryHandler:
             store=store,
             archive_all=archive_all,
             memory_window=memory_window,
-            short_term_store=self._memory_tiers.short_term_store,
+            short_term_store=(
+                self._memory_tiers.short_term_store if self._memory_tiers is not None else None
+            ),
             session_key=session.key,
             memory_index=index,
         )

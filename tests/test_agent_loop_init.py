@@ -62,6 +62,8 @@ def test_default_runtime_does_not_eagerly_create_optional_managers(tmp_path: Pat
     assert loop._mcp is None
     assert loop._genver_handler is None
     assert loop.hooks.hooks_dir is None
+    assert loop._memory.tiers_enabled() is False
+    assert loop._memory._memory_tiers is None
 
 
 def test_coding_profile_initializes_subagents_for_agent_tool(tmp_path: Path):

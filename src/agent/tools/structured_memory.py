@@ -24,9 +24,11 @@ class StructuredMemorySearchTool(Tool):
         *,
         workspace_resolver: Callable[[str | None], "Path"] | None = None,
         default_max_results: int = 6,
+        recall_telemetry_enabled: bool = False,
     ) -> None:
         self._workspace_resolver = workspace_resolver
         self._default_max_results = max(1, int(default_max_results))
+        self._recall_telemetry_enabled = bool(recall_telemetry_enabled)
 
     @property
     def name(self) -> str:
@@ -104,7 +106,7 @@ class StructuredMemorySearchTool(Tool):
             )
 
         # Recall telemetry
-        if _context and results:
+        if self._recall_telemetry_enabled and _context and results:
             import asyncio
 
             from src.memory.recall_journal import append_recall_entries
@@ -251,8 +253,14 @@ class DomainRuleGetTool(Tool):
 
     accepts_context = True
 
-    def __init__(self, *, workspace_resolver: Callable[[str | None], "Path"] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        workspace_resolver: Callable[[str | None], "Path"] | None = None,
+        recall_telemetry_enabled: bool = False,
+    ) -> None:
         self._workspace_resolver = workspace_resolver
+        self._recall_telemetry_enabled = bool(recall_telemetry_enabled)
 
     @property
     def name(self) -> str:
@@ -302,7 +310,7 @@ class DomainRuleGetTool(Tool):
             return f"Domain rule '{rule_id}' not found."
 
         # Recall telemetry
-        if _context and rule is not None:
+        if self._recall_telemetry_enabled and _context and rule is not None:
             import asyncio
 
             from src.memory.recall_journal import append_recall_entries

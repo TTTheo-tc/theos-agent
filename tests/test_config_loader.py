@@ -70,5 +70,7 @@ def test_slim_runtime_defaults():
     assert config.gateway.ui.enabled is False
     assert config.tools.browser.enabled is False
     assert config.tools.profile == "minimal"
+    assert config.memory.enabled is True
     assert config.memory.flush.enabled is False
     assert config.memory.gc.enabled is False
+    assert config.memory.telemetry.recall_enabled is False

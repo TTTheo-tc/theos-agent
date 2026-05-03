@@ -42,6 +42,7 @@ class ToolRegistrationConfig:
     memory_search_enabled: bool = True
     memory_search_max_results: int = 6
     memory_search_min_score: float = 0.0
+    memory_recall_telemetry_enabled: bool = False
     structured_memory_enabled: bool = True
     structured_workspace_resolver: Callable | None = None
     stock_config: Any = None

@@ -89,11 +89,13 @@ class MemorySearchTool(Tool):
         workspace_resolver: Callable[[str | None], "Path | None"] | None = None,
         default_max_results: int = 6,
         default_min_score: float = 0.0,
+        recall_telemetry_enabled: bool = False,
     ) -> None:
         self._index_resolver = index_resolver
         self._workspace_resolver = workspace_resolver
         self._default_max_results = max(1, int(default_max_results))
         self._default_min_score = float(default_min_score)
+        self._recall_telemetry_enabled = bool(recall_telemetry_enabled)
 
     @property
     def name(self) -> str:
@@ -284,7 +286,7 @@ class MemorySearchTool(Tool):
             return f"No memory results found for: {query}"
 
         # --- Recall telemetry (best-effort, non-blocking) ---
-        if _context and results_parts:
+        if self._recall_telemetry_enabled and _context and results_parts:
             import asyncio
 
             from src.memory.recall_journal import append_recall_entries

@@ -56,6 +56,7 @@ async def test_structured_memory_search_tool_returns_results(tmp_path: Path) -> 
 
         assert "[research_note]" in output or "[task]" in output
         assert str(result.task_id) in output or str(result.research_id) in output
+        assert not (tmp_path / "memory" / "instinct" / "recall_journal.jsonl").exists()
     finally:
         await store.close()
 
@@ -115,6 +116,7 @@ async def test_domain_rule_get_tool_returns_json(tmp_path: Path) -> None:
         payload = json.loads(output)
 
         assert payload["id"] == rule_id
+        assert not (tmp_path / "memory" / "instinct" / "recall_journal.jsonl").exists()
         meta = (
             json.loads(payload["metadata"])
             if isinstance(payload["metadata"], str)

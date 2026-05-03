@@ -169,3 +169,34 @@ class TestMemoryGetLineHints:
         await db.close()
 
         assert "Decisions lines " in output
+
+    @pytest.mark.asyncio
+    async def test_memory_search_does_not_write_recall_journal_by_default(
+        self, tmp_path: Path
+    ):
+        from src.agent.tools.context import ToolContext
+        from src.agent.tools.memory_search import MemorySearchTool
+
+        class _Index:
+            async def search(self, *_args, **_kwargs):
+                return [
+                    {
+                        "source": "MEMORY.md",
+                        "section": "Decisions",
+                        "content": "Use postgres for primary data before deploy.",
+                        "score": 1.0,
+                        "timestamp": "",
+                    }
+                ]
+
+        tool = MemorySearchTool(
+            index_resolver=lambda _sk: _Index(),
+            workspace_resolver=lambda _sk: tmp_path,
+        )
+        output = await tool.execute(
+            query="postgres deploy",
+            _context=ToolContext(session_key="cli:test"),
+        )
+
+        assert "postgres" in output
+        assert not (tmp_path / "memory" / "instinct" / "recall_journal.jsonl").exists()

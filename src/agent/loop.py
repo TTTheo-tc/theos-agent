@@ -395,6 +395,7 @@ class AgentLoop:
             memory_search_enabled=self._memory.search_enabled(),
             memory_search_max_results=self._memory.search_max_results(),
             memory_search_min_score=self._memory.search_min_score(),
+            memory_recall_telemetry_enabled=self._memory.recall_telemetry_enabled(),
             structured_memory_enabled=self._knowledge_graph_enabled,
             structured_workspace_resolver=lambda sk: self._memory.resolve_structured_workspace_for_tools(
                 sk,
@@ -683,7 +684,7 @@ class AgentLoop:
                             session.messages.append(reply_entry)
                             session.updated_at = datetime.now()
                             self.sessions.save(session)
-                            if self._memory.tiers.enabled:
+                            if self._memory.tiers_enabled():
                                 self._memory.tiers.buffer_entry(msg.session_key, reply_entry)
                             self.turns.record(
                                 msg.session_key,
@@ -822,8 +823,10 @@ class AgentLoop:
         """
         low_watermark = 5
         await self.drain_pending()
+        if not self._memory.memory_enabled():
+            return
         # Flush any buffered immediate-queue entries to SQLite
-        if self._memory.tiers.enabled:
+        if self._memory.tiers_enabled():
             await self._memory.tiers.flush_immediate(session_key)
         session = self.sessions.get_or_create(session_key)
         unconsolidated = len(session.messages) - session.last_consolidated
@@ -1347,8 +1350,10 @@ class AgentLoop:
             pass  # non-fatal — skip gate
 
         should_consolidate = (
-            unconsolidated >= consolidation_threshold or _memory_oversize
-        ) and not self._memory.is_consolidating(session.key)
+            self._memory.memory_enabled()
+            and (unconsolidated >= consolidation_threshold or _memory_oversize)
+            and not self._memory.is_consolidating(session.key)
+        )
 
         if should_consolidate:
             self._memory.add_consolidating(session.key)
@@ -1486,7 +1491,7 @@ class AgentLoop:
             turn_id=active_turn_id,
             metadata={"channel": msg.channel},
         )
-        if persisted_user and self._memory.tiers.enabled:
+        if persisted_user and self._memory.tiers_enabled():
             self._memory.tiers.buffer_entry(key, session.messages[-1])
         self._record_turn_checkpoint(
             key,
@@ -1572,7 +1577,7 @@ class AgentLoop:
                 genver_last_handoff=self._genver.pop_handoff(key) if run_genver else None,
                 tools=self.tools,
                 workspace=self.workspace,
-                memory_tiers=self._memory.tiers,
+                memory_tiers=self._memory.tiers_or_none(),
                 turn_id=active_turn_id,
                 persisted_user_message=persisted_user,
             )
@@ -1654,7 +1659,7 @@ class AgentLoop:
             skip,
             usage=usage,
             user_message=user_message,
-            memory_tiers=self._memory.tiers,
+            memory_tiers=self._memory.tiers_or_none(),
             turn_id=turn_id,
             persisted_user_message=persisted_user_message,
         )

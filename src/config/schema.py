@@ -143,14 +143,22 @@ class MemoryGCConfig(Base):
     max_sections: int = 20
 
 
+class MemoryTelemetryConfig(Base):
+    """Best-effort memory telemetry and maintenance journals."""
+
+    recall_enabled: bool = False
+
+
 class MemoryConfig(Base):
     """Top-level memory configuration."""
 
+    enabled: bool = True
     injection: MemoryInjectionConfig = Field(default_factory=MemoryInjectionConfig)
     search: MemorySearchConfig = Field(default_factory=MemorySearchConfig)
     compaction: MemoryCompactionConfig = Field(default_factory=MemoryCompactionConfig)
     flush: MemoryFlushConfig = Field(default_factory=MemoryFlushConfig)
     gc: MemoryGCConfig = Field(default_factory=MemoryGCConfig)
+    telemetry: MemoryTelemetryConfig = Field(default_factory=MemoryTelemetryConfig)
 
 
 class KnowledgeGraphConfig(Base):

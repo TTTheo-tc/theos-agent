@@ -421,7 +421,10 @@ class TestRuntimeTelemetryPaths:
         finally:
             await store.close()
 
-        tool = StructuredMemorySearchTool(workspace_resolver=lambda _sk: tmp_path)
+        tool = StructuredMemorySearchTool(
+            workspace_resolver=lambda _sk: tmp_path,
+            recall_telemetry_enabled=True,
+        )
         output = await tool.execute(
             query="pytest integration",
             object_type="rule",
