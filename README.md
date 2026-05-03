@@ -20,7 +20,7 @@ A personal agentic OS for code, memory, tools, and automation.
 ### 1. Install
 
 ```bash
-git clone https://github.com/LLLiuTC/theos-agent
+git clone https://github.com/TTTheo-tc/theos-agent
 cd theos-agent
 make install-full
 ```

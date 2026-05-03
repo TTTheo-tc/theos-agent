@@ -5,7 +5,7 @@ Thank you for your interest in contributing!
 ## Development Setup
 
 ```bash
-git clone https://github.com/LLLiuTC/theos-agent
+git clone https://github.com/TTTheo-tc/theos-agent
 cd theos-agent
 make install    # uv sync --group dev && pre-commit install
 make test       # uv run pytest
@@ -36,6 +36,6 @@ Start with `BOT.md` for development rules and document routing, then use
 
 ## Reporting Issues
 
-- **Bugs**: Use the [bug report template](https://github.com/LLLiuTC/theos-agent/issues/new?template=bug_report.yml)
-- **Features**: Use the [feature request template](https://github.com/LLLiuTC/theos-agent/issues/new?template=feature_request.yml)
+- **Bugs**: Use the [bug report template](https://github.com/TTTheo-tc/theos-agent/issues/new?template=bug_report.yml)
+- **Features**: Use the [feature request template](https://github.com/TTTheo-tc/theos-agent/issues/new?template=feature_request.yml)
 - **Security**: See [SECURITY.md](SECURITY.md)

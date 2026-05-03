@@ -60,10 +60,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/LLLiuTC/theos-agent"
-Repository = "https://github.com/LLLiuTC/theos-agent.git"
-Issues = "https://github.com/LLLiuTC/theos-agent/issues"
-Documentation = "https://github.com/LLLiuTC/theos-agent#readme"
+Homepage = "https://github.com/TTTheo-tc/theos-agent"
+Repository = "https://github.com/TTTheo-tc/theos-agent.git"
+Issues = "https://github.com/TTTheo-tc/theos-agent/issues"
+Documentation = "https://github.com/TTTheo-tc/theos-agent#readme"
 
 [project.optional-dependencies]
 matrix = [
