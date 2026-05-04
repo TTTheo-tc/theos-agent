@@ -1,4 +1,4 @@
-.PHONY: fmt lint test install install-core install-dev install-gateway install-full schema-check changelog build-ui
+.PHONY: fmt lint test install install-core install-dev install-gateway install-full schema-check changelog build-ui build-bridge build-core build-full
 
 fmt:
 	uv run pre-commit run --all-files
@@ -9,7 +9,7 @@ lint:
 test:
 	uv run pytest
 
-install: install-dev
+install: install-core
 
 install-core:
 	uv sync
@@ -22,7 +22,8 @@ install-gateway:
 	uv sync --extra gateway
 
 install-full:
-	cd ui && npm install && npm run build
+	$(MAKE) build-ui
+	$(MAKE) build-bridge
 	uv sync --all-extras --group dev
 	uv run pre-commit install
 
@@ -34,3 +35,12 @@ changelog:
 
 build-ui:
 	cd ui && npm install && npm run build
+
+build-bridge:
+	cd bridge && npm install && npm run build
+
+build-core:
+	uv build --wheel
+
+build-full: build-ui build-bridge
+	uv build

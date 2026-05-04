@@ -117,7 +117,7 @@
           "$ref": "#/$defs/GenVerConfig"
         },
         "mode": {
-          "default": "auto",
+          "default": "single",
           "enum": [
             "auto",
             "single",
@@ -260,7 +260,7 @@
           "type": "integer"
         },
         "enabled": {
-          "default": true,
+          "default": false,
           "title": "Enabled",
           "type": "boolean"
         },
@@ -761,7 +761,7 @@
       "description": "Heartbeat service configuration.",
       "properties": {
         "enabled": {
-          "default": true,
+          "default": false,
           "title": "Enabled",
           "type": "boolean"
         },
@@ -778,7 +778,7 @@
       "description": "Knowledge graph storage configuration.",
       "properties": {
         "enabled": {
-          "default": true,
+          "default": false,
           "title": "Enabled",
           "type": "boolean"
         },
@@ -973,6 +973,11 @@
         "compaction": {
           "$ref": "#/$defs/MemoryCompactionConfig"
         },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
         "flush": {
           "$ref": "#/$defs/MemoryFlushConfig"
         },
@@ -984,6 +989,9 @@
         },
         "search": {
           "$ref": "#/$defs/MemorySearchConfig"
+        },
+        "telemetry": {
+          "$ref": "#/$defs/MemoryTelemetryConfig"
         }
       },
       "title": "MemoryConfig",
@@ -993,7 +1001,7 @@
       "description": "Pre-compaction memory flush settings.",
       "properties": {
         "enabled": {
-          "default": true,
+          "default": false,
           "title": "Enabled",
           "type": "boolean"
         },
@@ -1010,7 +1018,7 @@
       "description": "Memory garbage collection / time decay.",
       "properties": {
         "enabled": {
-          "default": true,
+          "default": false,
           "title": "Enabled",
           "type": "boolean"
         },
@@ -1099,6 +1107,18 @@
         }
       },
       "title": "MemorySearchHybridConfig",
+      "type": "object"
+    },
+    "MemoryTelemetryConfig": {
+      "description": "Best-effort memory telemetry and maintenance journals.",
+      "properties": {
+        "recallEnabled": {
+          "default": false,
+          "title": "Recallenabled",
+          "type": "boolean"
+        }
+      },
+      "title": "MemoryTelemetryConfig",
       "type": "object"
     },
     "MemoryTiersConfig": {
@@ -1487,7 +1507,7 @@
       "description": "LLM-powered post-task reflector configuration.",
       "properties": {
         "enabled": {
-          "default": true,
+          "default": false,
           "title": "Enabled",
           "type": "boolean"
         },
@@ -1786,6 +1806,18 @@
           "title": "Mcpservers",
           "type": "object"
         },
+        "profile": {
+          "default": "minimal",
+          "enum": [
+            "minimal",
+            "coding",
+            "messaging",
+            "readonly",
+            "full"
+          ],
+          "title": "Profile",
+          "type": "string"
+        },
         "restrictToWorkspace": {
           "default": false,
           "title": "Restricttoworkspace",
@@ -1805,7 +1837,7 @@
       "description": "Dashboard UI server configuration.",
       "properties": {
         "enabled": {
-          "default": true,
+          "default": false,
           "title": "Enabled",
           "type": "boolean"
         },

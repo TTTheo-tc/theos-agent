@@ -81,6 +81,12 @@ def test_is_loaded_checks_systemctl(svc):
         assert svc.is_loaded() is False
 
 
+def test_missing_systemctl_reports_not_loaded(svc):
+    with patch("subprocess.run", side_effect=FileNotFoundError("systemctl")):
+        assert svc.is_loaded() is False
+        assert svc.status() == {"pid": None, "state": "not_installed", "loaded": False}
+
+
 def test_restart_prefers_sighup(svc):
     """restart() should try SIGHUP first when PID is available."""
     with (

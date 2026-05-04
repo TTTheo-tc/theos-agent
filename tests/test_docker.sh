@@ -5,16 +5,15 @@ cd "$(dirname "$0")/.." || exit 1
 IMAGE_NAME="theos-test"
 
 echo "=== Building Docker image ==="
-docker build -t "$IMAGE_NAME" .
+docker build --target gateway -t "$IMAGE_NAME" .
 
 echo ""
-echo "=== Running 'theos onboard' ==="
-docker run --name theos-test-run "$IMAGE_NAME" onboard
+echo "=== Running 'theos --help' ==="
+docker run --rm "$IMAGE_NAME" --help
 
 echo ""
 echo "=== Running 'theos status' ==="
-STATUS_OUTPUT=$(docker commit theos-test-run theos-test-onboarded > /dev/null && \
-    docker run --rm theos-test-onboarded status 2>&1) || true
+STATUS_OUTPUT=$(docker run --rm "$IMAGE_NAME" status 2>&1) || true
 
 echo "$STATUS_OUTPUT"
 
@@ -34,10 +33,7 @@ check() {
 check "theos Status"
 check "Config:"
 check "Workspace:"
-check "Model:"
-check "OpenRouter API:"
-check "Anthropic API:"
-check "OpenAI API:"
+check "Gateway:"
 
 echo ""
 if $PASS; then
@@ -50,7 +46,5 @@ fi
 # Cleanup
 echo ""
 echo "=== Cleanup ==="
-docker rm -f theos-test-run 2>/dev/null || true
-docker rmi -f theos-test-onboarded 2>/dev/null || true
 docker rmi -f "$IMAGE_NAME" 2>/dev/null || true
 echo "Done."

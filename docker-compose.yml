@@ -2,7 +2,7 @@ x-common-config: &common-config
   build:
     context: .
     dockerfile: Dockerfile
-    target: runtime
+    target: gateway
   volumes:
     # Mount the config and data folder
     - ~/.theos:/home/theos/.theos

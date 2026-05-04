@@ -144,7 +144,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
-# Include non-Python files in templates
+# Core wheel only: Python runtime, templates, and skills.
+# UI, WhatsApp bridge, and instinct source stay out of the wheel.
 [tool.hatch.build]
 include = [
     "src/**/*.py",
@@ -156,12 +157,27 @@ include = [
 [tool.hatch.build.targets.sdist]
 include = [
     "src/",
-    "bridge/",
+    "bridge/package.json",
+    "bridge/tsconfig.json",
+    "bridge/src/",
     "instinct/",
     "skills/",
-    "ui/",
+    "ui/components.json",
+    "ui/index.html",
+    "ui/package.json",
+    "ui/package-lock.json",
+    "ui/public/",
+    "ui/src/",
+    "ui/tsconfig.json",
+    "ui/vite.config.ts",
     "README.md",
     "LICENSE",
+]
+exclude = [
+    "bridge/dist/",
+    "bridge/node_modules/",
+    "ui/dist/",
+    "ui/node_modules/",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]

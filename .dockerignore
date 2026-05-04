@@ -13,5 +13,6 @@ build/
 .assets
 node_modules/
 ui/node_modules/
+ui/dist/
 bridge/dist/
 workspace/

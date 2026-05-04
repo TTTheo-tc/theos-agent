@@ -32,7 +32,7 @@ make install-core
 ```bash
 make install-dev      # core + dev tools + pre-commit
 make install-gateway  # core + gateway scheduling support
-make install-full     # UI build + all extras + dev tools
+make install-full     # UI + WhatsApp bridge build + all extras + dev tools
 ```
 
 按需安装 extras:
@@ -77,6 +77,18 @@ uv run theos agent
 uv run theos gateway
 uv run theos status
 ```
+
+### Docker Targets
+
+```bash
+docker build --target core -t theos-core .
+docker build --target gateway -t theos-gateway .
+docker build --target full -t theos-full .
+```
+
+`core` is Python-only and defaults to `theos agent`. `gateway` adds scheduling support
+and defaults to `theos gateway`. `full` installs all Python extras, builds the dashboard
+UI, and builds the WhatsApp Node bridge.
 
 ## Common Commands
 

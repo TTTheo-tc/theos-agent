@@ -54,12 +54,20 @@ WantedBy=default.target
 """
 
     def _systemctl(self, *args: str, check: bool = False) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["systemctl", "--user", *args],
-            capture_output=True,
-            text=True,
-            check=check,
-        )
+        cmd = ["systemctl", "--user", *args]
+        try:
+            return subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=check,
+            )
+        except FileNotFoundError as exc:
+            if check:
+                raise RuntimeError(
+                    "systemctl --user is not available; run 'theos gateway' manually instead."
+                ) from exc
+            return subprocess.CompletedProcess(cmd, 127, "", str(exc))
 
     def install(self, program_args, env, working_dir):
         self._unit_path.parent.mkdir(parents=True, exist_ok=True)
