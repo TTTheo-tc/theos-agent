@@ -46,16 +46,177 @@ def main(
 
 from src.cli.agent_cmd import agent  # noqa: E402
 from src.cli.auth_cmd import auth_app, provider_app  # noqa: E402
-from src.cli.cron_cmd import cron_app  # noqa: E402
-from src.cli.gateway_cmd import gateway_app  # noqa: E402
 from src.cli.init_cmd import init  # noqa: E402
-from src.cli.report_cmd import report_app  # noqa: E402
-from src.cli.ui_cmd import ui as ui_command  # noqa: E402
 
 app.command()(agent)
 app.command()(init)
+
+
+# Heavy command modules stay lazy so `theos --help` and core smoke paths do not
+# load gateway/channel/UI/report implementations.
+gateway_app = typer.Typer(
+    name="gateway",
+    help="Gateway daemon management",
+    invoke_without_command=True,
+)
+
+
+@gateway_app.callback(invoke_without_command=True)
+def gateway(
+    ctx: typer.Context,
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+):
+    """Start the theos gateway (foreground)."""
+    from src.cli.gateway_cmd import gateway as _gateway
+
+    return _gateway(ctx=ctx, verbose=verbose)
+
+
+@gateway_app.command("stop")
+def gateway_stop():
+    """Stop the gateway daemon."""
+    from src.cli.gateway_cmd import gateway_stop as _gateway_stop
+
+    return _gateway_stop()
+
+
+@gateway_app.command("restart")
+def gateway_restart_cmd():
+    """Restart the gateway daemon."""
+    from src.cli.gateway_cmd import gateway_restart_cmd as _gateway_restart_cmd
+
+    return _gateway_restart_cmd()
+
+
+@gateway_app.command("uninstall")
+def gateway_uninstall():
+    """Stop and remove the gateway daemon service."""
+    from src.cli.gateway_cmd import gateway_uninstall as _gateway_uninstall
+
+    return _gateway_uninstall()
+
+
+@gateway_app.command("logs")
+def gateway_logs(
+    source: str = typer.Option("app", help="Log source: app, supervisor-stdout, supervisor-stderr"),
+    raw: bool = typer.Option(False, "--raw", help="Output raw JSONL"),
+):
+    """Tail gateway logs."""
+    from src.cli.gateway_cmd import gateway_logs as _gateway_logs
+
+    return _gateway_logs(source=source, raw=raw)
+
+
+@app.command(name="ui")
+def ui_command(
+    port: int = typer.Option(8080, "--port", "-p", help="HTTP server port"),
+    host: str = typer.Option(
+        "127.0.0.1", "--host", help="Bind address (use 0.0.0.0 for network access)"
+    ),
+):
+    """Start the theos dashboard (read-only viewer)."""
+    from src.cli.ui_cmd import ui as _ui
+
+    return _ui(port=port, host=host)
+
+
+cron_app = typer.Typer(help="Manage scheduled tasks")
+
+
+@cron_app.command("list")
+def cron_list(
+    all: bool = typer.Option(False, "--all", "-a", help="Include disabled jobs"),
+):
+    """List scheduled jobs."""
+    from src.cli.cron_cmd import cron_list as _cron_list
+
+    return _cron_list(all=all)
+
+
+@cron_app.command("add")
+def cron_add(
+    name: str = typer.Option(..., "--name", "-n", help="Job name"),
+    message: str = typer.Option(..., "--message", "-m", help="Message for agent"),
+    every: int = typer.Option(None, "--every", "-e", help="Run every N seconds"),
+    cron_expr: str = typer.Option(None, "--cron", "-c", help="Cron expression (e.g. '0 9 * * *')"),
+    tz: str | None = typer.Option(
+        None, "--tz", help="IANA timezone for cron (e.g. 'America/Vancouver')"
+    ),
+    at: str = typer.Option(None, "--at", help="Run once at time (ISO format)"),
+    deliver: bool = typer.Option(False, "--deliver", "-d", help="Deliver response to channel"),
+    to: str = typer.Option(None, "--to", help="Recipient for delivery"),
+    channel: str = typer.Option(
+        None, "--channel", help="Channel for delivery (e.g. 'telegram', 'whatsapp')"
+    ),
+):
+    """Add a scheduled job."""
+    from src.cli.cron_cmd import cron_add as _cron_add
+
+    return _cron_add(
+        name=name,
+        message=message,
+        every=every,
+        cron_expr=cron_expr,
+        tz=tz,
+        at=at,
+        deliver=deliver,
+        to=to,
+        channel=channel,
+    )
+
+
+@cron_app.command("remove")
+def cron_remove(
+    job_id: str = typer.Argument(..., help="Job ID to remove"),
+):
+    """Remove a scheduled job."""
+    from src.cli.cron_cmd import cron_remove as _cron_remove
+
+    return _cron_remove(job_id=job_id)
+
+
+@cron_app.command("enable")
+def cron_enable(
+    job_id: str = typer.Argument(..., help="Job ID"),
+    disable: bool = typer.Option(False, "--disable", help="Disable instead of enable"),
+):
+    """Enable or disable a job."""
+    from src.cli.cron_cmd import cron_enable as _cron_enable
+
+    return _cron_enable(job_id=job_id, disable=disable)
+
+
+@cron_app.command("run")
+def cron_run(
+    job_id: str = typer.Argument(..., help="Job ID to run"),
+    force: bool = typer.Option(False, "--force", "-f", help="Run even if disabled"),
+):
+    """Manually run a job."""
+    from src.cli.cron_cmd import cron_run as _cron_run
+
+    return _cron_run(job_id=job_id, force=force)
+
+
+report_app = typer.Typer(help="Generate activity reports from EventStore")
+
+
+@report_app.command("daily")
+def daily():
+    """Generate a daily activity report."""
+    from src.cli.report_cmd import daily as _daily
+
+    return _daily()
+
+
+@report_app.command("weekly")
+def weekly():
+    """Generate a weekly activity report."""
+    from src.cli.report_cmd import weekly as _weekly
+
+    return _weekly()
+
+
 app.add_typer(gateway_app, name="gateway")
-app.command(name="ui")(ui_command)
 app.add_typer(cron_app, name="cron")
 app.add_typer(auth_app, name="auth")
 app.add_typer(provider_app, name="provider")

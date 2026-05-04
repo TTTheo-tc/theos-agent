@@ -81,6 +81,10 @@ OPTIONAL_IMPORT_BLOCKLIST = {
 
 OPTIONAL_RUNTIME_MODULES = {
     "src.channels.manager",
+    "src.cli.cron_cmd",
+    "src.cli.gateway_cmd",
+    "src.cli.report_cmd",
+    "src.cli.ui_cmd",
     "src.dream.runner",
     "src.feishu.client",
     "src.genver.pipeline",
@@ -136,7 +140,14 @@ def check_cli_help() -> None:
     from src.cli.commands import app
 
     runner = CliRunner()
-    for args in (["--help"], ["agent", "--help"], ["gateway", "--help"], ["ui", "--help"]):
+    for args in (
+        ["--help"],
+        ["agent", "--help"],
+        ["gateway", "--help"],
+        ["cron", "--help"],
+        ["report", "--help"],
+        ["ui", "--help"],
+    ):
         result = runner.invoke(app, args)
         if result.exit_code != 0:
             _fail(f"`theos {' '.join(args)}` failed:\n{result.output}")
