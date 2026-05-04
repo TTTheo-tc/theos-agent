@@ -806,6 +806,18 @@
       "title": "KnowledgeGraphConfig",
       "type": "object"
     },
+    "LearningConfig": {
+      "description": "Optional learning, instinct, and dream subsystem.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "LearningConfig",
+      "type": "object"
+    },
     "MCPServerConfig": {
       "description": "MCP server connection configuration (stdio or HTTP).",
       "properties": {
@@ -2049,6 +2061,9 @@
     },
     "knowledgeGraph": {
       "$ref": "#/$defs/KnowledgeGraphConfig"
+    },
+    "learning": {
+      "$ref": "#/$defs/LearningConfig"
     },
     "memory": {
       "$ref": "#/$defs/MemoryConfig"

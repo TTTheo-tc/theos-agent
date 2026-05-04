@@ -18,6 +18,12 @@ def test_core_wheel_excludes_full_runtime_assets() -> None:
     assert not force_include.intersection({"ui", "ui/dist", "bridge", "instinct"})
 
 
+def test_learning_extra_is_explicit_marker() -> None:
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert "learning" in data["project"]["optional-dependencies"]
+
+
 def test_sdist_excludes_generated_full_assets() -> None:
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     sdist = data["tool"]["hatch"]["build"]["targets"]["sdist"]

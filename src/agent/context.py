@@ -56,10 +56,12 @@ class ContextBuilder:
         group_workspace: Path | None = None,
         roles: "dict[str, AgentRoleConfig] | None" = None,
         recall_service: "Any | None" = None,
+        learning_enabled: bool = False,
     ):
         self.workspace = workspace  # global workspace (skills, templates)
         self.group_workspace = group_workspace or workspace  # per-group (memory, bootstrap)
         self._recall_service = recall_service
+        self._learning_enabled = learning_enabled
         if recall_service is None:
             self.memory = MemoryStore(self.group_workspace)
         else:
@@ -91,9 +93,10 @@ class ContextBuilder:
         # -- Static sections (session-scoped, cache-stable) ------------------
         static: list[str] = []
 
-        instinct = self._load_instinct_core()
-        if instinct:
-            static.append(instinct)
+        if self._learning_enabled:
+            instinct = self._load_instinct_core()
+            if instinct:
+                static.append(instinct)
 
         static.append(self._get_identity())
 

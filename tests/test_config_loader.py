@@ -68,6 +68,7 @@ def test_slim_runtime_defaults():
     assert config.knowledge_graph.enabled is False
     assert config.gateway.heartbeat.enabled is False
     assert config.gateway.ui.enabled is False
+    assert config.learning.enabled is False
     assert config.tools.browser.enabled is False
     assert config.tools.profile == "minimal"
     assert config.memory.enabled is True

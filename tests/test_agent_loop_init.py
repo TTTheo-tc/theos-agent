@@ -61,9 +61,50 @@ def test_default_runtime_does_not_eagerly_create_optional_managers(tmp_path: Pat
     assert loop._subagents is None
     assert loop._mcp is None
     assert loop._genver_handler is None
+    assert loop.learning_enabled is False
     assert loop.hooks.hooks_dir is None
     assert loop._memory.tiers_enabled() is False
     assert loop._memory._memory_tiers is None
+
+
+def test_hooks_are_only_loaded_when_learning_enabled(tmp_path: Path):
+    hooks_dir = tmp_path / "hooks"
+    hooks_dir.mkdir()
+
+    config = _make_test_config(tmp_path)
+    config.hooks = str(hooks_dir)
+
+    with patch.object(AgentLoop, "_register_default_tools", return_value=None):
+        disabled_loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+
+    assert disabled_loop.learning_enabled is False
+    assert disabled_loop.hooks.hooks_dir is None
+
+    config.learning.enabled = True
+    with patch.object(AgentLoop, "_register_default_tools", return_value=None):
+        enabled_loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+
+    assert enabled_loop.learning_enabled is True
+    assert enabled_loop.hooks.hooks_dir == hooks_dir
+
+
+@pytest.mark.asyncio
+async def test_instinct_command_is_disabled_by_default(tmp_path: Path):
+    config = _make_test_config(tmp_path)
+    with patch.object(AgentLoop, "_register_default_tools", return_value=None):
+        loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+    session = loop.sessions.get_or_create("cli:direct")
+    msg = InboundMessage(
+        channel="cli",
+        sender_id="user",
+        chat_id="direct",
+        content="/instinct status",
+    )
+
+    response = await loop._handle_slash_commands(msg, session, session.key)
+
+    assert response is not None
+    assert "Learning features are disabled" in response.content
 
 
 def test_coding_profile_initializes_subagents_for_agent_tool(tmp_path: Path):

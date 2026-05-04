@@ -242,6 +242,12 @@ class ReflectorConfig(Base):
     model: str = "minimax/MiniMax-M2.5"
 
 
+class LearningConfig(Base):
+    """Optional learning, instinct, and dream subsystem."""
+
+    enabled: bool = False
+
+
 class SubagentPolicyConfig(Base):
     """Policy limits for team/delegation subagent spawning."""
 
@@ -467,6 +473,7 @@ class Config(BaseSettings):
     knowledge_graph: KnowledgeGraphConfig = Field(
         default_factory=KnowledgeGraphConfig, alias="knowledgeGraph"
     )
+    learning: LearningConfig = Field(default_factory=LearningConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     response_cache: ResponseCacheConfig = Field(
         default_factory=ResponseCacheConfig, alias="responseCache"

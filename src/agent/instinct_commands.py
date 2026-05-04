@@ -27,11 +27,26 @@ if TYPE_CHECKING:
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+INSTINCT_DIR = REPO_ROOT / "instinct"
 EVOLVE_SCRIPT = REPO_ROOT / "instinct" / "scripts" / "evolve.js"
 
 
 def _workspace(loop: "AgentLoop") -> Path:
     return getattr(loop, "workspace", Path.home() / ".theos" / "workspace")
+
+
+def _learning_disabled_text() -> str:
+    return (
+        "Learning features are disabled. Set `learning.enabled=true` in config "
+        "and use a source/full build with instinct assets to enable `/instinct`."
+    )
+
+
+def _instinct_assets_missing_text() -> str:
+    return (
+        "Instinct assets are not installed in this build. Use a source/full build "
+        "with the `instinct/` directory to run this command."
+    )
 
 
 def _sync_index_reviewed(workspace: Path, session_id: str) -> None:
@@ -60,6 +75,13 @@ def _sync_index_reviewed(workspace: Path, session_id: str) -> None:
 
 async def handle_instinct_command(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage | None:
     """Dispatch /instinct subcommands."""
+    if getattr(loop, "learning_enabled", True) is False:
+        return OutboundMessage(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            content=_learning_disabled_text(),
+        )
+
     parts = msg.content.strip().split(maxsplit=2)
     sub = parts[1].lower() if len(parts) > 1 else "help"
 
@@ -169,7 +191,7 @@ def _handle_evolve_run(loop: "AgentLoop", msg: InboundMessage, *, dry_run: bool)
         return OutboundMessage(
             channel=msg.channel,
             chat_id=msg.chat_id,
-            content=f"evolve.js not found at {EVOLVE_SCRIPT}",
+            content=_instinct_assets_missing_text(),
         )
 
     cmd = ["node", str(EVOLVE_SCRIPT)]
@@ -202,6 +224,13 @@ def _handle_evolve_run(loop: "AgentLoop", msg: InboundMessage, *, dry_run: bool)
 
 
 async def _handle_dream_run(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage:
+    if not INSTINCT_DIR.exists():
+        return OutboundMessage(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            content=_instinct_assets_missing_text(),
+        )
+
     rest = msg.content.strip()
     topic = "general exploration"
     budget = 30.0

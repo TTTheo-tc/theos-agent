@@ -29,12 +29,17 @@ class TurnContextAssembler:
         workspace: Path,
         roles: dict[str, AgentRoleConfig] | None = None,
         recall_service: "MemoryRecallService | None" = None,
+        learning_enabled: bool = False,
     ):
         self._workspace = workspace
         self._roles = roles or {}
         self._recall_service = recall_service
+        self._learning_enabled = learning_enabled
         self._global_context = ContextBuilder(
-            workspace, roles=self._roles, recall_service=recall_service
+            workspace,
+            roles=self._roles,
+            recall_service=recall_service,
+            learning_enabled=learning_enabled,
         )
         self._cache: dict[str, ContextBuilder] = {}
 
@@ -58,7 +63,10 @@ class TurnContextAssembler:
         """
         self._roles = roles or {}
         self._global_context = ContextBuilder(
-            self._workspace, roles=self._roles, recall_service=self._recall_service
+            self._workspace,
+            roles=self._roles,
+            recall_service=self._recall_service,
+            learning_enabled=self._learning_enabled,
         )
         self._cache.clear()
 
@@ -85,6 +93,7 @@ class TurnContextAssembler:
                 group_workspace=group_ws,  # per-group (memory, bootstrap)
                 roles=self._roles,
                 recall_service=self._recall_service,
+                learning_enabled=self._learning_enabled,
             )
         return self._cache[session_key]
 
@@ -116,6 +125,7 @@ class TurnContextAssembler:
             group_workspace=workspace,
             roles=self._roles,
             recall_service=self._recall_service,
+            learning_enabled=self._learning_enabled,
         )
 
     # -- instinct extraction (static) ----------------------------------------

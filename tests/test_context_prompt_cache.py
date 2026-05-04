@@ -135,6 +135,16 @@ def test_system_prompt_only_loads_merged_bootstrap_files(tmp_path) -> None:
     assert "## IDENTITY.md" not in prompt
 
 
+def test_instinct_core_is_gated_by_learning_config(tmp_path) -> None:
+    workspace = _make_workspace(tmp_path)
+
+    default_prompt = ContextBuilder(workspace).build_system_prompt()
+    learning_prompt = ContextBuilder(workspace, learning_enabled=True).build_system_prompt()
+
+    assert "Brainstem" not in default_prompt
+    assert "Brainstem" in learning_prompt
+
+
 def test_identity_is_loaded_from_workspace_markdown(tmp_path) -> None:
     workspace = _make_workspace(tmp_path)
     (workspace / "IDENTITY.md").write_text(

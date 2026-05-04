@@ -245,7 +245,7 @@ def init(
 
         # Hooks
         repo_hooks = repo_root / "hooks"
-        if repo_hooks.is_dir() and (repo_hooks / "pre-chat").exists():
+        if config.learning.enabled and repo_hooks.is_dir() and (repo_hooks / "pre-chat").exists():
             config.hooks = str(repo_hooks)
             save_config(config)
             console.print(f"[green]\u2713[/green] Hooks: {repo_hooks}")

@@ -3606,7 +3606,7 @@ requires-dist = [
     { name = "websockets", marker = "extra == 'channels-whatsapp'", specifier = ">=16.0,<17.0" },
     { name = "yfinance", marker = "extra == 'stock'", specifier = ">=0.2.0" },
 ]
-provides-extras = ["auth-oauth", "browser", "channels-dingtalk", "channels-discord", "channels-feishu", "channels-mochat", "channels-qq", "channels-slack", "channels-telegram", "channels-whatsapp", "gateway", "image", "matrix", "mcp", "memory-kg", "pdf", "pollers", "stock", "ui", "web", "dev"]
+provides-extras = ["auth-oauth", "browser", "channels-dingtalk", "channels-discord", "channels-feishu", "channels-mochat", "channels-qq", "channels-slack", "channels-telegram", "channels-whatsapp", "gateway", "image", "learning", "matrix", "mcp", "memory-kg", "pdf", "pollers", "stock", "ui", "web", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -83,6 +83,7 @@ gateway = [
 image = [
     "pillow>=12.1.1",
 ]
+learning = []
 matrix = [
     "matrix-nio[e2e]>=0.25.2",
     "mistune>=3.0.0,<4.0.0",

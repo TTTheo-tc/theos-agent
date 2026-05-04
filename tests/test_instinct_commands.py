@@ -20,6 +20,18 @@ def _msg(content: str) -> InboundMessage:
 
 
 @pytest.mark.asyncio
+async def test_instinct_command_reports_disabled_learning(mock_loop):
+    from src.agent.instinct_commands import handle_instinct_command
+
+    mock_loop.learning_enabled = False
+
+    result = await handle_instinct_command(mock_loop, _msg("/instinct status"))
+
+    assert result is not None
+    assert "Learning features are disabled" in result.content
+
+
+@pytest.mark.asyncio
 async def test_status_empty(mock_loop):
     from src.agent.instinct_commands import handle_instinct_command
 

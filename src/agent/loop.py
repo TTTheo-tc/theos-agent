@@ -152,6 +152,7 @@ class AgentLoop:
         self._provider_keys = config.get_provider_keys()
         self._channel_env = channel_env or {}
         self._knowledge_graph_enabled = config.knowledge_graph.enabled
+        self.learning_enabled = config.learning.enabled
         self._mcp_server_configs = resolve_data_secret_refs(config.tools.mcp_servers)
         self._mcp_server_count = len(self._mcp_server_configs)
         self._mcp: "MCPManager | None" = None
@@ -191,7 +192,7 @@ class AgentLoop:
             )
         self.tools = ToolRegistry(approval_gate=_gate)
 
-        hooks_dir = Path(config.hooks).expanduser() if config.hooks else None
+        hooks_dir = Path(config.hooks).expanduser() if self.learning_enabled and config.hooks else None
         if hooks_dir:
             from src.hooks.runner import HookRunner
 
@@ -219,7 +220,10 @@ class AgentLoop:
         )
         # Context assembler — must be after _memory so recall service is available
         self._context = TurnContextAssembler(
-            workspace=workspace, roles=self.roles, recall_service=self._memory.recall
+            workspace=workspace,
+            roles=self.roles,
+            recall_service=self._memory.recall,
+            learning_enabled=self.learning_enabled,
         )
         self.context = self._context.global_context  # backward-compat alias
         # Composed turn finalizer
@@ -627,6 +631,7 @@ class AgentLoop:
                 self._mcp.server_count if self._mcp is not None else self._mcp_server_count
             ),
             "orchestrator": bool(self._lifecycle.policies),
+            "learning": self.learning_enabled,
             "hooks": str(self.hooks.hooks_dir) if self.hooks.hooks_dir else None,
         }
         if self._is_genver and self.genver_config:
@@ -1111,10 +1116,17 @@ class AgentLoop:
 
             return await handle_ui_command(self, msg)
         if cmd == "/help":
+            instinct_help = (
+                "\n/instinct — Instinct subsystem (status, evolve, dream)"
+                if self.learning_enabled
+                else "\n/instinct — Instinct subsystem (disabled; set learning.enabled=true)"
+            )
             return OutboundMessage(
                 channel=msg.channel,
                 chat_id=msg.chat_id,
-                content="theos commands:\n/new — Start a new conversation\n/stop — Stop the current task\n/reboot — Soft reboot (reload tools, clear session)\n/restart — Restart gateway (owner only, picks up code changes)\n/resume — Show latest durable turn state for this session\n/agent — Switch agent mode (single/team/genver)\n/model — Show or switch model\n/plan — Toggle plan mode (read-only tools only)\n/instinct — Instinct subsystem (status, evolve, dream)\n/ui — Show dashboard URL\n/help — Show available commands",
+                content="theos commands:\n/new — Start a new conversation\n/stop — Stop the current task\n/reboot — Soft reboot (reload tools, clear session)\n/restart — Restart gateway (owner only, picks up code changes)\n/resume — Show latest durable turn state for this session\n/agent — Switch agent mode (single/team/genver)\n/model — Show or switch model\n/plan — Toggle plan mode (read-only tools only)"
+                + instinct_help
+                + "\n/ui — Show dashboard URL\n/help — Show available commands",
             )
         if cmd.startswith("/resume"):
             parts = msg.content.strip().split(maxsplit=1)
@@ -1157,6 +1169,16 @@ class AgentLoop:
                 ),
             )
         if cmd.startswith("/instinct"):
+            if not self.learning_enabled:
+                return OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content=(
+                        "Learning features are disabled. Set `learning.enabled=true` "
+                        "in config and use a source/full build with instinct assets "
+                        "to enable `/instinct`."
+                    ),
+                )
             from src.agent.instinct_commands import handle_instinct_command
 
             return await handle_instinct_command(self, msg)

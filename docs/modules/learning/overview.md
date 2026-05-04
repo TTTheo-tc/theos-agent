@@ -39,6 +39,10 @@ instinct/scripts/           # Node.js learning pipeline
 | `reflect.js` main (`reflect.js:378-389`) | Event/lesson writing from post-task JSON |
 | `evolve.js` main | Batch rule promotion from events to ACTIVE/PROBATION |
 
+Learning is opt-in at runtime. The default config sets `learning.enabled=false`, so
+TheOS does not inject `instinct/core.md`, instantiate `HookRunner`, or execute
+`/instinct` commands unless the feature is explicitly enabled.
+
 ## Architecture
 
 ### Three Subsystems
