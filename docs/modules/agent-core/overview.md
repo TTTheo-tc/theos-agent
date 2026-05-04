@@ -100,6 +100,11 @@ remain discoverable.
 `register_standard_tools()` (`src/agent/tool_sets.py:42`) is the single
 registration site. It handles four modes:
 
+Advanced agent modes are opt-in. The default config keeps
+`agents.teamEnabled=false`, `agents.genverEnabled=false`, and
+`agents.mode="single"`; `/agent team` and `/agent genver` require the matching
+flag unless the config already explicitly starts in that mode.
+
 | Mode | Purpose | Key constraint |
 |---|---|---|
 | `single` | Root agent, full toolset | All tools available |

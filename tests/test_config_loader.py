@@ -64,6 +64,8 @@ def test_slim_runtime_defaults():
     config = Config()
 
     assert config.agents.mode == "single"
+    assert config.agents.team_enabled is False
+    assert config.agents.genver_enabled is False
     assert config.agents.reflector.enabled is False
     assert config.knowledge_graph.enabled is False
     assert config.gateway.heartbeat.enabled is False

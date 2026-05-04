@@ -264,6 +264,8 @@ class AgentsConfig(Base):
     """Agent configuration."""
 
     mode: Literal["auto", "single", "team", "genver"] = "single"
+    team_enabled: bool = Field(default=False, alias="teamEnabled")
+    genver_enabled: bool = Field(default=False, alias="genverEnabled")
     defaults: AgentDefaults = Field(default_factory=AgentDefaults)
     roles: dict[str, AgentRoleConfig] = Field(default_factory=dict)
     genver: GenVerConfig = Field(default_factory=GenVerConfig)

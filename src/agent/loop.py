@@ -162,8 +162,16 @@ class AgentLoop:
 
         channels_config = channels_config_override or resolve_data_secret_refs(config.channels)
         self.channels_config = channels_config
-        self.genver_config = config.agents.genver if config.agents.mode == "genver" else None
-        self._root_agent_mode = "team" if config.agents.mode == "team" else "single"
+        self.team_enabled = config.agents.team_enabled or config.agents.mode == "team"
+        self.genver_enabled = config.agents.genver_enabled or config.agents.mode == "genver"
+        self.genver_config = (
+            config.agents.genver
+            if config.agents.mode == "genver" and self.genver_enabled
+            else None
+        )
+        self._root_agent_mode = (
+            "team" if config.agents.mode == "team" and self.team_enabled else "single"
+        )
 
         self.roles = config.agents.roles or {}
         # Merge workspace agent definitions (*.md files in agents/ dir)
@@ -632,6 +640,8 @@ class AgentLoop:
             ),
             "orchestrator": bool(self._lifecycle.policies),
             "learning": self.learning_enabled,
+            "team_enabled": self.team_enabled,
+            "genver_enabled": self.genver_enabled,
             "hooks": str(self.hooks.hooks_dir) if self.hooks.hooks_dir else None,
         }
         if self._is_genver and self.genver_config:

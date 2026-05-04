@@ -61,6 +61,8 @@ def test_default_runtime_does_not_eagerly_create_optional_managers(tmp_path: Pat
     assert loop._subagents is None
     assert loop._mcp is None
     assert loop._genver_handler is None
+    assert loop.team_enabled is False
+    assert loop.genver_enabled is False
     assert loop.learning_enabled is False
     assert loop.hooks.hooks_dir is None
     assert loop._memory.tiers_enabled() is False

@@ -14,7 +14,7 @@ from src.bus.events import InboundMessage, OutboundMessage
 
 if TYPE_CHECKING:
     from src.agent.loop import AgentLoop
-    from src.config.schema import GenVerConfig
+    from src.config.schema import Config, GenVerConfig
 
 
 # Sentinel values so the CLI interactive loop can detect "needs setup"
@@ -102,6 +102,22 @@ def is_model_alias(name: str) -> bool:
     return name.lower() in MODEL_ALIASES
 
 
+def _team_enabled(loop: "AgentLoop", config: "Config") -> bool:
+    return bool(
+        getattr(loop, "team_enabled", False)
+        or config.agents.team_enabled
+        or config.agents.mode == "team"
+    )
+
+
+def _genver_enabled(loop: "AgentLoop", config: "Config") -> bool:
+    return bool(
+        getattr(loop, "genver_enabled", False)
+        or config.agents.genver_enabled
+        or config.agents.mode == "genver"
+    )
+
+
 async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage | None:
     """Handle ``/agent [single|team|genver]`` slash command for hot mode switching."""
     parts = msg.content.strip().split()
@@ -120,6 +136,8 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
         config.agents.mode = "single"
         save_config(config)
         loop.genver_config = None
+        loop.team_enabled = config.agents.team_enabled
+        loop.genver_enabled = config.agents.genver_enabled
         loop._root_agent_mode = "single"
         loop.reload_roles(config.agents.roles)
         loop.rebuild_tools()
@@ -133,6 +151,15 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
         from src.config.loader import load_config
 
         config = load_config()
+        if not _team_enabled(loop, config):
+            return OutboundMessage(
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content=(
+                    "Team mode is disabled in config. Set `agents.teamEnabled=true` "
+                    "to enable `/agent team`."
+                ),
+            )
         if config.agents.roles:
             # Roles already configured on disk — just reload them
             config.agents.mode = "team"
@@ -140,6 +167,7 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
 
             save_config(config)
             loop.genver_config = None
+            loop.team_enabled = True
             loop._root_agent_mode = "team"
             loop.reload_roles(config.agents.roles)
             role_lines = [f"  • {r}: {c.model}" for r, c in config.agents.roles.items()]
@@ -170,6 +198,15 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
         from src.config.loader import load_config, save_config
 
         config = load_config()
+        if not _genver_enabled(loop, config):
+            return OutboundMessage(
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content=(
+                    "GenVer mode is disabled in config. Set `agents.genverEnabled=true` "
+                    "to enable `/agent genver`."
+                ),
+            )
         gv = config.agents.genver
         has_models = gv.generator_model or gv.verifier_model or gv.explorer_model
 
@@ -193,6 +230,7 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
 
         config.agents.mode = "genver"
         save_config(config)
+        loop.genver_enabled = True
         loop.genver_config = gv
         loop._root_agent_mode = "single"
         loop.reload_roles(config.agents.roles)
@@ -236,6 +274,7 @@ def _genver_status_message(loop: "AgentLoop", msg: InboundMessage) -> OutboundMe
 
 def apply_genver_config(loop: "AgentLoop", genver_config: "GenVerConfig") -> None:
     """Apply a GenVerConfig and switch to genver mode."""
+    loop.genver_enabled = True
     loop.genver_config = genver_config
     loop._root_agent_mode = "single"
     loop.rebuild_tools()

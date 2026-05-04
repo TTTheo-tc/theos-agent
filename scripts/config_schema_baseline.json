@@ -116,6 +116,11 @@
         "genver": {
           "$ref": "#/$defs/GenVerConfig"
         },
+        "genverEnabled": {
+          "default": false,
+          "title": "Genverenabled",
+          "type": "boolean"
+        },
         "mode": {
           "default": "single",
           "enum": [
@@ -142,6 +147,11 @@
         },
         "subagents": {
           "$ref": "#/$defs/SubagentPolicyConfig"
+        },
+        "teamEnabled": {
+          "default": false,
+          "title": "Teamenabled",
+          "type": "boolean"
         }
       },
       "title": "AgentsConfig",
