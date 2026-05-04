@@ -53,7 +53,17 @@ def test_ci_runs_core_smoke_before_all_extras() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     smoke = "uv run python scripts/smoke_core_runtime.py --strict-installed"
+    wheel_smoke = "uv run python scripts/smoke_core_wheel.py"
     all_extras = "uv sync --all-extras --group dev"
 
     assert smoke in workflow
+    assert wheel_smoke in workflow
+    assert workflow.index(wheel_smoke) < workflow.index(smoke)
     assert workflow.index(smoke) < workflow.index(all_extras)
+
+
+def test_makefile_exposes_core_wheel_smoke() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "smoke-core-wheel: build-core" in makefile
+    assert "uv run python scripts/smoke_core_wheel.py" in makefile
