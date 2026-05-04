@@ -1,4 +1,4 @@
-.PHONY: fmt lint test install install-core install-dev install-gateway install-full schema-check changelog build-ui build-bridge build-core build-full
+.PHONY: fmt lint test install install-core install-dev install-gateway install-full smoke-core schema-check changelog build-ui build-bridge build-core build-full
 
 fmt:
 	uv run pre-commit run --all-files
@@ -26,6 +26,9 @@ install-full:
 	$(MAKE) build-bridge
 	uv sync --all-extras --group dev
 	uv run pre-commit install
+
+smoke-core:
+	uv run python scripts/smoke_core_runtime.py
 
 schema-check:
 	uv run python scripts/check_config_schema.py check

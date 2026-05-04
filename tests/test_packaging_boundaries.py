@@ -47,3 +47,13 @@ def test_dockerfile_keeps_core_gateway_and_full_targets_separate() -> None:
     assert "nodejs" not in base_block
     assert "uv sync --frozen --no-dev --extra gateway" in dockerfile
     assert "uv sync --frozen --no-dev --all-extras" in dockerfile
+
+
+def test_ci_runs_core_smoke_before_all_extras() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    smoke = "uv run python scripts/smoke_core_runtime.py --strict-installed"
+    all_extras = "uv sync --all-extras --group dev"
+
+    assert smoke in workflow
+    assert workflow.index(smoke) < workflow.index(all_extras)
