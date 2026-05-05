@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useState } from 'react'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { useDelayedSync } from '@/lib/use-delayed-sync'
 
 type CronJob = {
   id: string; name: string; enabled: boolean;
@@ -25,10 +26,10 @@ export default function CronPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true)
     setError('')
-    fetch('/api/cron/jobs')
+    return fetch('/api/cron/jobs')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(setJobs)
       .catch(() => {
@@ -36,9 +37,9 @@ export default function CronPage() {
         setError('Cron data unavailable.')
       })
       .finally(() => setLoading(false))
-  }
+  }, [])
 
-  useEffect(() => { load() }, [])
+  useDelayedSync(load, 10000)
 
   const handleWrite = (p: Promise<Response>) => {
     p.then(r => {

@@ -9,7 +9,7 @@ Only four frontend pages are in scope:
 | Path | Page | Purpose |
 |---|---|---|
 | `/memory` | Memory | Instinct framework, recall signals, knowledge graph nodes, and memory search |
-| `/wiki` | Wiki | Document-style learning notes from memory markdown |
+| `/wiki` | Wiki | Local LLM Wiki for personal learning notes and source-backed Markdown pages |
 | `/cron` | Cron | Scheduled jobs and recurring prompts |
 | `/plans` | Plans | Daily focus and long-term plans |
 
@@ -56,6 +56,33 @@ http://localhost:8080
 
 Start the backend dashboard API with the gateway or standalone UI command before using live data.
 
+The active pages refresh live data with after-delay sync: each request finishes first, then the next refresh is scheduled after the delay. Window focus also schedules a short delayed refresh.
+
+- Memory instinct summary: 10 seconds after the previous sync finishes
+- Memory graph nodes: 15 seconds after the previous sync finishes
+- Cron jobs: 10 seconds after the previous sync finishes
+- Wiki status and file index: 15 seconds after the previous sync finishes
+- Plans: browser-local state, synced across tabs with the `storage` event
+
+## Wiki Workspace
+
+The Wiki page is separate from Memory. It uses a local Markdown workspace under:
+
+```text
+<workspace>/llm-wiki/
+  raw/              # original source material, read-only by convention
+  wiki/
+    index.md        # page directory
+    log.md          # operation log
+    concepts/       # concept pages
+    entities/       # people, projects, companies, tools
+    sources/        # one summary page per raw source
+    outputs/        # reusable synthesis and answers
+  CLAUDE.md         # schema and workflow rules for LLM agents
+```
+
+The UI can initialize this structure, browse Markdown files, read a selected page, search text files, and record new `sources`, `concepts`, `entities`, or `outputs` pages. Recording writes a Markdown page, appends one line to `wiki/index.md`, and appends an operation entry to `wiki/log.md`. Full LLM-backed ingest, query, and lint flows are still future work.
+
 ## Scripts
 
 ```bash
@@ -73,7 +100,7 @@ src/
   app/globals.css            # Tailwind v4 and theme variables
   pages/
     Memory.tsx               # instinct, memory nodes, and search
-    Wiki.tsx                 # markdown-backed learning notes
+    Wiki.tsx                 # local LLM Wiki browser
     Cron.tsx                 # cron job list/actions
     Plans.tsx                # local daily/long-term plans
   components/layout/         # sidebar, header, command palette
@@ -90,7 +117,11 @@ Relevant endpoints currently used by the UI:
 | `/api/memory/nodes` | GET | Memory node list |
 | `/api/memory/search` | GET | Memory search |
 | `/api/memory/instinct` | GET | Instinct framework and runtime summary |
-| `/api/memory/markdown` | GET | Wiki document sections |
+| `/api/wiki/status` | GET | Wiki workspace status and file index |
+| `/api/wiki/init` | POST | Create the local Wiki directory structure |
+| `/api/wiki/page` | GET | Read a selected Wiki file |
+| `/api/wiki/record` | POST | Create a Wiki Markdown page and update index/log |
+| `/api/wiki/search` | GET | Search Wiki text files |
 | `/api/cron/jobs` | GET | Cron job list |
 | `/api/cron/jobs/{job_id}` | PUT, DELETE | Cron enable/disable and delete |
 | `/api/cron/jobs/{job_id}/run` | POST | Cron manual run |

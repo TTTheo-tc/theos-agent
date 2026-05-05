@@ -21,6 +21,7 @@ src/ui/
     health.py         # /api/health
     sessions.py       # /api/sessions, /api/agents, /api/metrics, /api/events, /api/search
     memory.py         # /api/memory/nodes, /api/memory/search, /api/memory/markdown, /api/memory/instinct
+    wiki.py           # /api/wiki/status, /api/wiki/init, /api/wiki/page, /api/wiki/record, /api/wiki/search
     cron.py           # /api/cron/jobs (CRUD + run)
     logs.py           # /api/logs, /api/logs/stream
     config.py         # /api/config (GET/PUT)
@@ -37,7 +38,7 @@ ui/                   # React SPA (separate build artifact)
   src/App.tsx         # BrowserRouter route table for the four active pages
   src/pages/
     Memory.tsx        # instinct, memory nodes, and search
-    Wiki.tsx          # document-style learning notes
+    Wiki.tsx          # local LLM Wiki browser
     Cron.tsx          # scheduled jobs
     Plans.tsx         # daily and long-term plans
   src/components/
@@ -55,7 +56,7 @@ The active UI is a four-page personal knowledge workspace:
 | Page | Route | Source | Current persistence |
 |---|---|---|---|
 | Memory | `/memory` | `ui/src/pages/Memory.tsx` | `/api/memory/instinct`, `/api/memory/nodes`, `/api/memory/search` |
-| Wiki | `/wiki` | `ui/src/pages/Wiki.tsx` | `/api/memory/markdown` |
+| Wiki | `/wiki` | `ui/src/pages/Wiki.tsx` | `/api/wiki/status`, `/api/wiki/page`, `/api/wiki/record`, `/api/wiki/search`, `/api/wiki/init` |
 | Cron | `/cron` | `ui/src/pages/Cron.tsx` | `/api/cron/jobs` |
 | Plans | `/plans` | `ui/src/pages/Plans.tsx` | browser `localStorage` key `theos.ui.plans` |
 
@@ -93,6 +94,7 @@ The Starlette server still exposes legacy observability endpoints. The active Re
 | Metrics | `/api/metrics`, `/api/metrics/cost` | GET |
 | Events | `/api/events` | GET (SSE) |
 | Memory | `/api/memory/nodes`, `/api/memory/search`, `/api/memory/nodes/{id}`, `/api/memory/markdown`, `/api/memory/instinct` | GET |
+| Wiki | `/api/wiki/status`, `/api/wiki/init`, `/api/wiki/page`, `/api/wiki/record`, `/api/wiki/search` | GET/POST |
 | Cron | `/api/cron/jobs`, `/api/cron/jobs/{id}`, `/api/cron/jobs/{id}/run` | GET/POST/PUT/DELETE |
 | Logs | `/api/logs`, `/api/logs/stream` | GET (SSE) |
 | Config | `/api/config` | GET/PUT |
@@ -105,7 +107,7 @@ The Starlette server still exposes legacy observability endpoints. The active Re
 |---|---|---|
 | `/` | redirect | `/memory` |
 | `/memory` | `ui/src/pages/Memory.tsx` | `/api/memory/instinct`, `/api/memory/nodes`, `/api/memory/search` |
-| `/wiki` | `ui/src/pages/Wiki.tsx` | `/api/memory/markdown` |
+| `/wiki` | `ui/src/pages/Wiki.tsx` | `/api/wiki/status`, `/api/wiki/page`, `/api/wiki/record`, `/api/wiki/search`, `/api/wiki/init` |
 | `/cron` | `ui/src/pages/Cron.tsx` | `/api/cron/jobs` |
 | `/plans` | `ui/src/pages/Plans.tsx` | browser `localStorage` |
 
@@ -127,10 +129,11 @@ Both use the same pattern: subscribers get an `asyncio.Queue` (max 256 items), f
 ## Data Flow
 
 1. **Gateway boot**: `gateway_cmd.py` creates `DashboardWriter` (write-side), then `create_ui_app()` with `DashboardReader` (read-side). Both point to `<workspace>/data/dashboard.db`.
-2. **Memory and Wiki**: The frontend fetches `/api/memory/instinct`, `/api/memory/nodes`, `/api/memory/search`, and `/api/memory/markdown`. Memory route handlers read the Instinct framework, Instinct runtime files, knowledge graph, and memory store data from the configured workspace.
-3. **Cron**: The frontend fetches `/api/cron/jobs` and calls the job update/delete/run endpoints. Mutating operations require the live gateway cron service.
-4. **Plans**: `ui/src/pages/Plans.tsx` stores daily and long-term plans in browser `localStorage` only. A backend route should be added before plans are treated as cross-device or durable server state.
-5. **Reports**: `MetricsCollector` reads from a separate DB (`<workspace>/theos.db`, the orchestrator event store), not the dashboard DB.
+2. **Memory**: The frontend fetches `/api/memory/instinct`, `/api/memory/nodes`, and `/api/memory/search`. Memory route handlers read the Instinct framework, Instinct runtime files, knowledge graph, and memory store data from the configured workspace.
+3. **Wiki**: The frontend fetches `/api/wiki/status`, `/api/wiki/page`, and `/api/wiki/search`, can call `/api/wiki/init` to create `<workspace>/llm-wiki/`, and calls `/api/wiki/record` to create pages under `wiki/sources`, `wiki/concepts`, `wiki/entities`, or `wiki/outputs`. Recording also updates `wiki/index.md` and `wiki/log.md`. Wiki route handlers use local Markdown files from `raw/`, `wiki/`, and `CLAUDE.md`; they do not read MemoryStore.
+4. **Cron**: The frontend fetches `/api/cron/jobs` and calls the job update/delete/run endpoints. Mutating operations require the live gateway cron service.
+5. **Plans**: `ui/src/pages/Plans.tsx` stores daily and long-term plans in browser `localStorage` only. A backend route should be added before plans are treated as cross-device or durable server state.
+6. **Reports**: `MetricsCollector` reads from a separate DB (`<workspace>/theos.db`, the orchestrator event store), not the dashboard DB.
 
 ## State & Persistence
 
@@ -140,6 +143,7 @@ Both use the same pattern: subscribers get an `asyncio.Queue` (max 256 items), f
 | Event store DB | `<workspace>/theos.db` | `src/store/database.py` (used by `MetricsCollector`) |
 | Turn checkpoints | `<workspace>/turns/` | `src/session/turn_store.py` (read by `DashboardReader`) |
 | Subagent checkpoints | `<workspace>/subagents/` | `src/session/subagent_store.py` (read by `DashboardReader`) |
+| Personal Wiki | `<workspace>/llm-wiki/` | `src/ui/routes/wiki.py` (local Markdown browser/init) |
 | Frontend plans | browser `localStorage` key `theos.ui.plans` | `ui/src/pages/Plans.tsx` |
 | Frontend build | `ui/dist/` or `src/ui/ui_static/` | Vite build (`cd ui && npm run build`) |
 
@@ -151,6 +155,7 @@ Both use the same pattern: subscribers get an `asyncio.Queue` (max 256 items), f
 4. `LogEventBus` always scrubs credentials before publishing, regardless of log level (`log_events.py:52-56`).
 5. CORS middleware is only added when no static dir is found (dev mode with Vite proxy) (`server.py:78-85`).
 6. Event bus queues are bounded (256 items); overflows are silently dropped, never block the publisher (`events.py:57-58`).
+7. Wiki file reads resolve paths inside the configured Wiki root before reading, blocking traversal outside `<workspace>/llm-wiki/`.
 
 ## Extension Points
 

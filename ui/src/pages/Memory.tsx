@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Header } from '@/components/layout/header'
 import { Badge } from '@/components/ui/badge'
+import { useDelayedSync } from '@/lib/use-delayed-sync'
 
 type KGNode = {
   id: string
@@ -122,19 +123,21 @@ export default function MemoryPage() {
   const [instinctLoading, setInstinctLoading] = useState(false)
   const [instinctError, setInstinctError] = useState('')
 
-  useEffect(() => {
+  const loadNodes = useCallback(() => {
     setLoading(true)
-    fetch(`/api/memory/nodes?type=${nodeType}&limit=50`)
+    return fetch(`/api/memory/nodes?type=${nodeType}&limit=50`)
       .then(r => r.json())
       .then(setNodes)
       .catch(() => setNodes([]))
       .finally(() => setLoading(false))
   }, [nodeType])
 
+  useDelayedSync(loadNodes, 15000)
+
   const loadInstinct = useCallback(() => {
     setInstinctLoading(true)
     setInstinctError('')
-    fetch('/api/memory/instinct')
+    return fetch('/api/memory/instinct')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(setInstinct)
       .catch(() => {
@@ -144,7 +147,7 @@ export default function MemoryPage() {
       .finally(() => setInstinctLoading(false))
   }, [])
 
-  useEffect(() => { loadInstinct() }, [loadInstinct])
+  useDelayedSync(loadInstinct, 10000)
 
   const doSearch = () => {
     const q = query.trim()

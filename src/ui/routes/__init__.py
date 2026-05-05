@@ -33,6 +33,7 @@ from src.ui.routes.sessions import (
 )
 from src.ui.routes.settings import settings_get, settings_put
 from src.ui.routes.tools import tools_list, tools_profiles
+from src.ui.routes.wiki import wiki_init, wiki_page, wiki_record, wiki_search, wiki_status
 
 
 def collect_routes() -> list[Route]:
@@ -52,6 +53,11 @@ def collect_routes() -> list[Route]:
         Route("/api/memory/nodes/{node_id}", memory_node_detail),
         Route("/api/memory/markdown", memory_markdown),
         Route("/api/memory/instinct", memory_instinct),
+        Route("/api/wiki/status", wiki_status, methods=["GET"]),
+        Route("/api/wiki/init", wiki_init, methods=["POST"]),
+        Route("/api/wiki/page", wiki_page, methods=["GET"]),
+        Route("/api/wiki/record", wiki_record, methods=["POST"]),
+        Route("/api/wiki/search", wiki_search, methods=["GET"]),
         Route("/api/cron/jobs", cron_jobs_list, methods=["GET"]),
         Route("/api/cron/jobs", cron_job_create, methods=["POST"]),
         Route("/api/cron/jobs/{job_id}", cron_job_update, methods=["PUT"]),

@@ -46,6 +46,14 @@ export default function PlansPage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(plans))
   }, [plans])
 
+  useEffect(() => {
+    const syncPlans = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY) setPlans(readPlans())
+    }
+    window.addEventListener('storage', syncPlans)
+    return () => window.removeEventListener('storage', syncPlans)
+  }, [])
+
   const grouped = useMemo(() => ({
     daily: plans.filter(plan => plan.kind === 'daily'),
     long: plans.filter(plan => plan.kind === 'long'),
