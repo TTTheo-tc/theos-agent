@@ -15,16 +15,12 @@ Registers all Typer commands. Heavy implementations live in sub-modules:
 import warnings
 
 import typer
-from rich.markup import escape
 
 from src import __logo__, __version__
 from src.cli.display import (
     THEOS_ACCENT,
     console,
-    make_plain_row,
-    make_status_row,
     print_cli_home,
-    print_status_header,
 )
 
 warnings.filterwarnings(
@@ -381,72 +377,9 @@ def feishu_auth(
 @app.command()
 def status():
     """Show theos status."""
-    from loguru import logger
+    from src.cli.status_cmd import status as _status
 
-    from src.auth.store import get_api_key_for_provider
-    from src.config.loader import get_config_path, load_config
-    from src.providers.registry import ordered_providers
-
-    logger.remove()
-
-    config_path = get_config_path()
-    try:
-        config = load_config()
-    except Exception as exc:
-        print_status_header(__version__)
-        console.print()
-        console.print(make_status_row("Config", config_path, config_path.exists()))
-        console.print(make_plain_row("Config error", f"[red]{escape(str(exc))}[/]"))
-        raise typer.Exit(1) from exc
-    workspace = config.workspace_path
-
-    print_status_header(__version__)
-    console.print()
-
-    console.print(make_status_row("Config", config_path, config_path.exists()))
-    console.print(make_status_row("Workspace", workspace, workspace.exists()))
-
-    if config_path.exists():
-        console.print(make_plain_row("Model", config.agents.defaults.model))
-
-        # Check API keys from registry (auth profiles take priority over config.json)
-        for spec in ordered_providers():
-            p = getattr(config.providers, spec.name, None)
-            if p is None:
-                continue
-            if spec.is_oauth:
-                console.print(make_plain_row(spec.label, "[green]ok[/] (OAuth)"))
-            elif spec.is_local:
-                if p.api_base:
-                    console.print(make_plain_row(spec.label, f"[green]ok[/] {p.api_base}"))
-                else:
-                    console.print(make_plain_row(spec.label, "[dim]not set[/dim]"))
-            else:
-                auth_key = get_api_key_for_provider(spec.name)
-                config_key = p.api_key if p else None
-                if auth_key:
-                    console.print(make_plain_row(spec.label, "[green]ok[/] (auth profile)"))
-                elif config_key:
-                    console.print(make_plain_row(spec.label, "[green]ok[/]"))
-                else:
-                    console.print(make_plain_row(spec.label, "[dim]not set[/dim]"))
-
-    # Gateway daemon status
-    try:
-        from src.daemon import resolve_service
-
-        svc = resolve_service()
-        if svc.is_loaded():
-            st = svc.status()
-            pid = st.get("pid")
-            if pid:
-                console.print(make_plain_row("Gateway", f"[green]running[/] (PID {pid})"))
-            else:
-                console.print(make_plain_row("Gateway", "[yellow]loaded but not running[/]"))
-        else:
-            console.print(make_plain_row("Gateway", "[dim]not installed[/dim]"))
-    except NotImplementedError:
-        pass  # Omit on unsupported platforms
+    return _status()
 
 
 if __name__ == "__main__":

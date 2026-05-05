@@ -70,6 +70,7 @@ def test_optional_cli_help_keeps_implementations_lazy():
         "src.cli.init_soul",
         "src.cli.cron_cmd",
         "src.cli.report_cmd",
+        "src.cli.status_cmd",
         "src.cli.ui_cmd",
         "src.cron.service",
     )
@@ -97,6 +98,7 @@ def test_optional_cli_help_keeps_implementations_lazy():
             ["cron", "add", "--help"],
             ["report", "--help"],
             ["report", "daily", "--help"],
+            ["status", "--help"],
             ["init", "--help"],
             ["agent", "--help"],
         ):

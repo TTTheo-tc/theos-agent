@@ -224,6 +224,121 @@ def _compute_daemon_args() -> tuple[list[str], dict[str, str], str]:
     return program_args, env, repo_root
 
 
+def _configure_web_search(config: Config) -> None:
+    """Interactive web search provider setup."""
+    console.print("\n[bold]Web search[/bold]\n")
+    console.print("  Default provider: [cyan]DuckDuckGo[/cyan] (free, no API key)")
+    console.print("  Optional upgrades:")
+    console.print("    [1] DuckDuckGo (default, free)")
+    console.print("    [2] Brave Search (faster, more relevant)")
+    console.print("    [3] Tavily (optimized for AI agents)\n")
+    ws_choice = typer.prompt(
+        "  Choose provider (number)", default="1", prompt_suffix=" "
+    ).strip()
+
+    if ws_choice == "2":
+        config.tools.web.search.provider = "brave"
+        console.print(
+            "\n  Get your Brave API key at: " "[cyan]https://brave.com/search/api/[/cyan]"
+        )
+        console.print("  Free tier: 2,000 queries/month\n")
+        brave_key = typer.prompt(
+            "  Brave API key (Enter to skip)",
+            default=config.tools.web.search.api_key or "",
+            show_default=False,
+            prompt_suffix=" ",
+        ).strip()
+        if brave_key:
+            config.tools.web.search.api_key = brave_key
+            console.print("[green]\u2713[/green] Brave Search configured")
+        else:
+            console.print("  [dim]Skipped — will fall back to DuckDuckGo[/dim]")
+    elif ws_choice == "3":
+        config.tools.web.search.provider = "tavily"
+        console.print("\n  Get your Tavily API key at: " "[cyan]https://tavily.com/[/cyan]")
+        console.print("  Free tier: 1,000 queries/month\n")
+        tavily_key = typer.prompt(
+            "  Tavily API key (Enter to skip)",
+            default=config.tools.web.search.tavily_api_key or "",
+            show_default=False,
+            prompt_suffix=" ",
+        ).strip()
+        if tavily_key:
+            config.tools.web.search.tavily_api_key = tavily_key
+            console.print("[green]\u2713[/green] Tavily Search configured")
+        else:
+            console.print("  [dim]Skipped — will fall back to DuckDuckGo[/dim]")
+    else:
+        config.tools.web.search.provider = "duckduckgo"
+        console.print("[green]\u2713[/green] DuckDuckGo (no key needed)")
+
+
+def _configure_agent_orchestration(config: Config, configured_providers: list[str]) -> None:
+    """Interactive single/team/genver setup."""
+    from src.config.loader import save_config
+
+    console.print("\n[bold]Agent orchestration[/bold]\n")
+    console.print("  [1] Single")
+    console.print("  [2] Team")
+    console.print("  [3] GenVer\n")
+    orch_raw = typer.prompt("  Choose (number)", default="1", prompt_suffix=" ").strip()
+
+    if orch_raw == "2" and configured_providers:
+        roles_built = configure_roles_interactive(configured_providers)
+        if roles_built:
+            config.agents.roles = roles_built
+            save_config(config)
+            console.print()
+            for rname, rcfg in roles_built.items():
+                console.print(f"[green]\u2713[/green] {rname}: [cyan]{rcfg.model}[/cyan]")
+    elif orch_raw == "3" and configured_providers:
+        genver_cfg = configure_genver_interactive(configured_providers)
+        if genver_cfg:
+            config.agents.genver = genver_cfg
+            config.agents.mode = "genver"
+            save_config(config)
+            console.print()
+            console.print(
+                f"[green]\u2713[/green] generator: [cyan]{genver_cfg.generator_model}[/cyan]"
+            )
+            console.print(
+                f"[green]\u2713[/green] verifier:  [cyan]{genver_cfg.verifier_model}[/cyan]"
+            )
+
+
+def _install_gateway_daemon(config: Config) -> None:
+    """Install or update the platform gateway daemon."""
+    from src.daemon import resolve_service
+    from src.daemon.health import wait_for_gateway
+
+    svc = resolve_service()
+    program_args, env, working_dir = _compute_daemon_args()
+
+    was_loaded = svc.is_loaded()
+    svc.install(program_args, env, working_dir)
+    action = "updated" if was_loaded else "installed"
+
+    ui_cfg = config.gateway.ui
+    probe_host = "127.0.0.1"
+    probe_port = ui_cfg.port if ui_cfg.enabled else config.gateway.port
+    probe_path = "/api/health" if ui_cfg.enabled else "/"
+    require_pid_match = ui_cfg.enabled
+    if wait_for_gateway(
+        probe_host,
+        probe_port,
+        timeout_s=15,
+        service=svc,
+        path=probe_path,
+        require_pid_match=require_pid_match,
+    ):
+        status = svc.status()
+        pid = status.get("pid", "?")
+        console.print(f"[green]\u2713[/green] Gateway: {action} (PID {pid})")
+    else:
+        console.print(f"[yellow]\u26a0[/yellow] Gateway: {action} but not yet reachable")
+        console.print("  Check logs: [cyan]theos gateway logs[/cyan]")
+
+
 def init(
     reset: bool = typer.Option(False, "--reset", help="Reset existing data before init"),
     no_daemon: bool = typer.Option(False, "--no-daemon", help="Skip gateway daemon installation"),
@@ -303,117 +418,16 @@ def init(
         save_config(config)
 
         # -- Step 4b: web search setup -------------------------------------------
-        console.print("\n[bold]Web search[/bold]\n")
-        console.print("  Default provider: [cyan]DuckDuckGo[/cyan] (free, no API key)")
-        console.print("  Optional upgrades:")
-        console.print("    [1] DuckDuckGo (default, free)")
-        console.print("    [2] Brave Search (faster, more relevant)")
-        console.print("    [3] Tavily (optimized for AI agents)\n")
-        ws_choice = typer.prompt(
-            "  Choose provider (number)", default="1", prompt_suffix=" "
-        ).strip()
-
-        if ws_choice == "2":
-            config.tools.web.search.provider = "brave"
-            console.print(
-                "\n  Get your Brave API key at: " "[cyan]https://brave.com/search/api/[/cyan]"
-            )
-            console.print("  Free tier: 2,000 queries/month\n")
-            brave_key = typer.prompt(
-                "  Brave API key (Enter to skip)",
-                default=config.tools.web.search.api_key or "",
-                show_default=False,
-                prompt_suffix=" ",
-            ).strip()
-            if brave_key:
-                config.tools.web.search.api_key = brave_key
-                console.print("[green]\u2713[/green] Brave Search configured")
-            else:
-                console.print("  [dim]Skipped — will fall back to DuckDuckGo[/dim]")
-        elif ws_choice == "3":
-            config.tools.web.search.provider = "tavily"
-            console.print("\n  Get your Tavily API key at: " "[cyan]https://tavily.com/[/cyan]")
-            console.print("  Free tier: 1,000 queries/month\n")
-            tavily_key = typer.prompt(
-                "  Tavily API key (Enter to skip)",
-                default=config.tools.web.search.tavily_api_key or "",
-                show_default=False,
-                prompt_suffix=" ",
-            ).strip()
-            if tavily_key:
-                config.tools.web.search.tavily_api_key = tavily_key
-                console.print("[green]\u2713[/green] Tavily Search configured")
-            else:
-                console.print("  [dim]Skipped — will fall back to DuckDuckGo[/dim]")
-        else:
-            config.tools.web.search.provider = "duckduckgo"
-            console.print("[green]\u2713[/green] DuckDuckGo (no key needed)")
-
+        _configure_web_search(config)
         save_config(config)
 
         # -- Step 5: agent orchestration ---------------------------------------
-        console.print("\n[bold]Agent orchestration[/bold]\n")
-        console.print("  [1] Single")
-        console.print("  [2] Team")
-        console.print("  [3] GenVer\n")
-        orch_raw = typer.prompt("  Choose (number)", default="1", prompt_suffix=" ").strip()
-
-        if orch_raw == "2" and configured_providers:
-            roles_built = configure_roles_interactive(configured_providers)
-            if roles_built:
-                config.agents.roles = roles_built
-                save_config(config)
-                console.print()
-                for rname, rcfg in roles_built.items():
-                    console.print(f"[green]\u2713[/green] {rname}: [cyan]{rcfg.model}[/cyan]")
-        elif orch_raw == "3" and configured_providers:
-            genver_cfg = configure_genver_interactive(configured_providers)
-            if genver_cfg:
-                config.agents.genver = genver_cfg
-                config.agents.mode = "genver"
-                save_config(config)
-                console.print()
-                console.print(
-                    f"[green]\u2713[/green] generator: [cyan]{genver_cfg.generator_model}[/cyan]"
-                )
-                console.print(
-                    f"[green]\u2713[/green] verifier:  [cyan]{genver_cfg.verifier_model}[/cyan]"
-                )
+        _configure_agent_orchestration(config, configured_providers)
 
         # -- Step 6: install gateway daemon service ----------------------------
         if not no_daemon:
             try:
-                from src.daemon import resolve_service
-                from src.daemon.health import wait_for_gateway
-
-                svc = resolve_service()
-                program_args, env, working_dir = _compute_daemon_args()
-
-                was_loaded = svc.is_loaded()
-                svc.install(program_args, env, working_dir)
-                action = "updated" if was_loaded else "installed"
-
-                ui_cfg = config.gateway.ui
-                probe_host = "127.0.0.1"
-                probe_port = ui_cfg.port if ui_cfg.enabled else config.gateway.port
-                probe_path = "/api/health" if ui_cfg.enabled else "/"
-                require_pid_match = ui_cfg.enabled
-                if wait_for_gateway(
-                    probe_host,
-                    probe_port,
-                    timeout_s=15,
-                    service=svc,
-                    path=probe_path,
-                    require_pid_match=require_pid_match,
-                ):
-                    st = svc.status()
-                    pid = st.get("pid", "?")
-                    console.print(f"[green]\u2713[/green] Gateway: {action} (PID {pid})")
-                else:
-                    console.print(
-                        f"[yellow]\u26a0[/yellow] Gateway: {action} but not yet reachable"
-                    )
-                    console.print("  Check logs: [cyan]theos gateway logs[/cyan]")
+                _install_gateway_daemon(config)
             except NotImplementedError:
                 console.print("[dim]  Gateway daemon not supported on this platform.[/dim]")
                 console.print("  Run manually: [cyan]theos gateway[/cyan]")

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from src.cli.commands import app
+from src.config.schema import Config
 
 runner = CliRunner()
 
@@ -45,3 +46,29 @@ def test_gateway_uninstall():
         result = runner.invoke(app, ["gateway", "uninstall"])
     assert result.exit_code == 0
     mock_svc.uninstall.assert_called_once()
+
+
+def test_startup_checks_skip_browser_dependency_when_disabled(tmp_path, monkeypatch):
+    import builtins
+
+    from src.cli.gateway_cmd import _run_startup_checks
+
+    config = Config()
+    config.agents.defaults.workspace = str(tmp_path)
+    config.tools.browser.enabled = False
+    config.tools.web.search.provider = "duckduckgo"
+
+    imported: list[str] = []
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        imported.append(name)
+        if name == "json_repair":
+            return object()
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    _run_startup_checks(config)
+
+    assert "playwright" not in imported

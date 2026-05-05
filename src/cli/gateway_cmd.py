@@ -145,9 +145,9 @@ def _run_startup_checks(config) -> None:
     }
     if getattr(config.channels.feishu, "enabled", False):
         critical_deps["lark_oapi"] = "Feishu/Lark API integration"
-    optional_deps = {
-        "playwright": "Browser automation (browser tool)",
-    }
+    optional_deps = {}
+    if getattr(getattr(config.tools, "browser", None), "enabled", False):
+        optional_deps["playwright"] = "Browser automation (browser tool)"
     for mod, desc in critical_deps.items():
         try:
             __import__(mod)
