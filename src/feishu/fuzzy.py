@@ -75,6 +75,25 @@ def normalize_for_fuzzy_match(text: str) -> str:
     return result.translate(_NORMALIZE_TABLE)
 
 
+def _not_found(content: str) -> FuzzyMatchResult:
+    return FuzzyMatchResult(
+        found=False,
+        index=-1,
+        match_length=0,
+        used_fuzzy_match=False,
+        content_for_replacement=content,
+    )
+
+
+def _unique_index(content: str, text: str) -> int | None:
+    first = content.find(text)
+    if first == -1:
+        return None
+    if content.find(text, first + 1) != -1:
+        return None
+    return first
+
+
 def fuzzy_find_text(content: str, old_text: str) -> FuzzyMatchResult:
     """Find old_text in content, trying exact match first, then fuzzy.
 
@@ -86,21 +105,9 @@ def fuzzy_find_text(content: str, old_text: str) -> FuzzyMatchResult:
     Returns:
         FuzzyMatchResult with match details, or found=False on failure.
     """
-    _not_found = FuzzyMatchResult(
-        found=False,
-        index=-1,
-        match_length=0,
-        used_fuzzy_match=False,
-        content_for_replacement=content,
-    )
-
     # Level 1: Exact match
-    first = content.find(old_text)
-    if first != -1:
-        # Check uniqueness
-        second = content.find(old_text, first + 1)
-        if second != -1:
-            return _not_found  # ambiguous — caller should handle
+    first = _unique_index(content, old_text)
+    if first is not None:
         return FuzzyMatchResult(
             found=True,
             index=first,
@@ -108,19 +115,16 @@ def fuzzy_find_text(content: str, old_text: str) -> FuzzyMatchResult:
             used_fuzzy_match=False,
             content_for_replacement=content,
         )
+    if content.find(old_text) != -1:
+        return _not_found(content)  # ambiguous — caller should handle
 
     # Level 2: Fuzzy match (normalize both)
     norm_content = normalize_for_fuzzy_match(content)
     norm_old = normalize_for_fuzzy_match(old_text)
 
-    first = norm_content.find(norm_old)
-    if first == -1:
-        return _not_found
-
-    # Check uniqueness in normalized space
-    second = norm_content.find(norm_old, first + 1)
-    if second != -1:
-        return _not_found  # ambiguous
+    first = _unique_index(norm_content, norm_old)
+    if first is None:
+        return _not_found(content)
 
     return FuzzyMatchResult(
         found=True,
