@@ -74,6 +74,20 @@ class TestCreateChat:
 
         assert result["chat_id"] == "oc_456"
 
+    def test_create_chat_passes_request_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(chat_id="oc_789")
+        client.im.v1.chat.create.return_value = _ok_response(data)
+        option = object()
+
+        with (
+            patch("src.feishu.api_chat._request_option", return_value=option),
+            patch("src.feishu.api_chat._unmarshal", return_value={"chat_id": "oc_789"}),
+        ):
+            api_chat.create_chat(client, "Group")
+
+        assert client.im.v1.chat.create.call_args.args[1] is option
+
 
 class TestGetChat:
     def test_get_chat(self):
@@ -113,6 +127,16 @@ class TestListChatMembers:
             result = api_chat.list_chat_members(client, "oc_123")
 
         assert len(result) == 2
+
+    def test_single_page_uses_one_arg_when_no_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(items=[], has_more=False, page_token=None)
+        client.im.v1.chat_members.get.return_value = _ok_response(data)
+
+        with patch("src.feishu.api_chat._request_option", return_value=None):
+            api_chat.list_chat_members(client, "oc_123")
+
+        assert len(client.im.v1.chat_members.get.call_args.args) == 1
 
     def test_paginated(self):
         client = _mock_lark_client()
@@ -163,6 +187,22 @@ class TestAddChatMembers:
         assert result == {"invalid_id_list": []}
 
 
+class TestRemoveChatMembers:
+    def test_remove_members_passes_request_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace()
+        client.im.v1.chat_members.delete.return_value = _ok_response(data)
+        option = object()
+
+        with (
+            patch("src.feishu.api_chat._request_option", return_value=option),
+            patch("src.feishu.api_chat._unmarshal", return_value={"invalid_id_list": []}),
+        ):
+            api_chat.remove_chat_members(client, "oc_123", ["ou_a"])
+
+        assert client.im.v1.chat_members.delete.call_args.args[1] is option
+
+
 class TestListChatMessages:
     def test_list_messages(self):
         client = _mock_lark_client()
@@ -184,6 +224,17 @@ class TestListChatMessages:
 
         assert len(result) == 1
         assert result[0]["message_id"] == "m1"
+
+    def test_list_messages_passes_request_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(items=[], has_more=False, page_token=None)
+        client.im.v1.message.list.return_value = _ok_response(data)
+        option = object()
+
+        with patch("src.feishu.api_chat._request_option", return_value=option):
+            api_chat.list_chat_messages(client, "oc_123")
+
+        assert client.im.v1.message.list.call_args.args[1] is option
 
 
 class TestPinMessage:

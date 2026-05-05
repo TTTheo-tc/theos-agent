@@ -34,6 +34,15 @@ from src.feishu.retry import with_retry
 # ---------------------------------------------------------------------------
 
 
+def _call_with_option(fn, request, option):
+    return fn(request, option) if option is not None else fn(request)
+
+
+def _extend_items(target: list[dict], items) -> None:
+    if items:
+        target.extend(_unmarshal(items))
+
+
 def create_chat(
     client: lark.Client,
     name: str,
@@ -69,9 +78,7 @@ def create_chat(
         .build()
     )
 
-    response = (
-        client.im.v1.chat.create(request, option) if option else client.im.v1.chat.create(request)
-    )
+    response = _call_with_option(client.im.v1.chat.create, request, option)
     _check(response, "create_chat")
     return _unmarshal(response.data)
 
@@ -93,7 +100,7 @@ def get_chat(client: lark.Client, chat_id: str) -> dict:
 
     request = GetChatRequest.builder().chat_id(chat_id).build()
 
-    response = client.im.v1.chat.get(request, option) if option else client.im.v1.chat.get(request)
+    response = _call_with_option(client.im.v1.chat.get, request, option)
     _check(response, "get_chat")
     return _unmarshal(response.data)
 
@@ -130,9 +137,7 @@ def update_chat(
         UpdateChatRequest.builder().chat_id(chat_id).request_body(body_builder.build()).build()
     )
 
-    response = (
-        client.im.v1.chat.update(request, option) if option else client.im.v1.chat.update(request)
-    )
+    response = _call_with_option(client.im.v1.chat.update, request, option)
     _check(response, "update_chat")
     return {"success": True, "chat_id": chat_id}
 
@@ -170,16 +175,11 @@ def list_chat_members(client: lark.Client, chat_id: str) -> list[dict]:
             builder = builder.page_token(page_token)
         request = builder.build()
 
-        response = (
-            client.im.v1.chat_members.get(request, option)
-            if option
-            else client.im.v1.chat_members.get(request)
-        )
+        response = _call_with_option(client.im.v1.chat_members.get, request, option)
         _check(response, "list_chat_members")
 
         data = response.data
-        if data.items:
-            members.extend(_unmarshal(data.items))
+        _extend_items(members, data.items)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -219,11 +219,7 @@ def add_chat_members(
         .build()
     )
 
-    response = (
-        client.im.v1.chat_members.create(request, option)
-        if option
-        else client.im.v1.chat_members.create(request)
-    )
+    response = _call_with_option(client.im.v1.chat_members.create, request, option)
     _check(response, "add_chat_members")
     return _unmarshal(response.data)
 
@@ -258,11 +254,7 @@ def remove_chat_members(
         .build()
     )
 
-    response = (
-        client.im.v1.chat_members.delete(request, option)
-        if option
-        else client.im.v1.chat_members.delete(request)
-    )
+    response = _call_with_option(client.im.v1.chat_members.delete, request, option)
     _check(response, "remove_chat_members")
     return _unmarshal(response.data)
 
@@ -309,16 +301,11 @@ def list_chat_messages(
             builder = builder.page_token(page_token)
         request = builder.build()
 
-        response = (
-            client.im.v1.message.list(request, option)
-            if option
-            else client.im.v1.message.list(request)
-        )
+        response = _call_with_option(client.im.v1.message.list, request, option)
         _check(response, "list_chat_messages")
 
         data = response.data
-        if data.items:
-            messages.extend(_unmarshal(data.items))
+        _extend_items(messages, data.items)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -346,9 +333,7 @@ def pin_message(client: lark.Client, message_id: str) -> bool:
     body = CreatePinRequestBody.builder().message_id(message_id).build()
     request = CreatePinRequest.builder().request_body(body).build()
 
-    response = (
-        client.im.v1.pin.create(request, option) if option else client.im.v1.pin.create(request)
-    )
+    response = _call_with_option(client.im.v1.pin.create, request, option)
     _check(response, "pin_message")
     return True
 
@@ -380,11 +365,7 @@ def add_reaction(
         CreateMessageReactionRequest.builder().message_id(message_id).request_body(body).build()
     )
 
-    response = (
-        client.im.v1.message_reaction.create(request, option)
-        if option
-        else client.im.v1.message_reaction.create(request)
-    )
+    response = _call_with_option(client.im.v1.message_reaction.create, request, option)
     _check(response, "add_reaction")
     return True
 
