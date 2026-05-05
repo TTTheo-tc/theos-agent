@@ -9,8 +9,11 @@ import pytest
 from src.feishu.errors import FeishuAPIError
 from src.feishu.retry import (
     ErrorCategory,
+    _call_maybe_async,
     _extract_error_code,
     _extract_rate_limit_reset,
+    _rate_limit_wait,
+    _retry_backoff,
     classify_error,
     with_retry,
 )
@@ -132,6 +135,39 @@ class TestExtractRateLimitReset:
         resp.headers = {"x-ogw-ratelimit-reset": "not_a_number"}
         err.response = resp
         assert _extract_rate_limit_reset(err) is None
+
+
+# ---------------------------------------------------------------------------
+# helper functions
+# ---------------------------------------------------------------------------
+
+
+class TestRetryHelpers:
+    @pytest.mark.asyncio
+    async def test_call_maybe_async_handles_sync_and_async_functions(self):
+        def sync_fn(a, b):
+            return a + b
+
+        async def async_fn(a, b):
+            return a * b
+
+        assert await _call_maybe_async(sync_fn, 2, 3) == 5
+        assert await _call_maybe_async(async_fn, 2, 3) == 6
+
+    def test_rate_limit_wait_prefers_reset_header(self):
+        err = FeishuAPIError("rate limited", code=429)
+        resp = MagicMock()
+        resp.headers = {"x-ogw-ratelimit-reset": "2.5"}
+        err.response = resp
+
+        assert _rate_limit_wait(err, default_wait=1.0) == 2.5
+        assert _rate_limit_wait(Exception("rate"), default_wait=1.0) == 1.0
+
+    def test_retry_backoff_respects_exponential_cap(self, monkeypatch):
+        monkeypatch.setattr("src.feishu.retry.random.uniform", lambda low, high: high)
+
+        assert _retry_backoff(1, max_backoff=30.0) == 2
+        assert _retry_backoff(8, max_backoff=30.0) == 30.0
 
 
 # ---------------------------------------------------------------------------

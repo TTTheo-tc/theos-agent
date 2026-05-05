@@ -91,6 +91,22 @@ def _extract_rate_limit_reset(error: Exception) -> float | None:
     return None
 
 
+async def _call_maybe_async(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    if inspect.iscoroutinefunction(fn):
+        return await fn(*args, **kwargs)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: fn(*args, **kwargs))
+
+
+def _rate_limit_wait(error: Exception, default_wait: float) -> float:
+    reset = _extract_rate_limit_reset(error)
+    return reset if reset is not None else default_wait
+
+
+def _retry_backoff(retries: int, max_backoff: float) -> float:
+    return random.uniform(0, min(2**retries, max_backoff))
+
+
 async def with_retry(
     fn: Callable[..., T],
     *args: Any,
@@ -122,11 +138,7 @@ async def with_retry(
     while attempts < max_attempts:
         attempts += 1
         try:
-            if inspect.iscoroutinefunction(fn):
-                return await fn(*args, **kwargs)
-            else:
-                loop = asyncio.get_running_loop()
-                return await loop.run_in_executor(None, lambda: fn(*args, **kwargs))
+            return await _call_maybe_async(fn, *args, **kwargs)
         except Exception as e:
             last_error = e
             category = classify_error(e)
@@ -147,8 +159,7 @@ async def with_retry(
                 continue
 
             if category == ErrorCategory.RATE_LIMITED:
-                reset = _extract_rate_limit_reset(e)
-                wait = reset if reset is not None else default_rate_limit_wait
+                wait = _rate_limit_wait(e, default_rate_limit_wait)
                 logger.info("[Feishu retry] Rate limited ({}), waiting {:.1f}s", action, wait)
                 await asyncio.sleep(wait)
                 continue  # doesn't count toward retries
@@ -163,7 +174,7 @@ async def with_retry(
                 )
                 raise
 
-            backoff = random.uniform(0, min(2**retries, max_backoff))
+            backoff = _retry_backoff(retries, max_backoff)
             logger.info(
                 "[Feishu retry] Retryable error ({}), attempt {}/{}, backoff {:.1f}s: {}",
                 action,
