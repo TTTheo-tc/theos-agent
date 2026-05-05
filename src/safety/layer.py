@@ -148,23 +148,11 @@ class SafetyLayer:
         Applied after tool execution, before the result enters LLM context.
         Returns the (possibly redacted) safe text.
         """
-        # Check for injection patterns in tool output
-        injection = self._blocking_sanitizer.scan(text)
-        if injection.was_modified:
-            logger.warning("Injection patterns in tool output: {}", injection.warnings)
-            return injection.content
-
-        # Check for credential leaks in tool output
-        leak_result = self._leak_detector.scan(text)
-        if not leak_result.clean:
-            logger.warning(
-                "Credential leak in tool output: {}",
-                [m.pattern_name for m in leak_result.matches],
-            )
-            if leak_result.redacted_text:
-                return leak_result.redacted_text
-
-        return text
+        return self._sanitize_untrusted_text(
+            text,
+            injection_context="tool output",
+            leak_context="tool output",
+        )
 
     def scan_outbound(self, text: str) -> SafetyCheckResult:
         """Full scan on agent output before delivery to user.
@@ -172,14 +160,11 @@ class SafetyLayer:
         Checks for credential leaks and returns redacted text if needed.
         """
         leak_result = self._leak_detector.scan(text)
-        output = text
-        if not leak_result.clean:
-            logger.warning(
-                "Credential leak in output: {}",
-                [m.pattern_name for m in leak_result.matches],
-            )
-            if leak_result.redacted_text:
-                output = leak_result.redacted_text
+        output = self._log_and_redact_leaks(
+            text,
+            leak_result,
+            context="output",
+        )
 
         return SafetyCheckResult(
             leaks=leak_result,
@@ -191,18 +176,43 @@ class SafetyLayer:
 
         Checks for both injection and leaks. Returns sanitized text.
         """
-        # Injection scan
+        return self._sanitize_untrusted_text(
+            text,
+            injection_context="external content",
+            leak_context="external content",
+        )
+
+    def _sanitize_untrusted_text(
+        self,
+        text: str,
+        *,
+        injection_context: str,
+        leak_context: str,
+    ) -> str:
+        """Apply blocking injection scan plus best-effort leak redaction."""
         injection = self._blocking_sanitizer.scan(text)
         if injection.was_modified:
-            logger.warning("Injection in external content: {}", injection.warnings)
+            logger.warning("Injection patterns in {}: {}", injection_context, injection.warnings)
             return injection.content
 
-        # Leak scan
         leak_result = self._leak_detector.scan(text)
-        if not leak_result.clean and leak_result.redacted_text:
-            return leak_result.redacted_text
+        return self._log_and_redact_leaks(text, leak_result, context=leak_context)
 
-        return text
+    @staticmethod
+    def _log_and_redact_leaks(
+        text: str,
+        leak_result: LeakScanResult,
+        *,
+        context: str,
+    ) -> str:
+        if leak_result.clean:
+            return text
+        logger.warning(
+            "Credential leak in {}: {}",
+            context,
+            [m.pattern_name for m in leak_result.matches],
+        )
+        return leak_result.redacted_text or text
 
     def check_policy(self, text: str) -> PolicyResult:
         """Evaluate text against security policy rules.

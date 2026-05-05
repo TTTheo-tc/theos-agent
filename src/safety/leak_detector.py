@@ -14,6 +14,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 try:
     import ahocorasick  # type: ignore[import-untyped]
@@ -124,18 +125,7 @@ class LeakDetector:
 
         matches: list[LeakMatch] = []
 
-        # Prefix patterns
-        if self._automaton is not None:
-            for end_idx, (prefix, name, action) in self._automaton.iter(text):
-                start = end_idx - len(prefix) + 1
-                matched = text[start : min(start + len(prefix) + 8, len(text))]
-                matches.append(LeakMatch(name, matched + "...", action))
-        else:
-            for prefix, name, action in _PREFIX_PATTERNS:
-                if prefix in text:
-                    idx = text.index(prefix)
-                    matched = text[idx : min(idx + len(prefix) + 8, len(text))]
-                    matches.append(LeakMatch(name, matched + "...", action))
+        matches.extend(_iter_prefix_matches(text, self._automaton))
 
         # Regex patterns
         for regex, name, action in _REGEX_PATTERNS:
@@ -156,16 +146,7 @@ class LeakDetector:
         if not matches:
             return LeakScanResult(clean=True)
 
-        # Build redacted version — process longer prefixes first to avoid
-        # short prefixes (like "sk-") shadowing longer ones ("sk-ant-").
-        redacted = text
-        sorted_prefixes = sorted(_PREFIX_PATTERNS, key=lambda p: len(p[0]), reverse=True)
-        for prefix, name, action in sorted_prefixes:
-            if prefix in redacted:
-                redacted = _redact_after_prefix(redacted, prefix)
-
-        for regex, name, action in _REGEX_PATTERNS:
-            redacted = regex.sub("[REDACTED]", redacted)
+        redacted = _redact_known_patterns(text)
 
         # Redact high-entropy tokens (apply in reverse order to preserve offsets)
         for start, end, tag in sorted(entropy_hits, key=lambda h: h[0], reverse=True):
@@ -206,6 +187,39 @@ def scrub_credentials(text: str) -> str:
         return f"{key}{sep}{masked}"
 
     return _SENSITIVE_KV_RE.sub(_replace, text)
+
+
+def _iter_prefix_matches(text: str, automaton: Any | None) -> list[LeakMatch]:
+    """Find all configured secret prefixes in *text*."""
+    matches: list[LeakMatch] = []
+    if automaton is not None:
+        for end_idx, (prefix, name, action) in automaton.iter(text):
+            start = end_idx - len(prefix) + 1
+            matches.append(LeakMatch(name, _match_preview(text, start, prefix), action))
+        return matches
+
+    for prefix, name, action in _PREFIX_PATTERNS:
+        start = text.find(prefix)
+        while start != -1:
+            matches.append(LeakMatch(name, _match_preview(text, start, prefix), action))
+            start = text.find(prefix, start + len(prefix))
+    return matches
+
+
+def _match_preview(text: str, start: int, prefix: str) -> str:
+    end = min(start + len(prefix) + 8, len(text))
+    return text[start:end] + "..."
+
+
+def _redact_known_patterns(text: str) -> str:
+    """Redact configured prefix and regex secrets from *text*."""
+    redacted = text
+    # Process longer prefixes first to avoid short-prefix shadowing.
+    for prefix, _name, _action in sorted(_PREFIX_PATTERNS, key=lambda p: len(p[0]), reverse=True):
+        redacted = _redact_after_prefix(redacted, prefix)
+    for regex, _name, _action in _REGEX_PATTERNS:
+        redacted = regex.sub("[REDACTED]", redacted)
+    return redacted
 
 
 _HIGH_ENTROPY_RE = re.compile(r"[a-zA-Z0-9_\-]{24,}")

@@ -38,6 +38,16 @@ class TestLeakDetector:
         assert not result.clean
         assert any(m.pattern_name == "github_pat" for m in result.matches)
 
+    def test_prefix_fallback_detects_repeated_matches(self) -> None:
+        d = LeakDetector()
+        d._automaton = None
+        result = d.scan("first sk-ant-one123456 second sk-ant-two123456")
+        matches = [m for m in result.matches if m.pattern_name == "anthropic_api_key"]
+        assert len(matches) == 2
+        assert result.redacted_text is not None
+        assert "one123456" not in result.redacted_text
+        assert "two123456" not in result.redacted_text
+
     def test_private_key(self) -> None:
         d = LeakDetector()
         result = d.scan("-----BEGIN RSA PRIVATE KEY-----\nMIIE...")
