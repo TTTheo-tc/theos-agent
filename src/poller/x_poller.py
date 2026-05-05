@@ -140,18 +140,7 @@ class XPoller(BasePoller):
             try:
                 new_tweets = await self._check_user(username)
                 for tweet in new_tweets:
-                    event = PollerEvent(
-                        poller_name=self.name,
-                        message=self._format_tweet_message(username, tweet),
-                        metadata={
-                            "tweet_id": str(tweet.id),
-                            "username": username,
-                            "tweet_url": f"https://x.com/{username}/status/{tweet.id}",
-                            "notify_channel": self.notify_channel,
-                            "notify_chat_id": self.notify_chat_id,
-                        },
-                    )
-                    events.append(event)
+                    events.append(self._tweet_event(username, tweet))
             except Exception:
                 logger.opt(exception=True).debug("XPoller: error checking @{}", username)
 
@@ -179,6 +168,20 @@ class XPoller(BasePoller):
             logger.opt(exception=True).debug("XPoller: failed to fetch tweets for @{}", username)
 
         return new_tweets
+
+    def _tweet_event(self, username: str, tweet: Any) -> PollerEvent:
+        tweet_url = f"https://x.com/{username}/status/{tweet.id}"
+        return PollerEvent(
+            poller_name=self.name,
+            message=self._format_tweet_message(username, tweet),
+            metadata={
+                "tweet_id": str(tweet.id),
+                "username": username,
+                "tweet_url": tweet_url,
+                "notify_channel": self.notify_channel,
+                "notify_chat_id": self.notify_chat_id,
+            },
+        )
 
     def _format_tweet_message(self, username: str, tweet: Any) -> str:
         """Format a tweet into a structured message for the agent."""

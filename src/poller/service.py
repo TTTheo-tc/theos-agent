@@ -60,9 +60,15 @@ class PollerService:
 
     async def _default_on_event(self, event: PollerEvent) -> None:
         """Default handler: inject event into the message bus as an InboundMessage."""
+        msg = self._message_from_event(event)
+        await self.bus.publish_inbound(msg)
+        logger.info("Poller [{}] → bus: {}", event.poller_name, event.message[:120])
+
+    @staticmethod
+    def _message_from_event(event: PollerEvent):
         from src.bus.events import InboundMessage
 
-        msg = InboundMessage(
+        return InboundMessage(
             channel="poller",
             sender_id=f"poller:{event.poller_name}",
             chat_id="poller",
@@ -70,5 +76,3 @@ class PollerService:
             metadata={"poller_name": event.poller_name, **event.metadata},
             sender_is_owner=True,  # pollers are system-initiated, treat as owner
         )
-        await self.bus.publish_inbound(msg)
-        logger.info("Poller [{}] → bus: {}", event.poller_name, event.message[:120])
