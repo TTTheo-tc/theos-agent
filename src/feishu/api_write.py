@@ -79,6 +79,10 @@ RateLimiter = PreemptiveThrottle
 _rate_limiter = PreemptiveThrottle(max_per_second=3.0)
 
 
+def _call_with_option(fn, request, option):
+    return fn(request, option) if option is not None else fn(request)
+
+
 # ---------------------------------------------------------------------------
 # Drive file management (create folder, move, copy, delete, upload)
 # ---------------------------------------------------------------------------
@@ -104,11 +108,7 @@ def create_folder(client: lark.Client, folder_token: str, name: str) -> dict:
     body = CreateFolderFileRequestBody.builder().folder_token(folder_token).name(name).build()
     request = CreateFolderFileRequest.builder().request_body(body).build()
 
-    response = (
-        client.drive.v1.file.create_folder(request, option)
-        if option
-        else client.drive.v1.file.create_folder(request)
-    )
+    response = _call_with_option(client.drive.v1.file.create_folder, request, option)
     _check(response, "create_folder")
     return _unmarshal(response.data)
 
@@ -138,9 +138,7 @@ def move_file(client: lark.Client, file_token: str, dest_folder: str, file_type:
         MoveFileRequest.builder().file_token(file_token).request_body(body_builder.build()).build()
     )
 
-    response = (
-        client.drive.v1.file.move(request, option) if option else client.drive.v1.file.move(request)
-    )
+    response = _call_with_option(client.drive.v1.file.move, request, option)
     _check(response, "move_file")
     return _unmarshal(response.data)
 
@@ -175,9 +173,7 @@ def copy_file(
         CopyFileRequest.builder().file_token(file_token).request_body(body_builder.build()).build()
     )
 
-    response = (
-        client.drive.v1.file.copy(request, option) if option else client.drive.v1.file.copy(request)
-    )
+    response = _call_with_option(client.drive.v1.file.copy, request, option)
     _check(response, "copy_file")
     return _unmarshal(response.data)
 
@@ -201,11 +197,7 @@ def delete_file(client: lark.Client, file_token: str, file_type: str) -> bool:
 
     request = DeleteFileRequest.builder().file_token(file_token).type(file_type).build()
 
-    response = (
-        client.drive.v1.file.delete(request, option)
-        if option
-        else client.drive.v1.file.delete(request)
-    )
+    response = _call_with_option(client.drive.v1.file.delete, request, option)
     _check(response, "delete_file")
     return True
 
@@ -252,11 +244,7 @@ def upload_file(
     request = UploadAllFileRequest.builder().request_body(body).build()
 
     try:
-        response = (
-            client.drive.v1.file.upload_all(request, option)
-            if option
-            else client.drive.v1.file.upload_all(request)
-        )
+        response = _call_with_option(client.drive.v1.file.upload_all, request, option)
     finally:
         file_obj.close()
 

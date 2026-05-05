@@ -52,6 +52,17 @@ class TestCreateFolder:
 
         assert result["token"] == "fldcnXYZ"
 
+    def test_create_folder_passes_request_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(token="fldcnXYZ")
+        client.drive.v1.file.create_folder.return_value = _ok_response(data)
+        option = object()
+
+        with patch("src.feishu.api_write._request_option", return_value=option):
+            api_write.create_folder(client, "fldcnRoot", "My Folder")
+
+        assert client.drive.v1.file.create_folder.call_args.args[1] is option
+
 
 class TestMoveFile:
     def test_move_file(self):
@@ -63,6 +74,16 @@ class TestMoveFile:
             result = api_write.move_file(client, "boxcnABC", "fldcnDest")
 
         assert result["task_id"] == "task_123"
+
+    def test_move_file_uses_one_arg_when_no_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(task_id="task_123")
+        client.drive.v1.file.move.return_value = _ok_response(data)
+
+        with patch("src.feishu.api_write._request_option", return_value=None):
+            api_write.move_file(client, "boxcnABC", "fldcnDest")
+
+        assert len(client.drive.v1.file.move.call_args.args) == 1
 
 
 class TestCopyFile:
@@ -113,6 +134,23 @@ class TestUploadFile:
             result = api_write.upload_file(client, "report.pdf", "/tmp/report.pdf", "fldcnDest")
 
         assert result["file_token"] == "boxcnUploaded"
+
+    def test_upload_file_passes_request_option_and_closes_file(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(file_token="boxcnUploaded")
+        client.drive.v1.file.upload_all.return_value = _ok_response(data)
+        option = object()
+        file_handle = mock_open(read_data=b"file content").return_value
+
+        with (
+            patch("src.feishu.api_write._request_option", return_value=option),
+            patch("os.path.getsize", return_value=1024),
+            patch("builtins.open", return_value=file_handle),
+        ):
+            api_write.upload_file(client, "report.pdf", "/tmp/report.pdf", "fldcnDest")
+
+        assert client.drive.v1.file.upload_all.call_args.args[1] is option
+        file_handle.close.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
