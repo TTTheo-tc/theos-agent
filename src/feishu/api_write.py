@@ -994,11 +994,7 @@ def add_permission_member(
         .build()
     )
 
-    response = (
-        client.drive.v1.permission_member.create(request, option)
-        if option
-        else client.drive.v1.permission_member.create(request)
-    )
+    response = _call_with_option(client.drive.v1.permission_member.create, request, option)
     _check(response, "add_permission_member")
     data = response.data
     return _unmarshal(data.member) if data is not None else {}
@@ -1027,11 +1023,7 @@ def list_permission_members(
 
     request = ListPermissionMemberRequest.builder().token(file_token).type(file_type).build()
 
-    response = (
-        client.drive.v1.permission_member.list(request, option)
-        if option
-        else client.drive.v1.permission_member.list(request)
-    )
+    response = _call_with_option(client.drive.v1.permission_member.list, request, option)
     _check(response, "list_permission_members")
     items = response.data.items
     if not items:
@@ -1078,11 +1070,7 @@ def update_permission_member(
         .build()
     )
 
-    response = (
-        client.drive.v1.permission_member.update(request, option)
-        if option
-        else client.drive.v1.permission_member.update(request)
-    )
+    response = _call_with_option(client.drive.v1.permission_member.update, request, option)
     _check(response, "update_permission_member")
     return _unmarshal(response.data.member)
 
@@ -1121,11 +1109,7 @@ def remove_permission_member(
         .build()
     )
 
-    response = (
-        client.drive.v1.permission_member.delete(request, option)
-        if option
-        else client.drive.v1.permission_member.delete(request)
-    )
+    response = _call_with_option(client.drive.v1.permission_member.delete, request, option)
     _check(response, "remove_permission_member")
     return True
 
@@ -1172,10 +1156,8 @@ def transfer_owner(
         .build()
     )
 
-    response = (
-        client.drive.v1.permission_member.transfer_owner(request, option)
-        if option
-        else client.drive.v1.permission_member.transfer_owner(request)
+    response = _call_with_option(
+        client.drive.v1.permission_member.transfer_owner, request, option
     )
     _check(response, "transfer_owner")
     # transfer_owner returns empty data on success

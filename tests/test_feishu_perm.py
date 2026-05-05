@@ -72,6 +72,19 @@ class TestListPermissionMembers:
 
         assert result == []
 
+    def test_passes_option(self):
+        client = MagicMock()
+        data = SimpleNamespace(items=None)
+        client.drive.v1.permission_member.list.return_value = _ok_response(data)
+        mock_option = MagicMock()
+
+        with patch("src.feishu.api_write._request_option", return_value=mock_option):
+            list_permission_members(client, "tok123", "docx")
+
+        call_args = client.drive.v1.permission_member.list.call_args
+        assert len(call_args.args) == 2
+        assert call_args.args[1] is mock_option
+
     def test_raises_on_failure(self):
         client = MagicMock()
         resp = MagicMock()
@@ -142,6 +155,18 @@ class TestRemovePermissionMember:
         assert result is True
         client.drive.v1.permission_member.delete.assert_called_once()
 
+    def test_passes_option(self):
+        client = MagicMock()
+        client.drive.v1.permission_member.delete.return_value = _ok_response(SimpleNamespace())
+        mock_option = MagicMock()
+
+        with patch("src.feishu.api_write._request_option", return_value=mock_option):
+            remove_permission_member(client, "tok123", "docx", "openid", "ou_user1")
+
+        call_args = client.drive.v1.permission_member.delete.call_args
+        assert len(call_args.args) == 2
+        assert call_args.args[1] is mock_option
+
     def test_raises_on_failure(self):
         client = MagicMock()
         resp = MagicMock()
@@ -175,6 +200,20 @@ class TestTransferOwner:
         assert result["success"] is True
         assert result["new_owner_id"] == "ou_new"
         client.drive.v1.permission_member.transfer_owner.assert_called_once()
+
+    def test_passes_option(self):
+        client = MagicMock()
+        client.drive.v1.permission_member.transfer_owner.return_value = _ok_response(
+            SimpleNamespace()
+        )
+        mock_option = MagicMock()
+
+        with patch("src.feishu.api_write._request_option", return_value=mock_option):
+            transfer_owner(client, "tok123", "docx", "ou_new", "openid")
+
+        call_args = client.drive.v1.permission_member.transfer_owner.call_args
+        assert len(call_args.args) == 2
+        assert call_args.args[1] is mock_option
 
     def test_raises_on_failure(self):
         client = MagicMock()
