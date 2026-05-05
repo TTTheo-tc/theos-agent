@@ -1,4 +1,5 @@
 import shutil
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -52,6 +53,40 @@ def mock_paths():
 
 def _run_init(user_input: str = "\n\nn\n"):
     return runner.invoke(app, ["init"], input=user_input)
+
+
+def test_optional_cli_help_keeps_implementations_lazy():
+    optional_modules = (
+        "src.cli.channels_cmd",
+        "src.cli.feishu_auth_cmd",
+        "src.cli.gateway_cmd",
+        "src.cli.cron_cmd",
+        "src.cli.report_cmd",
+        "src.cli.ui_cmd",
+    )
+    for module_name in optional_modules:
+        sys.modules.pop(module_name, None)
+
+    for args in (
+        ["channels", "--help"],
+        ["channels", "status", "--help"],
+        ["channels", "login", "--help"],
+        ["feishu-auth", "--help"],
+    ):
+        result = runner.invoke(app, args)
+        assert result.exit_code == 0
+
+    assert not [module_name for module_name in optional_modules if module_name in sys.modules]
+
+
+def test_channels_status_wrapper_loads_on_execution(monkeypatch):
+    monkeypatch.setattr("src.config.loader.load_config", lambda: Config())
+
+    result = runner.invoke(app, ["channels", "status"])
+
+    assert result.exit_code == 0
+    assert "Channel Status" in result.stdout
+    assert "WhatsApp" in result.stdout
 
 
 def test_init_fresh_install(mock_paths):

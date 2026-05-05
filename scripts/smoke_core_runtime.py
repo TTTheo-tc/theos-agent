@@ -81,7 +81,9 @@ OPTIONAL_IMPORT_BLOCKLIST = {
 
 OPTIONAL_RUNTIME_MODULES = {
     "src.channels.manager",
+    "src.cli.channels_cmd",
     "src.cli.cron_cmd",
+    "src.cli.feishu_auth_cmd",
     "src.cli.gateway_cmd",
     "src.cli.report_cmd",
     "src.cli.ui_cmd",
@@ -145,7 +147,11 @@ def check_cli_help() -> None:
         ["agent", "--help"],
         ["gateway", "--help"],
         ["cron", "--help"],
+        ["channels", "--help"],
+        ["channels", "status", "--help"],
+        ["channels", "login", "--help"],
         ["report", "--help"],
+        ["feishu-auth", "--help"],
         ["ui", "--help"],
     ):
         result = runner.invoke(app, args)
