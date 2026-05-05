@@ -41,28 +41,35 @@ DEFAULT_TOKEN_DIR = "~/.theos/feishu_tokens"
 # ---------------------------------------------------------------------------
 
 
+def _token_path(token_dir: str, filename: str) -> Path:
+    return Path(token_dir).expanduser() / filename
+
+
+def _token_payload(token_key: str, token: str, expires_epoch: int) -> dict[str, object]:
+    return {
+        token_key: token,
+        "timestamp": datetime.now().isoformat(),
+        "expires_epoch": expires_epoch,
+        "expires_datetime": datetime.fromtimestamp(expires_epoch).isoformat(),
+    }
+
+
+def _write_token_json(path: Path, data: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+    os.chmod(path, 0o600)
+
+
 def save_refresh_token(
     refresh_token: str,
     expires_epoch: int,
     token_dir: str = DEFAULT_TOKEN_DIR,
 ) -> None:
     """Persist *refresh_token* to ``<token_dir>/refresh_token.json``."""
-    path = Path(token_dir).expanduser() / "refresh_token.json"
+    path = _token_path(token_dir, "refresh_token.json")
     logger.info(f"saving refresh token to {path}, " f"token: {refresh_token[:4]}...*")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "refresh_token": refresh_token,
-                "timestamp": datetime.now().isoformat(),
-                "expires_epoch": expires_epoch,
-                "expires_datetime": datetime.fromtimestamp(expires_epoch).isoformat(),
-            },
-            f,
-            indent=4,
-            ensure_ascii=False,
-        )
-    os.chmod(path, 0o600)
+    _write_token_json(path, _token_payload("refresh_token", refresh_token, expires_epoch))
 
 
 def get_refresh_token(
@@ -73,7 +80,7 @@ def get_refresh_token(
 
     Raises ``ValueError`` when the file is missing or the token is expired.
     """
-    path = Path(token_dir).expanduser() / "refresh_token.json"
+    path = _token_path(token_dir, "refresh_token.json")
     if not path.exists():
         msg = f"Refresh token file {path} not found. " "Run init_token() to authorize first."
         raise ValueError(msg)
@@ -99,22 +106,25 @@ def save_access_token(
     token_dir: str = DEFAULT_TOKEN_DIR,
 ) -> None:
     """Persist *access_token* to ``<token_dir>/access_token.json``."""
-    path = Path(token_dir).expanduser() / "access_token.json"
+    path = _token_path(token_dir, "access_token.json")
     logger.info(f"saving access token to {path}, " f"token: {access_token[:4]}...*")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "access_token": access_token,
-                "timestamp": datetime.now().isoformat(),
-                "expires_epoch": expires_epoch,
-                "expires_datetime": datetime.fromtimestamp(expires_epoch).isoformat(),
-            },
-            f,
-            indent=4,
-            ensure_ascii=False,
-        )
-    os.chmod(path, 0o600)
+    _write_token_json(path, _token_payload("access_token", access_token, expires_epoch))
+
+
+def _read_valid_access_token(token_path: Path, min_ttl: int) -> str | None:
+    if not token_path.exists():
+        return None
+    data = json.loads(token_path.read_text(encoding="utf-8"))
+    ttl = data["expires_epoch"] - int(time.time())
+    if ttl <= min_ttl:
+        return None
+
+    access_token = data["access_token"]
+    logger.info(
+        f"loaded access token: {access_token[:4]}...* "
+        f"from {token_path}, TTL: {ttl:,}s ({ttl / 60:.1f} min)"
+    )
+    return access_token
 
 
 # ---------------------------------------------------------------------------
@@ -208,36 +218,22 @@ def get_access_token(
     str
         A valid Feishu user access token.
     """
-    token_path = Path(token_dir).expanduser() / "access_token.json"
+    token_path = _token_path(token_dir, "access_token.json")
 
     # --- fast path (no lock) ---
-    if token_path.exists():
-        data = json.loads(token_path.read_text(encoding="utf-8"))
-        ttl = data["expires_epoch"] - int(time.time())
-        if ttl > min_ttl:
-            access_token = data["access_token"]
-            logger.info(
-                f"loaded access token: {access_token[:4]}...* "
-                f"from {token_path}, TTL: {ttl:,}s ({ttl / 60:.1f} min)"
-            )
-            return access_token
+    access_token = _read_valid_access_token(token_path, min_ttl)
+    if access_token:
+        return access_token
 
     # --- slow path: acquire lock and refresh ---
-    lock_path = Path(token_dir).expanduser() / "token.lock"
+    lock_path = _token_path(token_dir, "token.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     with FileLock(str(lock_path)):
         # double-check after acquiring the lock (another process may have refreshed)
-        if token_path.exists():
-            data = json.loads(token_path.read_text(encoding="utf-8"))
-            ttl = data["expires_epoch"] - int(time.time())
-            if ttl > min_ttl:
-                access_token = data["access_token"]
-                logger.info(
-                    f"loaded access token: {access_token[:4]}...* "
-                    f"from {token_path}, TTL: {ttl:,}s ({ttl / 60:.1f} min)"
-                )
-                return access_token
+        access_token = _read_valid_access_token(token_path, min_ttl)
+        if access_token:
+            return access_token
 
         # actually refresh
         epoch_now = int(time.time())
@@ -380,7 +376,7 @@ def check_token_valid(
     token_dir: str = DEFAULT_TOKEN_DIR,
 ) -> bool:
     """Return ``True`` if a stored access token exists and has not expired."""
-    path = Path(token_dir).expanduser() / "access_token.json"
+    path = _token_path(token_dir, "access_token.json")
     if not path.exists():
         return False
     try:
