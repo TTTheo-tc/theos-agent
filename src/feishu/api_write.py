@@ -1332,6 +1332,31 @@ async def transfer_owner_with_retry(
 # ---------------------------------------------------------------------------
 
 
+def _feishu_http_json(
+    method: str,
+    url: str,
+    action: str,
+    **kwargs,
+) -> dict:
+    import httpx  # noqa: PLC0415
+
+    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header  # noqa: PLC0415
+
+    headers = kwargs.pop("headers", None)
+    if headers is None:
+        headers = feishu_auth_header()
+    kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
+    resp = httpx.request(method, url, headers=headers, **kwargs)
+    if resp.status_code != 200:
+        msg = f"{action} HTTP {resp.status_code}: {resp.text}"
+        raise RuntimeError(msg)
+    data = resp.json()
+    if data["code"] != 0:
+        msg = f"{action} API error: code={data['code']}, {resp.text}"
+        raise RuntimeError(msg)
+    return data["data"]
+
+
 def upload_media_for_import(
     file_path: str,
     file_name: str,
@@ -1353,9 +1378,7 @@ def upload_media_for_import(
     """
     from pathlib import Path  # noqa: PLC0415
 
-    import httpx  # noqa: PLC0415
-
-    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header  # noqa: PLC0415
+    from src.feishu.api import feishu_auth_header  # noqa: PLC0415
 
     _rate_limiter.wait()
     url = "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all"
@@ -1365,8 +1388,10 @@ def upload_media_for_import(
     extra = json.dumps({"obj_type": obj_type, "file_extension": file_extension})
     file_bytes = Path(file_path).read_bytes()
 
-    resp = httpx.post(
+    data = _feishu_http_json(
+        "POST",
         url,
+        "upload_media",
         headers=headers,
         data={
             "file_name": file_name,
@@ -1376,16 +1401,8 @@ def upload_media_for_import(
             "extra": extra,
         },
         files={"file": (file_name, file_bytes)},
-        timeout=DEFAULT_TIMEOUT,
     )
-    if resp.status_code != 200:
-        msg = f"upload_media HTTP {resp.status_code}: {resp.text}"
-        raise RuntimeError(msg)
-    data = resp.json()
-    if data["code"] != 0:
-        msg = f"upload_media API error: code={data['code']}, {resp.text}"
-        raise RuntimeError(msg)
-    return data["data"]["file_token"]
+    return data["file_token"]
 
 
 def create_import_task(
@@ -1409,13 +1426,8 @@ def create_import_task(
     Returns:
         ticket string for polling the import task result.
     """
-    import httpx  # noqa: PLC0415
-
-    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header  # noqa: PLC0415
-
     _rate_limiter.wait()
     url = "https://open.feishu.cn/open-apis/drive/v1/import_tasks"
-    headers = feishu_auth_header()
     body = {
         "file_extension": file_extension,
         "file_token": file_token,
@@ -1426,15 +1438,8 @@ def create_import_task(
             "mount_key": mount_key,
         },
     }
-    resp = httpx.post(url, headers=headers, json=body, timeout=DEFAULT_TIMEOUT)
-    if resp.status_code != 200:
-        msg = f"create_import_task HTTP {resp.status_code}: {resp.text}"
-        raise RuntimeError(msg)
-    data = resp.json()
-    if data["code"] != 0:
-        msg = f"create_import_task API error: code={data['code']}, {resp.text}"
-        raise RuntimeError(msg)
-    return data["data"]["ticket"]
+    data = _feishu_http_json("POST", url, "create_import_task", json=body)
+    return data["ticket"]
 
 
 def get_import_task_result(ticket: str) -> dict:
@@ -1449,22 +1454,10 @@ def get_import_task_result(ticket: str) -> dict:
         Result dict with job_status (0=success, 1=init, 2=processing, 3+=error)
         and on success: token, url, type, etc.
     """
-    import httpx  # noqa: PLC0415
-
-    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header  # noqa: PLC0415
-
     _rate_limiter.wait()
     url = f"https://open.feishu.cn/open-apis/drive/v1/import_tasks/{ticket}"
-    headers = feishu_auth_header()
-    resp = httpx.get(url, headers=headers, timeout=DEFAULT_TIMEOUT)
-    if resp.status_code != 200:
-        msg = f"get_import_task HTTP {resp.status_code}: {resp.text}"
-        raise RuntimeError(msg)
-    data = resp.json()
-    if data["code"] != 0:
-        msg = f"get_import_task API error: code={data['code']}, {resp.text}"
-        raise RuntimeError(msg)
-    return data["data"]["result"]
+    data = _feishu_http_json("GET", url, "get_import_task")
+    return data["result"]
 
 
 def move_docs_to_wiki(
@@ -1489,27 +1482,14 @@ def move_docs_to_wiki(
     Returns:
         Response dict containing wiki_token (and possibly task_id if async).
     """
-    import httpx  # noqa: PLC0415
-
-    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header  # noqa: PLC0415
-
     _rate_limiter.wait()
     url = f"https://open.feishu.cn/open-apis/wiki/v2/spaces/{space_id}/nodes/move_docs_to_wiki"
-    headers = feishu_auth_header()
     body = {
         "parent_wiki_token": parent_wiki_token,
         "obj_type": obj_type,
         "obj_token": obj_token,
     }
-    resp = httpx.post(url, headers=headers, json=body, timeout=DEFAULT_TIMEOUT)
-    if resp.status_code != 200:
-        msg = f"move_docs_to_wiki HTTP {resp.status_code}: {resp.text}"
-        raise RuntimeError(msg)
-    data = resp.json()
-    if data["code"] != 0:
-        msg = f"move_docs_to_wiki API error: code={data['code']}, {resp.text}"
-        raise RuntimeError(msg)
-    return data["data"]
+    return _feishu_http_json("POST", url, "move_docs_to_wiki", json=body)
 
 
 def get_wiki_task_result(task_id: str) -> dict:
@@ -1523,22 +1503,14 @@ def get_wiki_task_result(task_id: str) -> dict:
     Returns:
         Task result dict with status and wiki node info.
     """
-    import httpx  # noqa: PLC0415
-
-    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header  # noqa: PLC0415
-
     _rate_limiter.wait()
     url = f"https://open.feishu.cn/open-apis/wiki/v2/tasks/{task_id}"
-    headers = feishu_auth_header()
-    resp = httpx.get(url, headers=headers, params={"task_type": "move"}, timeout=DEFAULT_TIMEOUT)
-    if resp.status_code != 200:
-        msg = f"get_wiki_task HTTP {resp.status_code}: {resp.text}"
-        raise RuntimeError(msg)
-    data = resp.json()
-    if data["code"] != 0:
-        msg = f"get_wiki_task API error: code={data['code']}, {resp.text}"
-        raise RuntimeError(msg)
-    return data["data"]
+    return _feishu_http_json(
+        "GET",
+        url,
+        "get_wiki_task",
+        params={"task_type": "move"},
+    )
 
 
 # ---------------------------------------------------------------------------
