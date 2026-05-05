@@ -13,29 +13,41 @@ Registers all Typer commands. Heavy implementations live in sub-modules:
 """
 
 import typer
+from rich.markup import escape
 
 from src import __logo__, __version__
-from src.cli.display import console
+from src.cli.display import (
+    THEOS_ACCENT,
+    console,
+    make_plain_row,
+    make_status_row,
+    print_cli_home,
+    print_status_header,
+)
 
 app = typer.Typer(
     name="theos",
     help=f"{__logo__} TheOS - Personal AI Assistant",
-    no_args_is_help=True,
+    invoke_without_command=True,
+    rich_markup_mode="rich",
 )
 
 
 def version_callback(value: bool):
     if value:
-        console.print(f"{__logo__} theos v{__version__}")
+        console.print(f"[bold {THEOS_ACCENT}]theos[/] v{__version__}")
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(None, "--version", "-v", callback=version_callback, is_eager=True),
 ):
     """TheOS - Personal AI Assistant."""
-    pass
+    if ctx.invoked_subcommand is None:
+        print_cli_home(__version__)
+        raise typer.Exit()
 
 
 # ============================================================================
@@ -219,6 +231,49 @@ def cron_run(
 
 
 report_app = typer.Typer(help="Generate activity reports from EventStore")
+config_app = typer.Typer(help="Manage configuration presets")
+
+
+@config_app.command("full-access")
+def config_full_access():
+    """Enable full local-development tool access."""
+    from src.cli.config_cmd import full_access as _full_access
+
+    return _full_access()
+
+
+@config_app.command("safe")
+def config_safe():
+    """Restore conservative default tool permissions."""
+    from src.cli.config_cmd import safe as _safe
+
+    return _safe()
+
+
+@config_app.command("compact")
+def config_compact():
+    """Rewrite config.json with only non-default values."""
+    from src.cli.config_cmd import compact as _compact
+
+    return _compact()
+
+
+@config_app.command("features")
+def config_features():
+    """List available feature flags and current values."""
+    from src.cli.config_cmd import features as _features
+
+    return _features()
+
+
+@config_app.command("show")
+def config_show(
+    full: bool = typer.Option(False, "--full", help="Show merged config including defaults"),
+):
+    """Print current config as JSON with secrets masked."""
+    from src.cli.config_cmd import show as _show
+
+    return _show(full=full)
 
 
 @report_app.command("daily")
@@ -241,6 +296,7 @@ app.add_typer(gateway_app, name="gateway")
 app.add_typer(cron_app, name="cron")
 app.add_typer(auth_app, name="auth")
 app.add_typer(provider_app, name="provider")
+app.add_typer(config_app, name="config")
 app.add_typer(report_app, name="report")
 
 
@@ -315,23 +371,33 @@ def feishu_auth(
 @app.command()
 def status():
     """Show theos status."""
+    from loguru import logger
+
     from src.auth.store import get_api_key_for_provider
     from src.config.loader import get_config_path, load_config
     from src.providers.registry import ordered_providers
 
+    logger.remove()
+
     config_path = get_config_path()
-    config = load_config()
+    try:
+        config = load_config()
+    except Exception as exc:
+        print_status_header(__version__)
+        console.print()
+        console.print(make_status_row("Config", config_path, config_path.exists()))
+        console.print(make_plain_row("Config error", f"[red]{escape(str(exc))}[/]"))
+        raise typer.Exit(1) from exc
     workspace = config.workspace_path
 
-    console.print(f"{__logo__} theos Status\n")
+    print_status_header(__version__)
+    console.print()
 
-    config_mark = "[green]✓[/green]" if config_path.exists() else "[red]✗[/red]"
-    console.print(f"Config: {config_path} {config_mark}")
-    ws_mark = "[green]✓[/green]" if workspace.exists() else "[red]✗[/red]"
-    console.print(f"Workspace: {workspace} {ws_mark}")
+    console.print(make_status_row("Config", config_path, config_path.exists()))
+    console.print(make_status_row("Workspace", workspace, workspace.exists()))
 
     if config_path.exists():
-        console.print(f"Model: {config.agents.defaults.model}")
+        console.print(make_plain_row("Model", config.agents.defaults.model))
 
         # Check API keys from registry (auth profiles take priority over config.json)
         for spec in ordered_providers():
@@ -339,21 +405,21 @@ def status():
             if p is None:
                 continue
             if spec.is_oauth:
-                console.print(f"{spec.label}: [green]\u2713 (OAuth)[/green]")
+                console.print(make_plain_row(spec.label, "[green]ok[/] (OAuth)"))
             elif spec.is_local:
                 if p.api_base:
-                    console.print(f"{spec.label}: [green]\u2713 {p.api_base}[/green]")
+                    console.print(make_plain_row(spec.label, f"[green]ok[/] {p.api_base}"))
                 else:
-                    console.print(f"{spec.label}: [dim]not set[/dim]")
+                    console.print(make_plain_row(spec.label, "[dim]not set[/dim]"))
             else:
                 auth_key = get_api_key_for_provider(spec.name)
                 config_key = p.api_key if p else None
                 if auth_key:
-                    console.print(f"{spec.label}: [green]\u2713 (auth profile)[/green]")
+                    console.print(make_plain_row(spec.label, "[green]ok[/] (auth profile)"))
                 elif config_key:
-                    console.print(f"{spec.label}: [green]\u2713[/green]")
+                    console.print(make_plain_row(spec.label, "[green]ok[/]"))
                 else:
-                    console.print(f"{spec.label}: [dim]not set[/dim]")
+                    console.print(make_plain_row(spec.label, "[dim]not set[/dim]"))
 
     # Gateway daemon status
     try:
@@ -364,11 +430,11 @@ def status():
             st = svc.status()
             pid = st.get("pid")
             if pid:
-                console.print(f"Gateway: [green]\u2713 running (PID {pid})[/green]")
+                console.print(make_plain_row("Gateway", f"[green]running[/] (PID {pid})"))
             else:
-                console.print("Gateway: [yellow]loaded but not running[/yellow]")
+                console.print(make_plain_row("Gateway", "[yellow]loaded but not running[/]"))
         else:
-            console.print("Gateway: [dim]not installed[/dim]")
+            console.print(make_plain_row("Gateway", "[dim]not installed[/dim]"))
     except NotImplementedError:
         pass  # Omit on unsupported platforms
 

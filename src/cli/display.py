@@ -1,14 +1,208 @@
 """Console instance and display helpers shared across CLI modules."""
 
 import re
+from pathlib import Path
+from typing import Sequence
 
+from rich import box
+from rich.align import Align
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
 console = Console()
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+THEOS_ACCENT = "#7EE7D4"
+THEOS_GOLD = "#F4B860"
+THEOS_MUTED = "#7F8EA3"
+THEOS_GREEN = "#3DDC97"
+THEOS_RED = "#FF6B6B"
+
+THEOS_WORDMARK = """
+[bold #7EE7D4]╔╦╗╦ ╦╔═╗╔═╗╔═╗[/]
+[bold #7EE7D4] ║ ╠═╣║╣ ║ ║╚═╗[/]
+[bold #F4B860] ╩ ╩ ╩╚═╝╚═╝╚═╝[/]
+""".strip()
+
+COMMAND_GROUPS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
+    (
+        "Start",
+        (
+            ("theos agent", "Interactive terminal agent"),
+            ("theos agent -m \"...\"", "One-shot answer"),
+            ("theos init", "Config, workspace, provider setup"),
+        ),
+    ),
+    (
+        "Operate",
+        (
+            ("theos status", "Local config, auth, and gateway state"),
+            ("theos gateway", "Foreground gateway"),
+            ("theos gateway restart", "Restart service"),
+            ("theos ui", "Read-only dashboard"),
+        ),
+    ),
+    (
+        "Configure",
+        (
+            ("theos auth", "Provider credentials"),
+            ("theos provider", "Model provider login"),
+            ("theos config", "Runtime presets and config view"),
+            ("theos channels", "Messaging channel setup"),
+        ),
+    ),
+    (
+        "Automate",
+        (
+            ("theos cron list", "Scheduled jobs"),
+            ("theos cron add", "Add a job"),
+            ("theos report daily", "Activity report"),
+        ),
+    ),
+)
+
+
+def _short_path(path: str | Path | None, *, max_len: int = 58) -> str:
+    if path is None:
+        return "-"
+    text = str(path)
+    home = str(Path.home())
+    if text == home:
+        text = "~"
+    elif text.startswith(f"{home}/"):
+        text = f"~/{text[len(home) + 1:]}"
+    if len(text) <= max_len:
+        return text
+    return f"...{text[-(max_len - 3):]}"
+
+
+def _status_mark(ok: bool | None) -> str:
+    if ok is True:
+        return f"[bold {THEOS_GREEN}]ok[/]"
+    if ok is False:
+        return f"[bold {THEOS_RED}]missing[/]"
+    return f"[dim {THEOS_MUTED}]unknown[/]"
+
+
+def make_status_row(label: str, value: str | Path, ok: bool | None = None) -> str:
+    """Return a styled status row while preserving plain ``Label:`` text."""
+    suffix = f"  {_status_mark(ok)}" if ok is not None else ""
+    return f"[bold {THEOS_ACCENT}]{label}:[/] {_short_path(value)}{suffix}"
+
+
+def make_plain_row(label: str, value: str | Path) -> str:
+    """Return a styled key/value row while preserving plain ``Label:`` text."""
+    text = str(value)
+    display_value = text if text.startswith("[") else _short_path(text)
+    return f"[bold {THEOS_ACCENT}]{label}:[/] {display_value}"
+
+
+def print_cli_home(version: str) -> None:
+    """Render the root command overview."""
+    narrow = console.width < 104
+    command_table = Table.grid(padding=(0, 3 if not narrow else 1), expand=True)
+
+    columns: list[Table] = []
+    for title, commands in COMMAND_GROUPS:
+        group = Table.grid(padding=(0, 1))
+        group.add_column(justify="left", width=22 if narrow else 18, no_wrap=True)
+        group.add_column(justify="left", ratio=1)
+        group.add_row(f"[bold {THEOS_GOLD}]{title}[/]", "")
+        for command, description in commands:
+            group.add_row(f"[{THEOS_ACCENT}]{command}[/]", f"[dim]{description}[/]")
+        columns.append(group)
+
+    if narrow:
+        command_table.add_column(justify="left", ratio=1)
+        for column in columns:
+            command_table.add_row(column)
+            command_table.add_row("")
+    else:
+        command_table.add_column(justify="left", ratio=1)
+        command_table.add_column(justify="left", ratio=1)
+        command_table.add_row(columns[0], columns[1])
+        command_table.add_row(columns[2], columns[3])
+
+    layout = Table.grid(expand=True, padding=(0, 2))
+    if narrow:
+        layout.add_column(ratio=1)
+        layout.add_row(
+            Align.center(
+                f"{THEOS_WORDMARK}\n[dim {THEOS_MUTED}]agentic operating system[/]",
+                vertical="middle",
+            )
+        )
+        layout.add_row(command_table)
+    else:
+        layout.add_column(justify="center", width=24)
+        layout.add_column(ratio=1)
+        layout.add_row(
+            Align.center(
+                f"{THEOS_WORDMARK}\n[dim {THEOS_MUTED}]agentic operating system[/]",
+                vertical="middle",
+            ),
+            command_table,
+        )
+
+    panel = Panel(
+        layout,
+        title=f"[bold {THEOS_ACCENT}]theos[/] [dim]v{version}[/]",
+        subtitle=f"[dim {THEOS_MUTED}]Run [bold]theos <command> --help[/bold] for details[/]",
+        border_style=THEOS_ACCENT,
+        box=box.ROUNDED,
+        padding=(1, 2),
+    )
+    console.print()
+    console.print(panel)
+
+
+def print_agent_banner(
+    *,
+    model: str,
+    mode: str,
+    tools: int,
+    workspace: str | Path,
+    session_id: str,
+    logs: bool = False,
+    tool_names: Sequence[str] | None = None,
+    details: Sequence[str] | None = None,
+) -> None:
+    """Render the interactive agent header."""
+    model_short = model.split("/")[-1] if "/" in model else model
+    summary = (
+        f"[bold {THEOS_ACCENT}]TheOS[/] "
+        f"[dim]{model_short} · {mode} · {tools} tools · {_short_path(workspace)}[/]"
+    )
+    console.print()
+    console.print(summary)
+    console.print(
+        f"[dim {THEOS_MUTED}]session {session_id} · /help · /model · /agent · Ctrl+C to quit[/]"
+    )
+    if details:
+        for detail in details:
+            console.print(f"[dim {THEOS_MUTED}]  {detail}[/]")
+    if logs and tool_names:
+        tool_line = ", ".join(tool_names)
+        if len(tool_line) > 96:
+            tool_line = f"{tool_line[:93]}..."
+        console.print(f"[dim {THEOS_MUTED}]  tools: {tool_line}[/]")
+
+
+def print_status_header(version: str) -> None:
+    panel = Panel(
+        Align.center(
+            f"{THEOS_WORDMARK}\n[dim {THEOS_MUTED}]theos Status · v{version}[/]",
+            vertical="middle",
+        ),
+        border_style=THEOS_ACCENT,
+        box=box.ROUNDED,
+        padding=(1, 2),
+    )
+    console.print(panel)
 
 
 def print_agent_response(response: str, render_markdown: bool) -> None:

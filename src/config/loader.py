@@ -90,18 +90,19 @@ def load_config(config_path: Path | None = None) -> Config:
     return config
 
 
-def save_config(config: Config, config_path: Path | None = None) -> None:
+def save_config(config: Config, config_path: Path | None = None, *, compact: bool = True) -> None:
     """
     Save configuration to file.
 
     Args:
         config: Configuration to save.
         config_path: Optional path to save to. Uses default if not provided.
+        compact: When true, write only values that differ from schema defaults.
     """
     path = config_path or get_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    data = config.model_dump(by_alias=True)
+    data = config.model_dump(by_alias=True, exclude_defaults=compact)
 
     # Encrypt sensitive config values
     try:

@@ -19,13 +19,7 @@ from src.providers.base import LLMProvider, LLMResponse, StreamDelta, ToolCallRe
 
 _ALNUM = string.ascii_letters + string.digits
 
-# Anthropic OAuth support is intentionally disabled in TheOS. Keep the
-# legacy prefix constant only so we can fail closed if one is supplied.
 _ANTHROPIC_OAUTH_PREFIX = "sk-ant-oat"
-_CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
-_CLAUDE_CODE_BETA_HEADERS = (
-    "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14"
-)
 
 _STOP_REASON_MAP = {"end_turn": "stop", "tool_use": "tool_calls", "max_tokens": "length"}
 
@@ -48,15 +42,12 @@ class AnthropicProvider(LLMProvider):
         default_model: str = "claude-sonnet-4-20250514",
         extra_headers: dict[str, str] | None = None,
         provider_name: str | None = None,
-        oauth_manager: Any | None = None,
-        oauth_profile_id: str | None = None,
         spec: Any | None = None,
     ):
         super().__init__(api_key, api_base)
         self._default_model = default_model
         self._extra_headers = extra_headers or {}
         self._provider_name = provider_name
-        self._oauth_manager = oauth_manager
         self._spec = spec
 
         from anthropic import AsyncAnthropic
@@ -73,14 +64,6 @@ class AnthropicProvider(LLMProvider):
         if api_base:
             client_kw["base_url"] = api_base
         self._client = AsyncAnthropic(**client_kw)
-
-        # Profile ID passed from resolve_credentials — no store scanning needed.
-        # Only bind when the current api_key is itself an OAuth token;
-        # plain API key users must never be switched to an OAuth credential.
-        self._oauth_profile_id: str | None = None
-        if oauth_manager and oauth_profile_id and api_key:
-            if api_key.startswith(_ANTHROPIC_OAUTH_PREFIX):
-                self._oauth_profile_id = oauth_profile_id
 
     # ------------------------------------------------------------------
     # Model name helpers
@@ -357,84 +340,6 @@ class AnthropicProvider(LLMProvider):
 
         return system, new_msgs, new_tools
 
-    # ------------------------------------------------------------------
-    # OAuth
-    # ------------------------------------------------------------------
-
-    def _resolve_request_kwargs(self) -> dict[str, Any]:
-        """Build extra kwargs for Anthropic API calls (OAuth headers, identity).
-
-        When using an OAuth token (``sk-ant-oat*``), refreshes the token
-        and adds the required Claude Code headers.
-        """
-        kwargs: dict[str, Any] = {}
-        api_key = self.api_key
-
-        # OAuth token refresh (profile pre-resolved in __init__)
-        if api_key and api_key.startswith(_ANTHROPIC_OAUTH_PREFIX):
-            refreshed_key = self._try_refresh_oauth(api_key)
-            if refreshed_key and refreshed_key != api_key:
-                api_key = refreshed_key
-                self.api_key = refreshed_key
-                self._client.auth_token = refreshed_key
-                logger.info("Anthropic OAuth token refreshed for request")
-
-        # OAuth tokens require Claude Code identity headers
-        if api_key and api_key.startswith(_ANTHROPIC_OAUTH_PREFIX):
-            extra = kwargs.get("extra_headers", dict(self._extra_headers))
-            extra.update(
-                {
-                    "anthropic-beta": _CLAUDE_CODE_BETA_HEADERS,
-                    "anthropic-dangerous-direct-browser-access": "true",
-                    "user-agent": "claude-cli/1.0.0",
-                    "x-app": "cli",
-                }
-            )
-            kwargs["extra_headers"] = extra
-
-        return kwargs
-
-    def _try_refresh_oauth(self, current_key: str) -> str | None:
-        """Check for a cached valid token.
-
-        No network refresh and no subprocess calls on the request hot path.
-        """
-        if self._oauth_manager and self._oauth_profile_id:
-            try:
-                result = self._oauth_manager.try_cached("anthropic", self._oauth_profile_id)
-                if result:
-                    key, _ = result
-                    if key and key != current_key:
-                        return key
-            except Exception:
-                pass
-        return None
-
-    async def _reload_auth_key(self, current_key: str | None) -> str | None:
-        """Force-refresh credentials via OAuthManager. Async-safe."""
-        import asyncio
-
-        if self._oauth_manager and self._oauth_profile_id:
-            try:
-                result = await asyncio.to_thread(
-                    self._oauth_manager.resolve, "anthropic", self._oauth_profile_id
-                )
-                if result:
-                    key, _ = result
-                    if key and key != current_key:
-                        return key
-            except Exception:
-                logger.debug("Anthropic OAuthManager reload failed")
-        return None
-
-    def _apply_api_key(self, api_key: str) -> None:
-        """Update both provider state and the underlying SDK client."""
-        self.api_key = api_key
-        if api_key.startswith(_ANTHROPIC_OAUTH_PREFIX):
-            self._client.auth_token = api_key
-        else:
-            self._client.api_key = api_key
-
     async def _retry_after_auth_failure(
         self,
         *,
@@ -444,29 +349,11 @@ class AnthropicProvider(LLMProvider):
         max_tokens: int,
         temperature: float,
     ) -> tuple[LLMResponse | None, BaseException | None]:
-        """Force-reload credentials and retry auth-failed request.
-
-        If a fresh key is found, retry immediately with the new key.
-        If the key is unchanged (transient server-side rejection), retry
-        after a short delay — Anthropic OAuth can intermittently 401 on
-        valid tokens.
-        """
+        """Retry an auth-failed request once after a short delay."""
         import asyncio
 
-        current_key = self.api_key
-        fresh_key = await self._reload_auth_key(current_key)
-
-        if fresh_key:
-            self._apply_api_key(fresh_key)
-            logger.warning("Anthropic auth failed; reloaded credentials and retrying once")
-        else:
-            # Token unchanged — likely a transient server-side rejection.
-            # Wait briefly and retry with the same token.
-            logger.warning(
-                "Anthropic auth failed; no fresh token from OAuthManager, "
-                "retrying after 1s delay (transient 401)"
-            )
-            await asyncio.sleep(1)
+        logger.warning("Anthropic auth failed; retrying once after 1s delay")
+        await asyncio.sleep(1)
 
         retry_model_name, retry_kwargs = self._build_kwargs(
             messages, tools, model, max_tokens, temperature
@@ -477,18 +364,6 @@ class AnthropicProvider(LLMProvider):
             return self._parse_response(response), None
         except Exception as exc:
             return None, exc
-
-    def _prepend_identity(self, system: str | list[dict[str, Any]]) -> str | list[dict[str, Any]]:
-        """Prepend Claude Code identity to system prompt when using OAuth."""
-        if not (self.api_key and self.api_key.startswith(_ANTHROPIC_OAUTH_PREFIX)):
-            return system
-
-        if isinstance(system, str):
-            return f"{_CLAUDE_CODE_IDENTITY}\n\n{system}" if system else _CLAUDE_CODE_IDENTITY
-        if isinstance(system, list):
-            identity_block = {"type": "text", "text": _CLAUDE_CODE_IDENTITY}
-            return [identity_block, *system]
-        return _CLAUDE_CODE_IDENTITY
 
     # ------------------------------------------------------------------
     # Usage normalization
@@ -581,9 +456,6 @@ class AnthropicProvider(LLMProvider):
                 system, anthropic_msgs, anthropic_tools
             )
 
-        extra_kwargs = self._resolve_request_kwargs()
-        system = self._prepend_identity(system)
-
         kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": anthropic_msgs,
@@ -595,9 +467,7 @@ class AnthropicProvider(LLMProvider):
         if anthropic_tools:
             kwargs["tools"] = anthropic_tools
             kwargs["tool_choice"] = {"type": "auto"}
-        if extra_kwargs.get("extra_headers"):
-            kwargs["extra_headers"] = extra_kwargs["extra_headers"]
-        elif self._extra_headers:
+        if self._extra_headers:
             kwargs["extra_headers"] = self._extra_headers
 
         return model_name, kwargs
@@ -762,22 +632,11 @@ class AnthropicProvider(LLMProvider):
             if not has_yielded and isinstance(e, _anthropic.AuthenticationError):
                 import asyncio
 
-                fresh_key = await self._reload_auth_key(self.api_key)
-                if fresh_key:
-                    self._apply_api_key(fresh_key)
-                    logger.warning(
-                        "Anthropic stream auth failed; reloaded credentials, "
-                        "retrying once (model={})",
-                        model_name,
-                    )
-                else:
-                    # Token unchanged — transient server-side 401, retry after delay
-                    logger.warning(
-                        "Anthropic stream auth failed; same token, "
-                        "retrying after 1s delay (model={})",
-                        model_name,
-                    )
-                    await asyncio.sleep(1)
+                logger.warning(
+                    "Anthropic stream auth failed; retrying once after 1s delay (model={})",
+                    model_name,
+                )
+                await asyncio.sleep(1)
 
                 _, retry_kwargs = self._build_kwargs(
                     messages, tools, model, max_tokens, temperature

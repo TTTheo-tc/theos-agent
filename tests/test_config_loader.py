@@ -1,7 +1,8 @@
 import json
 import os
+from pathlib import Path
 
-from src.config.loader import _apply_proxy_env, _migrate_config, load_config
+from src.config.loader import _apply_proxy_env, _migrate_config, load_config, save_config
 from src.config.schema import Config
 
 
@@ -76,3 +77,35 @@ def test_slim_runtime_defaults():
     assert config.memory.flush.enabled is False
     assert config.memory.gc.enabled is False
     assert config.memory.telemetry.recall_enabled is False
+
+
+def test_save_config_writes_only_non_default_values_by_default(tmp_path: Path):
+    config_path = tmp_path / "config.json"
+    config = Config()
+    config.agents.defaults.model = "openai-codex/gpt-5.5"
+    config.tools.profile = "full"
+    config.proxy = "http://127.0.0.1:7890"
+
+    save_config(config, config_path)
+
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    assert raw == {
+        "agents": {"defaults": {"model": "openai-codex/gpt-5.5"}},
+        "tools": {"profile": "full"},
+        "proxy": "http://127.0.0.1:7890",
+    }
+    loaded = load_config(config_path)
+    assert loaded.agents.defaults.model == "openai-codex/gpt-5.5"
+    assert loaded.tools.profile == "full"
+    assert loaded.memory.enabled is True
+
+
+def test_save_config_can_write_full_schema(tmp_path: Path):
+    config_path = tmp_path / "config.json"
+
+    save_config(Config(), config_path, compact=False)
+
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    assert raw["agents"]["mode"] == "single"
+    assert raw["tools"]["profile"] == "minimal"
+    assert raw["memory"]["enabled"] is True

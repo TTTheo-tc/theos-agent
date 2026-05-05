@@ -23,8 +23,6 @@ class ProviderCredentials:
     api_key: str | None = None
     api_base: str | None = None
     extra_headers: dict[str, str] | None = None
-    oauth_manager: Any = None
-    profile_id: str | None = None
 
 
 def resolve_credentials(
@@ -50,18 +48,16 @@ def resolve_credentials(
                     (non-OAuth, non-Bedrock).
     """
     from src.auth.store import get_credential_for_provider
-    from src.providers.factory import _get_oauth_manager
     from src.security.secret_refs import resolve_mapping_refs, resolve_secret_ref
 
     p = getattr(config.providers, provider_name, None) if provider_name else None
 
     # --- Tier 1: Auth profile store ---
     api_key: str | None = None
-    profile_id: str | None = None
     if provider_name:
         result = get_credential_for_provider(provider_name)
         if result:
-            api_key, profile_id = result
+            api_key = result[0]
 
     # --- Tier 2: Config file ---
     if not api_key and p:
@@ -90,13 +86,8 @@ def resolve_credentials(
     # Resolve extra_headers
     extra_headers = resolve_mapping_refs(p.extra_headers) if p else None
 
-    # OAuth manager (singleton)
-    oauth_manager = _get_oauth_manager()
-
     return ProviderCredentials(
         api_key=api_key,
         api_base=api_base,
         extra_headers=extra_headers,
-        oauth_manager=oauth_manager,
-        profile_id=profile_id,
     )

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.bus.events import InboundMessage, OutboundMessage
 from src.bus.queue import MessageBus
-from src.orchestrator.policies import ExecutionPolicy, OrchestratorPolicy
+from src.orchestrator.policies import ExecutionPolicy, GenVerExecutionPolicy, OrchestratorPolicy
 from src.orchestrator.state_machine import TaskState
 from src.orchestrator.turn_lifecycle import TurnLifecycle
 from src.orchestrator.turn_record import TurnRecord
@@ -81,6 +81,42 @@ async def test_lifecycle_no_policies():
     out = await asyncio.wait_for(bus.consume_outbound(), timeout=2.0)
     assert out.content == "reply"
     assert "turn_id" in out.metadata
+
+
+async def test_lifecycle_routes_code_turn_to_genver_execution_policy():
+    """GenVer policy owns code-shaped turns while lifecycle still publishes the response."""
+    bus = MessageBus()
+    agent = _make_agent(bus=bus)
+    agent.is_genver = True
+    agent._process_message = AsyncMock(return_value=_make_response())
+
+    lifecycle = TurnLifecycle(agent, policies=[GenVerExecutionPolicy(agent=agent)])
+    msg = _make_msg(content="fix src/app.py and add tests")
+    await lifecycle.handle_message(msg)
+
+    _args, kwargs = agent._process_message.call_args
+    assert kwargs["run_genver_override"] is True
+    assert "turn_id" in kwargs
+    out = await asyncio.wait_for(bus.consume_outbound(), timeout=2.0)
+    assert out.content == "reply"
+
+
+async def test_lifecycle_leaves_non_code_turn_on_default_execution_in_genver_mode():
+    """GenVer policy declines chatty turns so AgentLoop can run its normal bypass path."""
+    bus = MessageBus()
+    agent = _make_agent(bus=bus)
+    agent.is_genver = True
+    agent._process_message = AsyncMock(return_value=_make_response())
+
+    lifecycle = TurnLifecycle(agent, policies=[GenVerExecutionPolicy(agent=agent)])
+    msg = _make_msg(content="hello")
+    await lifecycle.handle_message(msg)
+
+    _args, kwargs = agent._process_message.call_args
+    assert "run_genver_override" not in kwargs
+    assert "turn_id" in kwargs
+    out = await asyncio.wait_for(bus.consume_outbound(), timeout=2.0)
+    assert out.content == "reply"
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +352,38 @@ async def test_orchestrator_policy_success():
     response = _make_response()
     await policy.after_success(turn, msg, response)
 
+    assert task.state == TaskState.APPROVED
+    assert turn.turn_id not in policy._active
+
+
+async def test_orchestrator_policy_reads_genver_handoff_from_response_metadata():
+    """GenVer strategy passes handoff through response metadata for orchestrator review."""
+    agent = _make_agent()
+    agent.is_genver = True
+
+    policy = OrchestratorPolicy(
+        max_retries=3,
+        review_mode="auto",
+        event_log_enabled=False,
+        event_store_config=None,
+        agent=agent,
+    )
+    turn = TurnRecord(session_key="test:1")
+    msg = _make_msg()
+    await policy.before_execute(turn, msg)
+
+    task = policy._active[turn.turn_id]
+    response = _make_response()
+    response.metadata["_genver_handoff"] = {
+        "summary": "Implemented feature.",
+        "files_changed": ["src/app.py"],
+    }
+    await policy.after_success(turn, msg, response)
+
+    assert task.handoff == {
+        "summary": "Implemented feature.",
+        "files_changed": ["src/app.py"],
+    }
     assert task.state == TaskState.APPROVED
     assert turn.turn_id not in policy._active
 

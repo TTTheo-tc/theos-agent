@@ -33,6 +33,14 @@ class ExecutionPolicy:
     async def before_execute(self, turn: TurnRecord, msg: InboundMessage) -> None:
         """Called before _process_message."""
 
+    def can_execute(self, turn: TurnRecord, msg: InboundMessage) -> bool:
+        """Return True when this policy wants to own execution for this turn."""
+        return False
+
+    async def execute(self, turn: TurnRecord, msg: InboundMessage) -> Any:
+        """Execute this turn when ``can_execute`` returned True."""
+        raise NotImplementedError
+
     async def after_success(self, turn: TurnRecord, msg: InboundMessage, response: Any) -> None:
         """Called after successful _process_message."""
 
@@ -50,6 +58,29 @@ class ExecutionPolicy:
 
     async def close(self) -> None:
         """Cleanup resources owned by this policy."""
+
+
+class GenVerExecutionPolicy(ExecutionPolicy):
+    """Route code-change turns through GenVer while TurnLifecycle owns lifecycle hooks."""
+
+    def __init__(self, *, agent: AgentLoop) -> None:
+        self._agent = agent
+
+    def can_execute(self, turn: TurnRecord, msg: InboundMessage) -> bool:
+        """Use GenVer only for code-shaped requests while the agent is in GenVer mode."""
+        if not self._agent.is_genver:
+            return False
+        from src.agent.loop_genver import GenVerHandler
+
+        return GenVerHandler.should_run_for_request(msg.content)
+
+    async def execute(self, turn: TurnRecord, msg: InboundMessage) -> Any:
+        """Run the regular AgentLoop skeleton with GenVer explicitly selected."""
+        return await self._agent._process_message(
+            msg,
+            turn_id=turn.turn_id,
+            run_genver_override=True,
+        )
 
 
 class OrchestratorPolicy(ExecutionPolicy):
@@ -132,13 +163,20 @@ class OrchestratorPolicy(ExecutionPolicy):
         return self._agent.is_genver and task.handoff is not None
 
     def _pop_genver_handoff(self, session_key: str) -> Any | None:
-        """Consume the latest GenVer handoff when the agent is in GenVer mode."""
+        """Fallback handoff lookup for older GenVer paths."""
         if not self._agent.is_genver:
             return None
         genver = getattr(self._agent, "_genver", None)
         if genver is None:
             return None
         return genver.pop_handoff(session_key)
+
+    @staticmethod
+    def _handoff_from_response(response: Any) -> dict[str, Any] | None:
+        """Return normalized GenVer handoff metadata from an OutboundMessage."""
+        metadata = getattr(response, "metadata", None) or {}
+        handoff = metadata.get("_genver_handoff")
+        return handoff if isinstance(handoff, dict) else None
 
     # ------------------------------------------------------------------
     # Public accessors (preserve Orchestrator API surface)
@@ -223,13 +261,19 @@ class OrchestratorPolicy(ExecutionPolicy):
             return
         task.result = response.content if response else None
 
-        # Retrieve genver handoff for this session
-        handoff = self._pop_genver_handoff(turn.session_key)
+        # Retrieve GenVer handoff from the execution response.  The old
+        # session-level pop remains as a compatibility fallback for paths that
+        # bypass TurnFinalizer metadata.
+        handoff = self._handoff_from_response(response)
         if handoff is not None:
-            task.handoff = {
-                "summary": handoff.summary,
-                "files_changed": handoff.files_changed,
-            }
+            task.handoff = handoff
+        else:
+            legacy_handoff = self._pop_genver_handoff(turn.session_key)
+            if legacy_handoff is not None:
+                task.handoff = {
+                    "summary": legacy_handoff.summary,
+                    "files_changed": legacy_handoff.files_changed,
+                }
 
         # Success path: decide whether to review
         if self._should_review(task):

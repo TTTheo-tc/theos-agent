@@ -5,36 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.auth.oauth_manager import OAuthManager
     from src.config.schema import Config
     from src.providers.base import LLMProvider
     from src.providers.registry import ProviderSpec
-
-_oauth_manager: "OAuthManager | None" = None
-
-
-def _get_oauth_manager() -> "OAuthManager | None":
-    """Lazily create a singleton OAuthManager with built-in plugins."""
-    global _oauth_manager
-    if _oauth_manager is not None:
-        return _oauth_manager
-    try:
-        from pathlib import Path
-
-        from src.auth.oauth_manager import OAuthManager
-        from src.auth.plugins import register_builtin_plugins
-
-        plugins = register_builtin_plugins()
-        if not plugins:
-            return None
-        _oauth_manager = OAuthManager(
-            plugins=plugins,
-            store_path=Path.home() / ".theos" / "auth-profiles.enc",
-        )
-        _oauth_manager.start_background_refresh(interval_s=1800)
-        return _oauth_manager
-    except Exception:
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -118,8 +91,6 @@ def _build_provider(
             default_model=model,
             extra_headers=creds.extra_headers,
             provider_name=provider_name,
-            oauth_manager=creds.oauth_manager,
-            oauth_profile_id=creds.profile_id,
             spec=spec,
         )
 

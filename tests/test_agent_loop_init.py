@@ -14,6 +14,7 @@ from src.bus.events import InboundMessage, OutboundMessage
 from src.bus.queue import MessageBus
 from src.config.schema import AgentRoleConfig, Config
 from src.config.schema_channels import ChannelsConfig
+from src.orchestrator.policies import GenVerExecutionPolicy, OrchestratorPolicy
 
 
 def _make_test_config(workspace: Path) -> Config:
@@ -67,6 +68,18 @@ def test_default_runtime_does_not_eagerly_create_optional_managers(tmp_path: Pat
     assert loop.hooks.hooks_dir is None
     assert loop._memory.tiers_enabled() is False
     assert loop._memory._memory_tiers is None
+
+
+def test_orchestrator_runtime_installs_genver_execution_strategy(tmp_path: Path):
+    """Orchestrator owns lifecycle and can delegate code-shaped turns to GenVer."""
+    config = _make_test_config(tmp_path)
+    config.agents.orchestrator.enabled = True
+
+    with patch.object(AgentLoop, "_register_default_tools", return_value=None):
+        loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+
+    assert any(isinstance(policy, GenVerExecutionPolicy) for policy in loop._lifecycle.policies)
+    assert any(isinstance(policy, OrchestratorPolicy) for policy in loop._lifecycle.policies)
 
 
 def test_hooks_are_only_loaded_when_learning_enabled(tmp_path: Path):

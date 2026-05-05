@@ -91,24 +91,6 @@ def test_api_base_from_spec_default():
     assert creds.api_base == "https://api.moonshot.ai/v1"
 
 
-def test_oauth_manager_attached():
-    """OAuth manager from factory singleton is attached to credentials."""
-    config = Config()
-    config.providers.anthropic.api_key = "sk-test"
-
-    mock_oauth = object()
-    with (
-        patch(
-            "src.auth.store.get_credential_for_provider",
-            return_value=("sk-test", "anthropic:default"),
-        ),
-        patch("src.providers.factory._get_oauth_manager", return_value=mock_oauth),
-    ):
-        creds = resolve_credentials("anthropic", config)
-
-    assert creds.oauth_manager is mock_oauth
-
-
 def test_none_provider_name_returns_empty_credentials():
     """When provider_name is None, returns credentials with no key."""
     config = Config()
@@ -141,7 +123,6 @@ class TestTier3EnvVar:
                 "src.security.secret_refs.resolve_secret_ref", side_effect=lambda x, **kw: x or None
             ),
             patch("src.security.secret_refs.resolve_mapping_refs", return_value=None),
-            patch("src.providers.factory._get_oauth_manager", return_value=None),
             patch.dict(os.environ, {"TEST_PROVIDER_API_KEY": "sk-from-env"}),
         ):
             creds = resolve_credentials("test_provider", config, spec=spec)
@@ -168,7 +149,6 @@ class TestTier3EnvVar:
                 "src.security.secret_refs.resolve_secret_ref", side_effect=lambda x, **kw: x or None
             ),
             patch("src.security.secret_refs.resolve_mapping_refs", return_value=None),
-            patch("src.providers.factory._get_oauth_manager", return_value=None),
             patch.dict(os.environ, {"ALT_API_KEY": "sk-alt"}),
         ):
             creds = resolve_credentials("test_provider", config, spec=spec)
@@ -198,7 +178,6 @@ class TestTier3EnvVar:
                 "src.security.secret_refs.resolve_secret_ref", side_effect=lambda x, **kw: x or None
             ),
             patch("src.security.secret_refs.resolve_mapping_refs", return_value=None),
-            patch("src.providers.factory._get_oauth_manager", return_value=None),
             patch.dict(os.environ, {"SHOULD_NOT_USE": "sk-env"}),
         ):
             creds = resolve_credentials("test_provider", config, spec=spec)

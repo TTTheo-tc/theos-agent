@@ -289,6 +289,11 @@ class TurnFinalizer:
         meta = dict(msg.metadata or {})
         if usage:
             meta["usage"] = usage
+        if genver_handoff is not None:
+            meta["_genver_handoff"] = {
+                "summary": getattr(genver_handoff, "summary", ""),
+                "files_changed": list(getattr(genver_handoff, "files_changed", []) or []),
+            }
         return OutboundMessage(
             channel=msg.channel,
             chat_id=msg.chat_id,

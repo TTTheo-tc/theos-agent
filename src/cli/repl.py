@@ -94,12 +94,14 @@ async def read_interactive_input(prompt: str | None = None) -> str:
     Parameters
     ----------
     prompt : str, optional
-        Custom prompt text. Defaults to the standard blue ``>`` prompt.
+        Custom prompt text. Defaults to the branded ``theos›`` prompt.
     """
     if _PROMPT_SESSION is None:
         raise RuntimeError("Call init_prompt_session() first")
     prompt_html = (
-        HTML(f"<b fg='ansiyellow'>{prompt}</b> ") if prompt else HTML("<b fg='ansiblue'>&gt;</b> ")
+        HTML(f"<b fg='ansiyellow'>{prompt}</b> ")
+        if prompt
+        else HTML("<b fg='ansicyan'>theos</b><b fg='ansiwhite'>›</b> ")
     )
     try:
         with patch_stdout():

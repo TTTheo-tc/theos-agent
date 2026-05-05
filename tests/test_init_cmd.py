@@ -2,12 +2,29 @@ from pathlib import Path
 
 from src.cli.init_cmd import (
     _apply_reset,
+    _compute_daemon_args,
     _detect_existing_state,
     _ensure_local_instruction_symlinks,
     _prompt_reset_mode,
     _resolve_workspace_for_reset,
 )
 from src.cli.init_soul import configure_soul, render_soul_markdown
+
+_PROXY_ENV_KEYS = (
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "https_proxy",
+    "http_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+    "NO_PROXY",
+    "no_proxy",
+)
+
+
+def _clear_proxy_env(monkeypatch) -> None:
+    for key in _PROXY_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
 
 
 def test_resolve_workspace_for_reset_uses_loaded_config_when_available(
@@ -235,3 +252,31 @@ def test_ensure_local_instruction_symlinks_skips_existing_files(tmp_path: Path) 
     assert created == ["GEMINI.md", "AGENTS.md"]
     assert existing.read_text(encoding="utf-8") == "custom"
     assert not existing.is_symlink()
+
+
+def test_compute_daemon_args_silently_skips_socks_all_proxy_when_http_proxy_exists(
+    monkeypatch, capsys
+) -> None:
+    _clear_proxy_env(monkeypatch)
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:7890")
+    monkeypatch.setenv("https_proxy", "http://127.0.0.1:7890")
+    monkeypatch.setenv("all_proxy", "socks5h://127.0.0.1:7890")
+
+    _program_args, env, _repo_root = _compute_daemon_args()
+
+    output = capsys.readouterr().out
+    assert env["http_proxy"] == "http://127.0.0.1:7890"
+    assert env["https_proxy"] == "http://127.0.0.1:7890"
+    assert "all_proxy" not in env
+    assert "SOCKS protocol" not in output
+
+
+def test_compute_daemon_args_warns_when_only_socks_all_proxy(monkeypatch, capsys) -> None:
+    _clear_proxy_env(monkeypatch)
+    monkeypatch.setenv("all_proxy", "socks5h://127.0.0.1:7890")
+
+    _program_args, env, _repo_root = _compute_daemon_args()
+
+    output = capsys.readouterr().out
+    assert "all_proxy" not in env
+    assert "SOCKS protocol" in output

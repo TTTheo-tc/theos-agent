@@ -92,6 +92,76 @@ MODEL_ALIASES: dict[str, str] = {
 }
 
 
+def _format_alias_groups() -> list[str]:
+    names = list(MODEL_ALIASES)
+    groups = [names[i : i + 5] for i in range(0, len(names), 5)]
+    return ["- " + " ".join(f"`{name}`" for name in group) for group in groups]
+
+
+def format_help_message(*, learning_enabled: bool) -> str:
+    """Return the user-facing slash command help."""
+    instinct = (
+        "`/instinct` - status, evolve, dream"
+        if learning_enabled
+        else "`/instinct` - disabled until `learning.enabled=true`"
+    )
+    return "\n".join(
+        [
+            "## TheOS commands",
+            "",
+            "**Session**",
+            "- `/new` - Start a new conversation",
+            "- `/stop` - Stop the current running task",
+            "- `/resume` - Show the latest durable turn state",
+            "",
+            "**Runtime**",
+            "- `/reboot` - Reload tools and clear this session",
+            "- `/restart` - Restart the gateway",
+            "- `/ui` - Show the dashboard URL",
+            "",
+            "**Agent**",
+            "- `/agent` - Show or switch agent mode",
+            "- `/model` - Show or switch model",
+            "- `/plan` - Toggle read-only plan mode",
+            f"- {instinct}",
+            "",
+            "**Usage**",
+            "- `/agent single|team|genver` (team/genver may require setup)",
+            "- `/model <alias|model-id>`",
+            "- `/model <role> <alias|model-id>` (team roles)",
+            "- `/help`",
+            "",
+            "_Note: `/restart` does not reload this direct terminal; exit and rerun `theos agent` for CLI UI code changes._",
+        ]
+    )
+
+
+def format_model_status(loop: "AgentLoop") -> str:
+    """Return the user-facing ``/model`` status text."""
+    lines = [
+        "## Model",
+        "",
+        f"Default model: `{loop.model}`",
+    ]
+    if loop.roles:
+        lines.extend(["", "**Roles**"])
+        for role, config in loop.roles.items():
+            lines.append(f"- `{role}` - `{config.model or loop.model}`")
+
+    lines.extend(
+        [
+            "",
+            "**Switch**",
+            "- `/model <alias|model-id>`",
+        ]
+    )
+    if loop.roles:
+        lines.append("- `/model <role> <alias|model-id>`")
+
+    lines.extend(["", "**Aliases**", *_format_alias_groups()])
+    return "\n".join(lines)
+
+
 def resolve_model_alias(name: str) -> str:
     """Resolve a short alias to a full model ID, or return as-is."""
     return MODEL_ALIASES.get(name.lower(), name)
@@ -305,15 +375,11 @@ async def handle_model_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
     parts = msg.content.strip().split()
     # /model — show current
     if len(parts) == 1:
-        lines = [f"Default model: {loop.model}"]
-        if loop.roles:
-            for r, c in loop.roles.items():
-                lines.append(f"  • {r}: {c.model or loop.model}")
-        aliases = ", ".join(MODEL_ALIASES.keys())
-        lines.append(f"\nUsage: /model <name>  (aliases: {aliases})")
-        if loop.roles:
-            lines.append("       /model <role> <name>")
-        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content="\n".join(lines))
+        return OutboundMessage(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            content=format_model_status(loop),
+        )
 
     from src.config.loader import load_config, save_config
 

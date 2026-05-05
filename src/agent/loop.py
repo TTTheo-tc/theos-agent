@@ -228,11 +228,12 @@ class AgentLoop:
             provider=provider,
         )
         # Phase 3: Per-group queue dispatcher — unified TurnLifecycle entry point
-        from src.orchestrator.policies import OrchestratorPolicy
+        from src.orchestrator.policies import GenVerExecutionPolicy, OrchestratorPolicy
         from src.orchestrator.turn_lifecycle import TurnLifecycle
 
         policies: list = []
         if orchestrator_config and orchestrator_config.enabled:
+            policies.append(GenVerExecutionPolicy(agent=self))
             orchestrator_policy = OrchestratorPolicy(
                 max_retries=orchestrator_config.max_retries,
                 review_mode=orchestrator_config.review_mode,
@@ -942,17 +943,12 @@ class AgentLoop:
 
             return await handle_ui_command(self, msg)
         if cmd == "/help":
-            instinct_help = (
-                "\n/instinct — Instinct subsystem (status, evolve, dream)"
-                if self.learning_enabled
-                else "\n/instinct — Instinct subsystem (disabled; set learning.enabled=true)"
-            )
+            from src.agent.slash_commands import format_help_message
+
             return OutboundMessage(
                 channel=msg.channel,
                 chat_id=msg.chat_id,
-                content="theos commands:\n/new — Start a new conversation\n/stop — Stop the current task\n/reboot — Soft reboot (reload tools, clear session)\n/restart — Restart gateway (owner only, picks up code changes)\n/resume — Show latest durable turn state for this session\n/agent — Switch agent mode (single/team/genver)\n/model — Show or switch model\n/plan — Toggle plan mode (read-only tools only)"
-                + instinct_help
-                + "\n/ui — Show dashboard URL\n/help — Show available commands",
+                content=format_help_message(learning_enabled=self.learning_enabled),
             )
         if cmd.startswith("/resume"):
             parts = msg.content.strip().split(maxsplit=1)
@@ -1181,6 +1177,7 @@ class AgentLoop:
         session_key: str | None = None,
         on_progress: Callable[[str], Awaitable[None]] | None = None,
         turn_id: str | None = None,
+        run_genver_override: bool | None = None,
     ) -> OutboundMessage | None:
         """Process a single inbound message and return the response."""
         # 1. System messages (cron / heartbeat)
@@ -1260,7 +1257,8 @@ class AgentLoop:
                 message_tool.start_turn()
 
         # 6. GenVer routing decision
-        run_genver = self.is_genver and GenVerHandler.should_run_for_request(msg.content)
+        detected_genver = self.is_genver and GenVerHandler.should_run_for_request(msg.content)
+        run_genver = detected_genver if run_genver_override is None else run_genver_override
         if self.is_genver and not run_genver:
             logger.info(
                 "Bypassing GenVer for non-code request in session {}: {}",

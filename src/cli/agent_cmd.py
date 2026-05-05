@@ -8,7 +8,13 @@ import signal
 
 import typer
 
-from src.cli.display import _ANSI_RE, console, print_agent_response, print_token_usage
+from src.cli.display import (
+    _ANSI_RE,
+    console,
+    print_agent_banner,
+    print_agent_response,
+    print_token_usage,
+)
 from src.cli.repl import (
     flush_pending_tty_input,
     init_prompt_session,
@@ -132,26 +138,32 @@ def agent(
         diag = agent_loop.get_diagnostics()
         mode_str = diag["mode"]
         tool_count = diag["tools"]
-        tool_list = ", ".join(diag["tool_names"])
-        console.print(
-            f"[dim]{config.agents.defaults.model} · {mode_str} mode · {tool_count} tools · /help · Ctrl+C to quit[/dim]"
-        )
+        details = []
         if logs:
-            console.print(f"[dim]  tools: {tool_list}[/dim]")
             if diag.get("genver"):
                 gv = diag["genver"]
-                console.print(
-                    f"[dim]  genver: gen={gv['generator']} ver={gv['verifier']} exp={gv['explorer']}[/dim]"
+                details.append(
+                    f"genver: gen={gv['generator']} ver={gv['verifier']} exp={gv['explorer']}"
                 )
             if diag.get("roles"):
                 for rname, rmodel in diag["roles"].items():
-                    console.print(f"[dim]  role/{rname}: {rmodel}[/dim]")
+                    details.append(f"role/{rname}: {rmodel}")
             if diag["mcp_servers"]:
-                console.print(f"[dim]  mcp: {diag['mcp_servers']} server(s)[/dim]")
+                details.append(f"mcp: {diag['mcp_servers']} server(s)")
             if diag["orchestrator"]:
-                console.print("[dim]  orchestrator: enabled[/dim]")
+                details.append("orchestrator: enabled")
             if diag["hooks"]:
-                console.print(f"[dim]  hooks: {diag['hooks']}[/dim]")
+                details.append(f"hooks: {diag['hooks']}")
+        print_agent_banner(
+            model=config.agents.defaults.model,
+            mode=f"{mode_str} mode",
+            tools=tool_count,
+            workspace=config.workspace_path,
+            session_id=session_id,
+            logs=logs,
+            tool_names=diag["tool_names"],
+            details=details,
+        )
         console.print()
 
         if ":" in session_id:

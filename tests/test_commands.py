@@ -60,6 +60,7 @@ def test_optional_cli_help_keeps_implementations_lazy():
         "src.cli.agent_cmd",
         "src.cli.auth_oauth_cmd",
         "src.cli.channels_cmd",
+        "src.cli.config_cmd",
         "src.cli.feishu_auth_cmd",
         "src.cli.gateway_cmd",
         "src.cli.init_cmd",
@@ -81,6 +82,12 @@ def test_optional_cli_help_keeps_implementations_lazy():
             ["channels", "--help"],
             ["channels", "status", "--help"],
             ["channels", "login", "--help"],
+            ["config", "--help"],
+            ["config", "compact", "--help"],
+            ["config", "features", "--help"],
+            ["config", "full-access", "--help"],
+            ["config", "safe", "--help"],
+            ["config", "show", "--help"],
             ["feishu-auth", "--help"],
             ["auth", "login", "--help"],
             ["provider", "login", "--help"],
@@ -95,6 +102,39 @@ def test_optional_cli_help_keeps_implementations_lazy():
         for module_name, module in previous_modules.items():
             if module is not None:
                 sys.modules[module_name] = module
+
+
+def test_root_command_shows_cli_overview():
+    result = runner.invoke(app, [])
+
+    assert result.exit_code == 0
+    assert "agentic operating system" in result.stdout
+    assert "theos agent" in result.stdout
+    assert "theos gateway restart" in result.stdout
+
+
+def test_status_output_keeps_stable_labels(tmp_path, monkeypatch):
+    config_file = tmp_path / "config.json"
+    workspace_dir = tmp_path / "workspace"
+    config_file.write_text("{}", encoding="utf-8")
+    workspace_dir.mkdir()
+
+    config = Config()
+    config.agents.defaults.workspace = str(workspace_dir)
+
+    mock_svc = SimpleNamespace(is_loaded=lambda: False)
+    monkeypatch.setattr("src.auth.store.get_api_key_for_provider", lambda _name: None)
+    monkeypatch.setattr("src.config.loader.get_config_path", lambda: config_file)
+    monkeypatch.setattr("src.config.loader.load_config", lambda: config)
+    monkeypatch.setattr("src.daemon.resolve_service", lambda: mock_svc)
+
+    result = runner.invoke(app, ["status"])
+
+    assert result.exit_code == 0
+    assert "theos Status" in result.stdout
+    assert "Config:" in result.stdout
+    assert "Workspace:" in result.stdout
+    assert "Gateway:" in result.stdout
 
 
 def test_channels_status_wrapper_loads_on_execution(monkeypatch):

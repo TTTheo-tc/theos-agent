@@ -576,33 +576,8 @@ class TestErrorHandling:
         assert result.finish_reason == "error"
         assert "authentication failed" in result.content.lower()
 
-    async def test_auth_error_reloads_key_and_retries_once(self, provider):
-        """After 401, provider force-refreshes via OAuthManager and retries."""
-        from anthropic import AuthenticationError
-
-        err_body = {
-            "type": "error",
-            "error": {"type": "authentication_error", "message": "invalid"},
-        }
-        provider._client.messages.create = AsyncMock(
-            side_effect=[
-                AuthenticationError(
-                    response=MagicMock(status_code=401), body=err_body, message="auth"
-                ),
-                FakeMessage(content=[FakeTextBlock(text="recovered")]),
-            ]
-        )
-        provider._oauth_manager = MagicMock()
-        provider._oauth_profile_id = "anthropic:default"
-        provider._oauth_manager.resolve.return_value = ("sk-ant-fresh", {})
-
-        result = await provider.chat([{"role": "user", "content": "hi"}])
-        assert "recovered" in result.content
-        assert provider.api_key == "sk-ant-fresh"
-        assert provider._client.messages.create.call_count == 2
-
-    async def test_auth_error_without_fresh_key_retries_then_fails(self, provider):
-        """After 401, if OAuthManager returns no key, retry once with delay."""
+    async def test_auth_error_retries_once_then_fails(self, provider):
+        """After 401, retry once with the same API key before returning an error."""
         from anthropic import AuthenticationError
 
         err_body = {
@@ -614,9 +589,6 @@ class TestErrorHandling:
                 response=MagicMock(status_code=401), body=err_body, message="auth"
             )
         )
-        provider._oauth_manager = MagicMock()
-        provider._oauth_profile_id = "anthropic:default"
-        provider._oauth_manager.resolve.return_value = None
 
         result = await provider.chat([{"role": "user", "content": "hi"}])
         assert result.error_type == "AuthenticationError"

@@ -25,7 +25,6 @@ class TestFactoryRouting:
                 api_key="sk-test",
                 api_base=None,
                 extra_headers=None,
-                oauth_manager=None,
             )
             provider = _build_provider(spec, "anthropic", "claude-sonnet-4-6", MagicMock())
         assert isinstance(provider, AnthropicProvider)
@@ -42,7 +41,6 @@ class TestFactoryRouting:
                 api_key="sk-test",
                 api_base=None,
                 extra_headers=None,
-                oauth_manager=None,
             )
             provider = _build_provider(spec, "openai", "gpt-4o", MagicMock())
         assert isinstance(provider, OpenAICompatProvider)

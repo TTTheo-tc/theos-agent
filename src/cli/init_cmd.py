@@ -22,6 +22,11 @@ from src.cli.display import console
 from src.config.schema import Config
 from src.utils.helpers import sync_workspace_templates
 
+_HTTP_PROXY_ENV_KEYS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
+_ALL_PROXY_ENV_KEYS = ("ALL_PROXY", "all_proxy")
+_NO_PROXY_ENV_KEYS = ("NO_PROXY", "no_proxy")
+_PROXY_ENV_KEYS = _HTTP_PROXY_ENV_KEYS + _ALL_PROXY_ENV_KEYS + _NO_PROXY_ENV_KEYS
+
 
 def configure_channels(config: Config) -> None:
     from src.cli.init_channels import configure_channels as _configure_channels
@@ -165,6 +170,18 @@ def _ensure_local_instruction_symlinks(repo_root: Path) -> list[str]:
     return created
 
 
+def _is_socks_proxy(value: str) -> bool:
+    return value.lower().startswith(("socks://", "socks4://", "socks4a://", "socks5://", "socks5h://"))
+
+
+def _has_supported_http_proxy_env() -> bool:
+    return any(
+        bool(value and not _is_socks_proxy(value))
+        for key in _HTTP_PROXY_ENV_KEYS
+        if (value := os.environ.get(key))
+    )
+
+
 def _compute_daemon_args() -> tuple[list[str], dict[str, str], str]:
     """Compute program args, env, and working dir for daemon install."""
     import sys
@@ -178,19 +195,13 @@ def _compute_daemon_args() -> tuple[list[str], dict[str, str], str]:
         if val:
             env[key] = val
     # Proxy
-    for key in (
-        "HTTPS_PROXY",
-        "HTTP_PROXY",
-        "https_proxy",
-        "http_proxy",
-        "ALL_PROXY",
-        "all_proxy",
-        "NO_PROXY",
-        "no_proxy",
-    ):
+    has_supported_http_proxy = _has_supported_http_proxy_env()
+    for key in _PROXY_ENV_KEYS:
         val = os.environ.get(key)
         if val:
-            if val.lower().startswith("socks"):
+            if _is_socks_proxy(val):
+                if key in _ALL_PROXY_ENV_KEYS and has_supported_http_proxy:
+                    continue
                 console.print(
                     f"[yellow]⚠ {key}={val} uses SOCKS protocol which is not "
                     f"supported by httpx. Skipping — please set it to an HTTP "

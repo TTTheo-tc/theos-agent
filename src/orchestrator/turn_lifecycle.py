@@ -76,7 +76,7 @@ class TurnLifecycle:
         while True:
             attempt += 1
             try:
-                return await self.agent._process_message(msg, turn_id=turn.turn_id)
+                return await self._execute_once(turn, msg)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -93,6 +93,13 @@ class TurnLifecycle:
                         await p.on_retry(turn, msg, exc, attempt)
                     continue
                 raise
+
+    async def _execute_once(self, turn: TurnRecord, msg: InboundMessage) -> Any:
+        """Run the selected execution strategy for this turn."""
+        for policy in self.policies:
+            if policy.can_execute(turn, msg) is True:
+                return await policy.execute(turn, msg)
+        return await self.agent._process_message(msg, turn_id=turn.turn_id)
 
     async def _run_failed_post_chat(
         self, turn: TurnRecord, msg: InboundMessage, exc: Exception
