@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from src.providers.registry import PROVIDERS, find_by_name
+from src.providers.registry import (
+    PROVIDERS,
+    core_providers,
+    extended_providers,
+    find_by_name,
+    oauth_providers,
+    ordered_providers,
+)
 
 
 class TestProviderBackend:
@@ -39,3 +46,15 @@ class TestProviderBackend:
         spec = find_by_name("openrouter")
         assert spec is not None
         assert hasattr(spec, "model_prefix")
+
+    def test_provider_layers_keep_core_small(self):
+        assert [spec.name for spec in core_providers()] == ["custom", "anthropic", "openai"]
+        assert all(spec.name not in {"custom", "anthropic", "openai"} for spec in extended_providers())
+
+    def test_oauth_provider_layer(self):
+        assert [spec.name for spec in oauth_providers()] == ["openai_codex", "github_copilot"]
+
+    def test_ordered_providers_puts_core_first(self):
+        names = [spec.name for spec in ordered_providers()]
+        assert names[:3] == ["custom", "anthropic", "openai"]
+        assert set(names) == {spec.name for spec in PROVIDERS}

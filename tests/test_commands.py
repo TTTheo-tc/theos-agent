@@ -57,26 +57,45 @@ def _run_init(user_input: str = "\n\nn\n"):
 
 def test_optional_cli_help_keeps_implementations_lazy():
     optional_modules = (
+        "src.cli.agent_cmd",
+        "src.cli.auth_oauth_cmd",
         "src.cli.channels_cmd",
         "src.cli.feishu_auth_cmd",
         "src.cli.gateway_cmd",
+        "src.cli.init_cmd",
+        "src.cli.init_channels",
+        "src.cli.init_genver",
+        "src.cli.init_roles",
+        "src.cli.init_soul",
         "src.cli.cron_cmd",
         "src.cli.report_cmd",
         "src.cli.ui_cmd",
+        "src.cron.service",
+        "src.hooks.reflector",
     )
+    previous_modules = {module_name: sys.modules.get(module_name) for module_name in optional_modules}
     for module_name in optional_modules:
         sys.modules.pop(module_name, None)
 
-    for args in (
-        ["channels", "--help"],
-        ["channels", "status", "--help"],
-        ["channels", "login", "--help"],
-        ["feishu-auth", "--help"],
-    ):
-        result = runner.invoke(app, args)
-        assert result.exit_code == 0
+    try:
+        for args in (
+            ["channels", "--help"],
+            ["channels", "status", "--help"],
+            ["channels", "login", "--help"],
+            ["feishu-auth", "--help"],
+            ["auth", "login", "--help"],
+            ["provider", "login", "--help"],
+            ["init", "--help"],
+            ["agent", "--help"],
+        ):
+            result = runner.invoke(app, args)
+            assert result.exit_code == 0
 
-    assert not [module_name for module_name in optional_modules if module_name in sys.modules]
+        assert not [module_name for module_name in optional_modules if module_name in sys.modules]
+    finally:
+        for module_name, module in previous_modules.items():
+            if module is not None:
+                sys.modules[module_name] = module
 
 
 def test_channels_status_wrapper_loads_on_execution(monkeypatch):

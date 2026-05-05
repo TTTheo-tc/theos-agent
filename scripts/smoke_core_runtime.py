@@ -81,15 +81,31 @@ OPTIONAL_IMPORT_BLOCKLIST = {
 
 OPTIONAL_RUNTIME_MODULES = {
     "src.channels.manager",
+    "src.agent.tools.cron",
+    "src.agent.tools.notebook",
+    "src.agent.tools.sessions",
+    "src.agent.tools.shell",
+    "src.agent.tools.subagent_kill",
+    "src.agent.tools.subagent_wait",
+    "src.agent.tools.todo",
+    "src.cli.agent_cmd",
+    "src.cli.auth_oauth_cmd",
     "src.cli.channels_cmd",
     "src.cli.cron_cmd",
     "src.cli.feishu_auth_cmd",
     "src.cli.gateway_cmd",
+    "src.cli.init_cmd",
+    "src.cli.init_channels",
+    "src.cli.init_genver",
+    "src.cli.init_roles",
+    "src.cli.init_soul",
     "src.cli.report_cmd",
     "src.cli.ui_cmd",
+    "src.cron.service",
     "src.dream.runner",
     "src.feishu.client",
     "src.genver.pipeline",
+    "src.hooks.reflector",
     "src.poller.service",
     "src.ui.server",
 }
@@ -145,6 +161,9 @@ def check_cli_help() -> None:
     for args in (
         ["--help"],
         ["agent", "--help"],
+        ["auth", "login", "--help"],
+        ["provider", "login", "--help"],
+        ["init", "--help"],
         ["gateway", "--help"],
         ["cron", "--help"],
         ["channels", "--help"],
@@ -157,6 +176,26 @@ def check_cli_help() -> None:
         result = runner.invoke(app, args)
         if result.exit_code != 0:
             _fail(f"`theos {' '.join(args)}` failed:\n{result.output}")
+
+
+def check_tool_registration_imports() -> None:
+    import src.agent.tool_sets  # noqa: F401
+
+    loaded = sorted(
+        name
+        for name in (
+            "src.agent.tools.cron",
+            "src.agent.tools.notebook",
+            "src.agent.tools.sessions",
+            "src.agent.tools.shell",
+            "src.agent.tools.subagent_kill",
+            "src.agent.tools.subagent_wait",
+            "src.agent.tools.todo",
+        )
+        if name in sys.modules
+    )
+    if loaded:
+        _fail("tool registration imported optional tool modules: " + ", ".join(loaded))
 
 
 def check_default_config_and_loop() -> None:
@@ -254,6 +293,7 @@ def main() -> None:
     if args.strict_installed:
         check_optional_packages_not_installed()
     check_cli_help()
+    check_tool_registration_imports()
     check_default_config_and_loop()
     check_no_optional_imports()
     check_wheel_assets()

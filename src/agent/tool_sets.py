@@ -8,26 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.agent.tools.filesystem import (
-    DocWriteFileTool,
-    EditFileTool,
-    GlobTool,
-    GrepTool,
-    ListDirTool,
-    MultiEditTool,
-    ReadFileTool,
-    WriteFileTool,
-)
-from src.agent.tools.notebook import NotebookEditTool, NotebookReadTool
 from src.agent.tools.registry import ToolRegistry
-from src.agent.tools.shell import ExecTool, SafeExecTool
-from src.agent.tools.todo import (
-    TaskCreateTool,
-    TaskGetTool,
-    TaskListTool,
-    TaskUpdateTool,
-    TodoTool,
-)
 from src.agent.tools.tool_profiles import ALWAYS_ON_TOOLS, expand_groups, resolve_profile
 
 if TYPE_CHECKING:
@@ -116,6 +97,9 @@ def register_standard_tools(
 
     # --- verifier: read-only fs + bash (autonomous verification agent) ---
     if mode == "verifier":
+        from src.agent.tools.filesystem import GlobTool, GrepTool, ListDirTool, ReadFileTool
+        from src.agent.tools.shell import ExecTool
+
         registry.register(ExecTool(working_dir=str(workspace), timeout=300))
         registry.register(ReadFileTool(workspace=workspace, allowed_dir=allowed_dir))
         registry.register(GlobTool(workspace=workspace, allowed_dir=allowed_dir))
@@ -125,13 +109,19 @@ def register_standard_tools(
 
     # --- filesystem tools ---
     if _should("read_file"):
+        from src.agent.tools.filesystem import ReadFileTool
+
         _reg(ReadFileTool(workspace=workspace, allowed_dir=allowed_dir))
 
     if is_team_mode:
         if _should("write_docs"):
+            from src.agent.tools.filesystem import DocWriteFileTool
+
             _reg(DocWriteFileTool(workspace=workspace, allowed_dir=allowed_dir))
     else:
         if _should("write_file"):
+            from src.agent.tools.filesystem import WriteFileTool
+
             _reg(
                 WriteFileTool(
                     workspace=workspace,
@@ -140,6 +130,8 @@ def register_standard_tools(
                 )
             )
         if _should("edit_file"):
+            from src.agent.tools.filesystem import EditFileTool
+
             _reg(
                 EditFileTool(
                     workspace=workspace,
@@ -149,13 +141,21 @@ def register_standard_tools(
             )
 
     if _should("list_dir"):
+        from src.agent.tools.filesystem import ListDirTool
+
         _reg(ListDirTool(workspace=workspace, allowed_dir=allowed_dir))
     if _should("glob"):
+        from src.agent.tools.filesystem import GlobTool
+
         _reg(GlobTool(workspace=workspace, allowed_dir=allowed_dir))
     if _should("grep"):
+        from src.agent.tools.filesystem import GrepTool
+
         _reg(GrepTool(workspace=workspace, allowed_dir=allowed_dir))
 
     if not is_team_mode and _should("multi_edit"):
+        from src.agent.tools.filesystem import MultiEditTool
+
         _reg(MultiEditTool(workspace=workspace, allowed_dir=allowed_dir))
 
     if not is_team_mode and _should("apply_patch"):
@@ -165,12 +165,24 @@ def register_standard_tools(
 
     # --- notebook tools ---
     if _should("notebook_read"):
+        from src.agent.tools.notebook import NotebookReadTool
+
         _reg(NotebookReadTool(workspace=workspace, allowed_dir=allowed_dir))
     if not is_team_mode and _should("notebook_edit"):
+        from src.agent.tools.notebook import NotebookEditTool
+
         _reg(NotebookEditTool(workspace=workspace, allowed_dir=allowed_dir))
 
     # --- todo / tasks ---
     if mode != "subagent" and _should("todo"):
+        from src.agent.tools.todo import (
+            TaskCreateTool,
+            TaskGetTool,
+            TaskListTool,
+            TaskUpdateTool,
+            TodoTool,
+        )
+
         _reg(TodoTool(workspace=workspace))
         _reg(TaskCreateTool(workspace=workspace))
         _reg(TaskListTool(workspace=workspace))
@@ -179,6 +191,8 @@ def register_standard_tools(
 
     # --- exec ---
     if _should("bash"):
+        from src.agent.tools.shell import ExecTool, SafeExecTool
+
         exec_kwargs = dict(
             working_dir=str(workspace),
             timeout=ec.timeout,
@@ -370,9 +384,6 @@ def register_standard_tools(
 
     # --- communication (only in loop modes) ---
     if mode in ("single", "team"):
-        from src.agent.tools.subagent_kill import SubagentKillTool
-        from src.agent.tools.subagent_wait import SubagentWaitTool
-
         if bus_publish is not None and _should("message"):
             from src.agent.tools.message import MessageTool
 
@@ -382,8 +393,12 @@ def register_standard_tools(
 
             _reg(AgentTool(manager=subagent_manager))
         if executor is not None and _should("subagent_wait"):
+            from src.agent.tools.subagent_wait import SubagentWaitTool
+
             _reg(SubagentWaitTool(executor=executor))
         if executor is not None and _should("subagent_kill"):
+            from src.agent.tools.subagent_kill import SubagentKillTool
+
             _reg(SubagentKillTool(executor=executor))
         if cron_service is not None and _should("cron"):
             from src.agent.tools.cron import CronTool
@@ -392,18 +407,19 @@ def register_standard_tools(
 
     # Nested subagent tools — registered when mode="subagent" and allowed_tools includes them
     if mode == "subagent" and executor is not None:
-        from src.agent.tools.subagent_kill import SubagentKillTool
-        from src.agent.tools.subagent_wait import SubagentWaitTool
-
         if _should("agent") and subagent_manager is not None:
             from src.agent.tools.spawn import AgentTool
 
             _reg(AgentTool(manager=subagent_manager))
 
         if _should("subagent_wait"):
+            from src.agent.tools.subagent_wait import SubagentWaitTool
+
             _reg(SubagentWaitTool(executor=executor))
 
         if _should("subagent_kill"):
+            from src.agent.tools.subagent_kill import SubagentKillTool
+
             _reg(SubagentKillTool(executor=executor))
 
         if _should("subagents_list") and subagent_manager is not None:
@@ -489,15 +505,10 @@ def register_standard_tools(
 
     # --- session orchestration ---
     if mode in ("single", "team"):
-        from src.agent.tools.sessions import (
-            SessionsHistoryTool,
-            SessionsListTool,
-            SessionsSendTool,
-            SubagentsListTool,
-        )
-
         if session_manager is not None:
             if _should("sessions_list"):
+                from src.agent.tools.sessions import SessionsListTool
+
                 _reg(
                     SessionsListTool(
                         session_manager=session_manager,
@@ -506,6 +517,8 @@ def register_standard_tools(
                     )
                 )
             if _should("sessions_history"):
+                from src.agent.tools.sessions import SessionsHistoryTool
+
                 _reg(
                     SessionsHistoryTool(
                         session_manager=session_manager,
@@ -514,6 +527,10 @@ def register_standard_tools(
                     )
                 )
         if bus is not None and _should("sessions_send"):
+            from src.agent.tools.sessions import SessionsSendTool
+
             _reg(SessionsSendTool(bus=bus))
         if subagent_manager is not None and _should("subagents_list"):
+            from src.agent.tools.sessions import SubagentsListTool
+
             _reg(SubagentsListTool(manager=subagent_manager))

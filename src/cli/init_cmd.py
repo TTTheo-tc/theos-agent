@@ -19,12 +19,32 @@ from loguru import logger
 
 from src import __logo__
 from src.cli.display import console
-from src.cli.init_channels import configure_channels
-from src.cli.init_genver import configure_genver_interactive
-from src.cli.init_roles import configure_roles_interactive
-from src.cli.init_soul import configure_soul
 from src.config.schema import Config
 from src.utils.helpers import sync_workspace_templates
+
+
+def configure_channels(config: Config) -> None:
+    from src.cli.init_channels import configure_channels as _configure_channels
+
+    return _configure_channels(config)
+
+
+def configure_genver_interactive(configured_providers: list[str] | None = None):
+    from src.cli.init_genver import configure_genver_interactive as _configure_genver_interactive
+
+    return _configure_genver_interactive(configured_providers)
+
+
+def configure_roles_interactive(configured_providers: list[str] | None = None):
+    from src.cli.init_roles import configure_roles_interactive as _configure_roles_interactive
+
+    return _configure_roles_interactive(configured_providers)
+
+
+def configure_soul(workspace: Path) -> None:
+    from src.cli.init_soul import configure_soul as _configure_soul
+
+    return _configure_soul(workspace)
 
 
 def _auth_profile_paths() -> list[Path]:

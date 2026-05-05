@@ -387,6 +387,30 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
     ),
 )
 
+CORE_PROVIDER_NAMES: frozenset[str] = frozenset({"custom", "anthropic", "openai"})
+
+
+def core_providers() -> tuple[ProviderSpec, ...]:
+    """Return the minimal provider set emphasized by core installs."""
+    return tuple(spec for spec in PROVIDERS if spec.name in CORE_PROVIDER_NAMES)
+
+
+def extended_providers() -> tuple[ProviderSpec, ...]:
+    """Return installed metadata outside the minimal core provider set."""
+    return tuple(spec for spec in PROVIDERS if spec.name not in CORE_PROVIDER_NAMES)
+
+
+def oauth_providers() -> tuple[ProviderSpec, ...]:
+    """Return OAuth-backed provider specs."""
+    return tuple(spec for spec in PROVIDERS if spec.is_oauth)
+
+
+def ordered_providers(*, core_first: bool = True) -> tuple[ProviderSpec, ...]:
+    """Return provider specs in UI-friendly order while preserving registry entries."""
+    if not core_first:
+        return PROVIDERS
+    return core_providers() + extended_providers()
+
 
 # ---------------------------------------------------------------------------
 # Lookup helpers

@@ -42,16 +42,39 @@ def main(
 # Register commands from sub-modules
 # ============================================================================
 
-from src.cli.agent_cmd import agent  # noqa: E402
 from src.cli.auth_cmd import auth_app, provider_app  # noqa: E402
-from src.cli.init_cmd import init  # noqa: E402
 
-app.command()(agent)
-app.command()(init)
+
+@app.command()
+def agent(
+    message: str = typer.Option(None, "--message", "-m", help="Message to send to the agent"),
+    session_id: str = typer.Option("cli:direct", "--session", "-s", help="Session ID"),
+    markdown: bool = typer.Option(
+        True, "--markdown/--no-markdown", help="Render assistant output as Markdown"
+    ),
+    logs: bool = typer.Option(
+        False, "--logs/--no-logs", help="Show theos runtime logs during chat"
+    ),
+):
+    """Interact with the agent directly."""
+    from src.cli.agent_cmd import agent as _agent
+
+    return _agent(message=message, session_id=session_id, markdown=markdown, logs=logs)
+
+
+@app.command()
+def init(
+    reset: bool = typer.Option(False, "--reset", help="Reset existing data before init"),
+    no_daemon: bool = typer.Option(False, "--no-daemon", help="Skip gateway daemon installation"),
+):
+    """Initialize TheOS: config, workspace, and provider setup."""
+    from src.cli.init_cmd import init as _init
+
+    return _init(reset=reset, no_daemon=no_daemon)
 
 
 # Heavy command modules stay lazy so `theos --help` and core smoke paths do not
-# load gateway/channel/Feishu/UI/report implementations.
+# load agent/init/gateway/channel/Feishu/UI/report implementations.
 gateway_app = typer.Typer(
     name="gateway",
     help="Gateway daemon management",
@@ -294,7 +317,7 @@ def status():
     """Show theos status."""
     from src.auth.store import get_api_key_for_provider
     from src.config.loader import get_config_path, load_config
-    from src.providers.registry import PROVIDERS
+    from src.providers.registry import ordered_providers
 
     config_path = get_config_path()
     config = load_config()
@@ -311,7 +334,7 @@ def status():
         console.print(f"Model: {config.agents.defaults.model}")
 
         # Check API keys from registry (auth profiles take priority over config.json)
-        for spec in PROVIDERS:
+        for spec in ordered_providers():
             p = getattr(config.providers, spec.name, None)
             if p is None:
                 continue

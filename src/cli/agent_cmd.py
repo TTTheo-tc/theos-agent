@@ -19,6 +19,18 @@ from src.cli.repl import (
 from src.utils.helpers import sync_workspace_templates
 
 
+def _profile_allows_tool(profile: str | None, tool_name: str) -> bool:
+    if profile is None:
+        return True
+    try:
+        from src.agent.tools.tool_profiles import resolve_profile
+
+        profile_set = resolve_profile(profile)
+    except ValueError:
+        return True
+    return profile_set is None or tool_name in profile_set
+
+
 def agent(
     message: str = typer.Option(None, "--message", "-m", help="Message to send to the agent"),
     session_id: str = typer.Option("cli:direct", "--session", "-s", help="Session ID"),
@@ -34,8 +46,7 @@ def agent(
 
     from src.agent.loop import AgentLoop
     from src.bus.queue import MessageBus
-    from src.config.loader import get_data_dir, load_config
-    from src.cron.service import CronService
+    from src.config.loader import load_config
     from src.security.secret_refs import resolve_data_secret_refs
 
     config = load_config()
@@ -50,23 +61,27 @@ def agent(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
 
-    # Create cron service for tool usage (no callback needed for CLI unless running)
-    cron_store_path = get_data_dir() / "cron" / "jobs.json"
-    cron = CronService(cron_store_path)
+    cron = None
+    if _profile_allows_tool(config.tools.profile, "cron"):
+        from src.config.loader import get_data_dir
+        from src.cron.service import CronService
+
+        # Create cron service for tool usage (no callback needed for CLI unless running)
+        cron_store_path = get_data_dir() / "cron" / "jobs.json"
+        cron = CronService(cron_store_path)
 
     if logs:
         logger.enable("src")
     else:
         logger.remove()  # silence all loguru output
 
-    # Create reflector for post-task lesson generation
-    from src.hooks.reflector import Reflector
-
     reflector_cfg = config.agents.reflector
     reflector = None
     if reflector_cfg.enabled:
+        from src.hooks.reflector import Reflector
         from src.providers.factory import make_provider_for_model
 
+        # Create reflector for post-task lesson generation only when explicitly enabled.
         try:
             reflector_provider = make_provider_for_model(config, reflector_cfg.model)
             reflector_model = reflector_cfg.model
