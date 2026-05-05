@@ -3,8 +3,7 @@
 from typing import Any
 
 from src.agent.tools.base import ContextAwareTool
-from src.cron.service import CronService
-from src.cron.types import CronSchedule
+from src.cron.service import CronService, build_schedule
 
 _MAX_JOBS = 50
 
@@ -97,31 +96,17 @@ class CronTool(ContextAwareTool):
             return "Error: no session context (channel/chat_id)"
         if len(self._cron.list_jobs()) >= _MAX_JOBS:
             return f"Error: maximum number of jobs ({_MAX_JOBS}) reached. Remove some before adding new ones."
-        if tz and not cron_expr:
-            return "Error: tz can only be used with cron_expr"
-        if tz:
-            from zoneinfo import ZoneInfo
-
-            try:
-                ZoneInfo(tz)
-            except Exception:
-                return f"Error: unknown timezone '{tz}'"
-
-        # Build schedule
-        delete_after = False
-        if every_seconds:
-            schedule = CronSchedule(kind="every", every_ms=every_seconds * 1000)
-        elif cron_expr:
-            schedule = CronSchedule(kind="cron", expr=cron_expr, tz=tz)
-        elif at:
-            from datetime import datetime
-
-            dt = datetime.fromisoformat(at)
-            at_ms = int(dt.timestamp() * 1000)
-            schedule = CronSchedule(kind="at", at_ms=at_ms)
-            delete_after = True
-        else:
-            return "Error: either every_seconds, cron_expr, or at is required"
+        try:
+            schedule, delete_after = build_schedule(
+                every_seconds=every_seconds,
+                cron_expr=cron_expr,
+                at=at,
+                tz=tz,
+            )
+        except ValueError as exc:
+            if "tz can only be used" in str(exc):
+                return "Error: tz can only be used with cron_expr"
+            return f"Error: {exc}"
 
         job = self._cron.add_job(
             name=message[:30],

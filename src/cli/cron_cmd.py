@@ -85,25 +85,22 @@ def cron_add(
 ):
     """Add a scheduled job."""
     from src.config.loader import get_data_dir
-    from src.cron.service import CronService
-    from src.cron.types import CronSchedule
+    from src.cron.service import CronService, build_schedule
 
     if tz and not cron_expr:
         console.print("[red]Error: --tz can only be used with --cron[/red]")
         raise typer.Exit(1)
 
-    # Determine schedule type
-    if every:
-        schedule = CronSchedule(kind="every", every_ms=every * 1000)
-    elif cron_expr:
-        schedule = CronSchedule(kind="cron", expr=cron_expr, tz=tz)
-    elif at:
-        import datetime
-
-        dt = datetime.datetime.fromisoformat(at)
-        schedule = CronSchedule(kind="at", at_ms=int(dt.timestamp() * 1000))
-    else:
-        console.print("[red]Error: Must specify --every, --cron, or --at[/red]")
+    try:
+        schedule, _delete_after = build_schedule(
+            every_seconds=every,
+            cron_expr=cron_expr,
+            at=at,
+            tz=tz,
+        )
+    except ValueError as e:
+        message = "Must specify --every, --cron, or --at" if "either " in str(e) else str(e)
+        console.print(f"[red]Error: {message}[/red]")
         raise typer.Exit(1)
 
     store_path = get_data_dir() / "cron" / "jobs.json"

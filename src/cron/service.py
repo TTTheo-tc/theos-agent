@@ -61,6 +61,31 @@ def _validate_schedule_for_add(schedule: CronSchedule) -> None:
             raise ValueError(f"unknown timezone '{schedule.tz}'") from None
 
 
+def build_schedule(
+    *,
+    every_seconds: int | None = None,
+    cron_expr: str | None = None,
+    at: str | None = None,
+    tz: str | None = None,
+) -> tuple[CronSchedule, bool]:
+    """Build a schedule from public CLI/tool inputs.
+
+    Returns ``(schedule, delete_after_run)``.
+    """
+    if tz and not cron_expr:
+        raise ValueError("tz can only be used with cron schedules")
+    if every_seconds:
+        return CronSchedule(kind="every", every_ms=every_seconds * 1000), False
+    if cron_expr:
+        schedule = CronSchedule(kind="cron", expr=cron_expr, tz=tz)
+        _validate_schedule_for_add(schedule)
+        return schedule, False
+    if at:
+        dt = datetime.fromisoformat(at)
+        return CronSchedule(kind="at", at_ms=int(dt.timestamp() * 1000)), True
+    raise ValueError("either every_seconds, cron_expr, or at is required")
+
+
 class CronService:
     """Service for managing and executing scheduled jobs."""
 
