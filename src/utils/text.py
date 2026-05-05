@@ -25,6 +25,14 @@ def tool_hint(tool_calls: list) -> str:
     return ", ".join(_fmt(tc) for tc in tool_calls)
 
 
+def _split_position(text: str, max_len: int) -> int:
+    cut = text[:max_len]
+    pos = cut.rfind("\n")
+    if pos <= 0:
+        pos = cut.rfind(" ")
+    return pos if pos > 0 else max_len
+
+
 def split_message(content: str, max_len: int = 4000) -> list[str]:
     """Split content into chunks within max_len, preferring line breaks."""
     if not content:
@@ -36,12 +44,7 @@ def split_message(content: str, max_len: int = 4000) -> list[str]:
         if len(content) <= max_len:
             chunks.append(content)
             break
-        cut = content[:max_len]
-        pos = cut.rfind("\n")
-        if pos <= 0:
-            pos = cut.rfind(" ")
-        if pos <= 0:
-            pos = max_len
+        pos = _split_position(content, max_len)
         chunks.append(content[:pos])
         content = content[pos:].lstrip()
     return chunks

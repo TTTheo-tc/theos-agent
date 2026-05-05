@@ -57,7 +57,7 @@ _CN_STOPWORDS = {
 
 
 def is_ascii_term(term: str) -> bool:
-    return bool(re.fullmatch(r"[a-z0-9][a-z0-9._/-]*", term, flags=re.I))
+    return bool(_ASCII_TERM_RE.fullmatch(term))
 
 
 def tokenize_query(text: str) -> list[str]:
