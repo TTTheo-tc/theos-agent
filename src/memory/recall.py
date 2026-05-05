@@ -157,6 +157,18 @@ if TYPE_CHECKING:
 
 # Rough token estimation: ~4 chars per token (matches store.py constant)
 _CHARS_PER_TOKEN = 4
+_STALE_SECTION_DAYS = 7
+_VERIFY_WARNING_SUFFIX = " \u2014 verify before acting on this information."
+
+
+def _freshness_warning(body: str, store: Any) -> str:
+    """Return a freshness warning for a memory section body, or empty string."""
+    age = store.extract_section_age_days(body)
+    if age is not None and age > _STALE_SECTION_DAYS:
+        return f"\n> \u26a0 Last updated {age} days ago{_VERIFY_WARNING_SUFFIX}"
+    if age is None:
+        return f"\n> \u26a0 No timestamp{_VERIFY_WARNING_SUFFIX}"
+    return ""
 
 
 class MemoryRecallService:
@@ -249,16 +261,7 @@ class MemoryRecallService:
                 continue
 
             section_text = f"## {title}\n{body}"
-            age = MemoryStore.extract_section_age_days(body)
-            if age is not None and age > 7:
-                section_text += (
-                    f"\n> \u26a0 Last updated {age} days ago"
-                    " \u2014 verify before acting on this information."
-                )
-            elif age is None:
-                section_text += (
-                    "\n> \u26a0 No timestamp" " \u2014 verify before acting on this information."
-                )
+            section_text += _freshness_warning(body, MemoryStore)
             parts.append(section_text)
 
         return "\n\n".join(parts)
@@ -312,17 +315,7 @@ class MemoryRecallService:
 
             # Annotate freshness per section
             if title != "_preamble":
-                age = store.extract_section_age_days(body)
-                if age is not None and age > 7:
-                    section_text += (
-                        f"\n> \u26a0 Last updated {age} days ago"
-                        " \u2014 verify before acting on this information."
-                    )
-                elif age is None:
-                    section_text += (
-                        "\n> \u26a0 No timestamp"
-                        " \u2014 verify before acting on this information."
-                    )
+                section_text += _freshness_warning(body, store)
 
             if used_chars + len(section_text) > budget_chars and selected:
                 break

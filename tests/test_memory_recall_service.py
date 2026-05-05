@@ -257,13 +257,15 @@ class TestFreshnessWarnings:
 
     def test_old_section_gets_warning(self, tmp_path: Path) -> None:
         """Section from 2025-01-15 should have a freshness warning."""
+        old_date = "2025-01-15"
+        age = (datetime.now() - datetime.strptime(old_date, "%Y-%m-%d")).days
         content = """\
 # Long-term Memory
 
 ## Old Facts
-<!-- updated: 2025-01-15 -->
+<!-- updated: {old_date} -->
 - Something stale
-"""
+""".format(old_date=old_date)
         workspace = tmp_path / "ws"
         workspace.mkdir()
         _write_memory(workspace, content)
@@ -273,6 +275,10 @@ class TestFreshnessWarnings:
 
         assert "Old Facts" in result
         assert "verify" in result.lower()
+        assert (
+            f"> \u26a0 Last updated {age} days ago"
+            " \u2014 verify before acting on this information."
+        ) in result
 
     def test_section_without_timestamp_gets_warning(self, tmp_path: Path) -> None:
         """Section without an updated timestamp should get a warning."""
@@ -292,3 +298,4 @@ class TestFreshnessWarnings:
         assert "Orphan Section" in result
         # The warning blockquote should contain "verify" or "No timestamp"
         assert "> \u26a0" in result
+        assert "> \u26a0 No timestamp \u2014 verify before acting on this information." in result

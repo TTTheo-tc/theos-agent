@@ -24,6 +24,8 @@ from src.utils.helpers import ensure_dir
 if TYPE_CHECKING:
     from src.providers.base import LLMProvider
 
+_UPDATED_MARKER_RE = re.compile(r"<!-- updated: ([\d-]+) -->")
+
 
 class MemoryStore:
     """Two-layer memory: MEMORY.md (long-term facts) + HISTORY.md (grep-searchable log)."""
@@ -174,32 +176,27 @@ class MemoryStore:
             return 0
 
         cutoff = datetime.now() - timedelta(days=max_age_days)
-        kept: list[str] = []
+        kept: list[tuple[str, str]] = []
         removed = 0
 
         for title, body in sections:
             # Check for pin
             if "<!-- pinned -->" in body:
-                kept.append(f"## {title}\n{body}" if title != "_preamble" else body)
+                kept.append((title, body))
                 continue
 
             # Check timestamp
-            ts_match = re.search(r"<!-- updated: ([\d-]+) -->", body)
-            if ts_match:
-                try:
-                    updated = datetime.strptime(ts_match.group(1), "%Y-%m-%d")
-                    if updated < cutoff:
-                        removed += 1
-                        logger.info(
-                            "Memory GC: removing section '{}' (updated {})",
-                            title,
-                            ts_match.group(1),
-                        )
-                        continue
-                except ValueError:
-                    pass
+            updated = self._extract_updated_at(body)
+            if updated is not None and updated < cutoff:
+                removed += 1
+                logger.info(
+                    "Memory GC: removing section '{}' (updated {})",
+                    title,
+                    updated.strftime("%Y-%m-%d"),
+                )
+                continue
 
-            kept.append(f"## {title}\n{body}" if title != "_preamble" else body)
+            kept.append((title, body))
 
         # Enforce max_sections (keep most recent)
         if len(kept) > max_sections:
@@ -208,7 +205,7 @@ class MemoryStore:
             kept = kept[:1] + kept[1 + overflow :]  # keep preamble + most recent
 
         if removed > 0:
-            self.write_long_term("\n\n".join(kept))
+            self.write_long_term(self._render_sections(kept))
             logger.info("Memory GC: removed {} sections, {} remaining", removed, len(kept))
 
         return removed
@@ -220,12 +217,19 @@ class MemoryStore:
     @staticmethod
     def extract_section_age_days(body: str) -> int | None:
         """Extract age in days from ``<!-- updated: YYYY-MM-DD -->``."""
-        ts_match = re.search(r"<!-- updated: ([\d-]+) -->", body)
+        updated = MemoryStore._extract_updated_at(body)
+        if updated is None:
+            return None
+        return (datetime.now() - updated).days
+
+    @staticmethod
+    def _extract_updated_at(body: str) -> datetime | None:
+        """Parse the first ``updated`` marker in a memory section."""
+        ts_match = _UPDATED_MARKER_RE.search(body)
         if not ts_match:
             return None
         try:
-            updated = datetime.strptime(ts_match.group(1), "%Y-%m-%d")
-            return (datetime.now() - updated).days
+            return datetime.strptime(ts_match.group(1), "%Y-%m-%d")
         except ValueError:
             return None
 
