@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -39,40 +40,13 @@ def load_config(config_path: Path | None = None) -> Config:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             data = _migrate_config(data)
-
-            # Decrypt encrypted config values
-            had_plaintext = False
-            try:
-                from src.security.config_secrets import (
-                    ConfigSecretsManager,
-                    get_config_secrets_manager,
-                )
-
-                mgr = get_config_secrets_manager()
-                if mgr:
-                    data, had_plaintext = mgr.decrypt_config_data(data)
-                    # If encrypted values remain after decryption, the key is wrong
-                    if ConfigSecretsManager.has_encrypted_values(data):
-                        raise RuntimeError(
-                            "Config decryption failed — SECRETS_MASTER_KEY or OS keychain "
-                            "master key may have changed. Restore the original key or "
-                            "re-configure the affected config secrets."
-                        )
-                elif ConfigSecretsManager.has_encrypted_values(data):
-                    raise RuntimeError(
-                        "Config contains encrypted values but no master key is available. "
-                        "Set SECRETS_MASTER_KEY or restore the OS keychain master key."
-                    )
-            except RuntimeError:
-                raise  # re-raise config errors
-            except Exception:
-                logger.debug("Config secrets decryption unavailable")
+            data, had_plaintext = _decrypt_config_data(data)
 
             config = Config.model_validate(data)
             _apply_proxy_env(config)
 
             # Auto-migrate plaintext secrets to encrypted form
-            if had_plaintext and path:
+            if had_plaintext:
                 try:
                     save_config(config, path)
                     logger.info("Migrated plaintext config secrets to encrypted form")
@@ -102,21 +76,7 @@ def save_config(config: Config, config_path: Path | None = None, *, compact: boo
     path.parent.mkdir(parents=True, exist_ok=True)
 
     data = config.model_dump(by_alias=True, exclude_defaults=compact)
-
-    # Encrypt sensitive config values
-    try:
-        from src.security.config_secrets import get_config_secrets_manager
-
-        mgr = get_config_secrets_manager()
-        if mgr:
-            data = mgr.encrypt_config_data(data)
-        else:
-            logger.warning(
-                "No master key available — config secrets saved as plaintext. "
-                "Set SECRETS_MASTER_KEY or install a keychain to enable encryption."
-            )
-    except Exception:
-        logger.warning("Config secrets encryption failed, saving plaintext")
+    data = _encrypt_config_data(data)
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
@@ -136,6 +96,54 @@ def _migrate_config(data: dict) -> dict:
             data["hooks"] = data.pop("hooksDir")
         elif "hooks_dir" in data:
             data["hooks"] = data.pop("hooks_dir")
+    return data
+
+
+def _decrypt_config_data(data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Decrypt encrypted config values and report whether plaintext secrets were found."""
+    try:
+        from src.security.config_secrets import (
+            ConfigSecretsManager,
+            get_config_secrets_manager,
+        )
+
+        mgr = get_config_secrets_manager()
+        if mgr:
+            data, had_plaintext = mgr.decrypt_config_data(data)
+            if ConfigSecretsManager.has_encrypted_values(data):
+                raise RuntimeError(
+                    "Config decryption failed — SECRETS_MASTER_KEY or OS keychain "
+                    "master key may have changed. Restore the original key or "
+                    "re-configure the affected config secrets."
+                )
+            return data, had_plaintext
+        if ConfigSecretsManager.has_encrypted_values(data):
+            raise RuntimeError(
+                "Config contains encrypted values but no master key is available. "
+                "Set SECRETS_MASTER_KEY or restore the OS keychain master key."
+            )
+    except RuntimeError:
+        raise
+    except Exception:
+        logger.debug("Config secrets decryption unavailable")
+    return data, False
+
+
+def _encrypt_config_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Encrypt sensitive config values when a master key is available."""
+    try:
+        from src.security.config_secrets import ConfigSecretsManager, get_config_secrets_manager
+
+        mgr = get_config_secrets_manager()
+        if mgr:
+            return mgr.encrypt_config_data(data)
+        if ConfigSecretsManager.has_sensitive_values(data):
+            logger.warning(
+                "No master key available — config secrets saved as plaintext. "
+                "Set SECRETS_MASTER_KEY or install a keychain to enable encryption."
+            )
+    except Exception:
+        logger.warning("Config secrets encryption failed, saving plaintext")
     return data
 
 

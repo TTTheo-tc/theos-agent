@@ -42,3 +42,18 @@ def test_config_get_api_base_uses_provider_default_without_env_setup():
 
     with patch("src.auth.store.get_api_key_for_provider", return_value="moonshot-key"):
         assert config.get_api_base("moonshot/kimi-k2.5") == "https://api.moonshot.ai/v1"
+
+
+def test_config_get_provider_keys_includes_all_configured_registry_providers():
+    config = Config()
+    config.providers.openrouter.api_key = "sk-or-test"
+    config.providers.moonshot.api_key = "secret://moonshot"
+
+    with patch(
+        "src.auth.store.get_api_key_for_provider",
+        side_effect=lambda name: "moonshot-key" if name == "moonshot" else None,
+    ):
+        keys = config.get_provider_keys()
+
+    assert keys["openrouter"] == "sk-or-test"
+    assert keys["moonshot"] == "moonshot-key"

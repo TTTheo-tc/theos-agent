@@ -522,15 +522,16 @@ class Config(BaseSettings):
 
     def get_provider_keys(self) -> dict[str, str]:
         """Get all configured provider API keys (resolved), keyed by provider name."""
+        from src.providers.registry import PROVIDERS
         from src.security.secret_refs import resolve_secret_ref
 
         result: dict[str, str] = {}
-        for name in ("anthropic", "openai", "deepseek", "gemini", "aihubmix"):
-            p = getattr(self.providers, name, None)
+        for spec in PROVIDERS:
+            p = getattr(self.providers, spec.name, None)
             if p and p.api_key:
                 key = resolve_secret_ref(p.api_key)
                 if key:
-                    result[name] = key
+                    result[spec.name] = key
         return result
 
     def get_api_key(self, model: str | None = None) -> str | None:
