@@ -288,24 +288,8 @@ def add_comment(
     if reply_id:
         body["reply_id"] = reply_id
 
-    req = lark.BaseRequest()
-    req.http_method = lark.HttpMethod.POST
-    req.uri = f"/open-apis/drive/v1/files/{file_token}/comments"
-    req.body = body
-
-    token = ctx_current_token.get()
-    if token:
-        req.token_types = {lark.AccessTokenType.USER}
-    else:
-        req.token_types = {lark.AccessTokenType.TENANT}
-
-    option = _request_option()
-    response = client.request(req, option) if option else client.request(req)
-    _check(response, "add_comment")
-
-    raw = response.raw.content
-    data = json.loads(raw).get("data", {}) if raw else {}
-    return data
+    uri = f"/open-apis/drive/v1/files/{file_token}/comments"
+    return _raw_comment_request(client, lark.HttpMethod.POST, uri, "add_comment", body=body)
 
 
 def resolve_comment(
@@ -336,24 +320,8 @@ def resolve_comment(
         "is_solved": is_solved,
     }
 
-    req = lark.BaseRequest()
-    req.http_method = lark.HttpMethod.PATCH
-    req.uri = f"/open-apis/drive/v1/files/{file_token}/comments/{comment_id}"
-    req.body = body
-
-    token = ctx_current_token.get()
-    if token:
-        req.token_types = {lark.AccessTokenType.USER}
-    else:
-        req.token_types = {lark.AccessTokenType.TENANT}
-
-    option = _request_option()
-    response = client.request(req, option) if option else client.request(req)
-    _check(response, "resolve_comment")
-
-    raw = response.raw.content
-    data = json.loads(raw).get("data", {}) if raw else {}
-    return data
+    uri = f"/open-apis/drive/v1/files/{file_token}/comments/{comment_id}"
+    return _raw_comment_request(client, lark.HttpMethod.PATCH, uri, "resolve_comment", body=body)
 
 
 def delete_comment(
@@ -377,21 +345,43 @@ def delete_comment(
     """
     _rate_limiter.wait()
 
+    uri = f"/open-apis/drive/v1/files/{file_token}/comments/{comment_id}"
+    _raw_comment_request(
+        client,
+        lark.HttpMethod.DELETE,
+        uri,
+        "delete_comment",
+        query={"file_type": file_type},
+    )
+    return True
+
+
+def _raw_comment_request(
+    client: lark.Client,
+    method,
+    uri: str,
+    action: str,
+    *,
+    body: dict | None = None,
+    query: dict[str, str] | None = None,
+) -> dict:
     req = lark.BaseRequest()
-    req.http_method = lark.HttpMethod.DELETE
-    req.uri = f"/open-apis/drive/v1/files/{file_token}/comments/{comment_id}"
-    req.add_query("file_type", file_type)
+    req.http_method = method
+    req.uri = uri
+    if body is not None:
+        req.body = body
+    for key, value in (query or {}).items():
+        req.add_query(key, value)
 
     token = ctx_current_token.get()
-    if token:
-        req.token_types = {lark.AccessTokenType.USER}
-    else:
-        req.token_types = {lark.AccessTokenType.TENANT}
+    req.token_types = {lark.AccessTokenType.USER} if token else {lark.AccessTokenType.TENANT}
 
     option = _request_option()
-    response = client.request(req, option) if option else client.request(req)
-    _check(response, "delete_comment")
-    return True
+    response = client.request(req, option) if option is not None else client.request(req)
+    _check(response, action)
+
+    raw = response.raw.content
+    return json.loads(raw).get("data", {}) if raw else {}
 
 
 # ---------------------------------------------------------------------------

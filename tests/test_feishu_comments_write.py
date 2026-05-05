@@ -34,6 +34,12 @@ class TestAddComment:
         req = mock_client.request.call_args[0][0]
         assert "/comments" in req.uri
         assert req.http_method == lark.HttpMethod.POST
+        assert req.body == {
+            "file_type": "docx",
+            "content": {
+                "elements": [{"type": "text_run", "text_run": {"text": "hello"}}],
+            },
+        }
         assert result["comment_id"] == "c1"
 
     def test_add_comment_with_reply_id(self):
@@ -52,6 +58,37 @@ class TestAddComment:
         req = mock_client.request.call_args[0][0]
         assert req.body["reply_id"] == "c1"
         assert result["reply_id"] == "c1"
+
+    def test_add_comment_passes_request_option_and_user_token_type(self):
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.success.return_value = True
+        mock_response.raw.content = json.dumps({"data": {"comment_id": "c1"}}).encode()
+        mock_client.request.return_value = mock_response
+        option = object()
+
+        with (
+            patch("src.feishu.api_write._request_option", return_value=option),
+            patch("src.feishu.api_write.ctx_current_token") as mock_ctx,
+        ):
+            mock_ctx.get.return_value = "user-token"
+            add_comment(mock_client, "doc_token_1", "docx", "hello")
+
+        req = mock_client.request.call_args.args[0]
+        assert req.token_types == {lark.AccessTokenType.USER}
+        assert mock_client.request.call_args.args[1] is option
+
+    def test_add_comment_returns_empty_data_on_empty_raw_response(self):
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.success.return_value = True
+        mock_response.raw.content = b""
+        mock_client.request.return_value = mock_response
+
+        with patch("src.feishu.api_write._request_option", return_value=None):
+            result = add_comment(mock_client, "doc_token_1", "docx", "hello")
+
+        assert result == {}
 
     def test_add_comment_raises_on_failure(self):
         """Verify add_comment raises FeishuAPIError on API failure."""
@@ -90,9 +127,28 @@ class TestResolveComment:
 
         req = mock_client.request.call_args[0][0]
         assert req.http_method == lark.HttpMethod.PATCH
+        assert req.body["file_type"] == "docx"
         assert req.body["is_solved"] is True
         assert "c1" in req.uri
         assert result["is_solved"] is True
+
+    def test_resolve_comment_uses_tenant_token_without_user_token(self):
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.success.return_value = True
+        mock_response.raw.content = json.dumps({"data": {"comment_id": "c1"}}).encode()
+        mock_client.request.return_value = mock_response
+
+        with (
+            patch("src.feishu.api_write._request_option", return_value=None),
+            patch("src.feishu.api_write.ctx_current_token") as mock_ctx,
+        ):
+            mock_ctx.get.return_value = None
+            resolve_comment(mock_client, "doc_token_1", "docx", "c1")
+
+        req = mock_client.request.call_args.args[0]
+        assert req.token_types == {lark.AccessTokenType.TENANT}
+        assert len(mock_client.request.call_args.args) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +170,7 @@ class TestDeleteComment:
 
         req = mock_client.request.call_args[0][0]
         assert req.http_method == lark.HttpMethod.DELETE
+        assert req.queries == [("file_type", "docx")]
         assert "c1" in req.uri
         assert result is True
 
