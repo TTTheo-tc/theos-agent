@@ -1427,54 +1427,65 @@ class FeishuClient:
             ext_clean, file_token, target_type, display_name, mount_key
         )
 
-        # Step 3: Poll for completion
-        import time  # noqa: PLC0415
-
-        for _ in range(max_polls):
-            result = api_write.get_import_task_result(ticket)
-            status = result.get("job_status", -1)
-            if status == 0:  # success
-                break
-            if status >= 3:  # error
-                msg = f"Import failed with status {status}: {result}"
-                raise RuntimeError(msg)
-            time.sleep(poll_interval)
-        else:
-            msg = f"Import timed out after {max_polls * poll_interval}s"
-            raise TimeoutError(msg)
+        result = self._poll_import_result(ticket, poll_interval, max_polls)
 
         # Step 4: Optionally move to wiki
         if wiki_parent_url:
-            parsed = parse_url(wiki_parent_url)
-            wiki_id = parsed.get("wiki_id")
-            if not wiki_id:
-                msg = f"Cannot parse wiki URL: {wiki_parent_url}"
-                raise ValueError(msg)
-            _, info = self.info_page(wiki_parent_url)
-            space_id = info.get("space_id")
-            if not space_id:
-                msg = f"Cannot determine space_id from {wiki_parent_url}"
-                raise ValueError(msg)
-
-            move_result = api_write.move_docs_to_wiki(
-                self._client,
-                space_id,
-                wiki_id,
-                result.get("type", target_type),
-                result["token"],
-            )
-            result["wiki_token"] = move_result.get("wiki_token")
-
-            # If async, poll for completion
-            task_id = move_result.get("task_id")
-            if task_id:
-                for _ in range(max_polls):
-                    task_result = api_write.get_wiki_task_result(task_id)
-                    if task_result.get("status") == "done":
-                        break
-                    time.sleep(poll_interval)
+            self._move_import_to_wiki(result, target_type, wiki_parent_url, poll_interval, max_polls)
 
         return result
+
+    def _poll_import_result(self, ticket: str, poll_interval: float, max_polls: int) -> dict:
+        for _ in range(max_polls):
+            result = api_write.get_import_task_result(ticket)
+            status = result.get("job_status", -1)
+            if status == 0:
+                return result
+            if status >= 3:
+                msg = f"Import failed with status {status}: {result}"
+                raise RuntimeError(msg)
+            time.sleep(poll_interval)
+        msg = f"Import timed out after {max_polls * poll_interval}s"
+        raise TimeoutError(msg)
+
+    def _move_import_to_wiki(
+        self,
+        result: dict,
+        target_type: str,
+        wiki_parent_url: str,
+        poll_interval: float,
+        max_polls: int,
+    ) -> None:
+        parsed = parse_url(wiki_parent_url)
+        wiki_id = parsed.get("wiki_id")
+        if not wiki_id:
+            msg = f"Cannot parse wiki URL: {wiki_parent_url}"
+            raise ValueError(msg)
+        _, info = self.info_page(wiki_parent_url)
+        space_id = info.get("space_id")
+        if not space_id:
+            msg = f"Cannot determine space_id from {wiki_parent_url}"
+            raise ValueError(msg)
+
+        move_result = api_write.move_docs_to_wiki(
+            self._client,
+            space_id,
+            wiki_id,
+            result.get("type", target_type),
+            result["token"],
+        )
+        result["wiki_token"] = move_result.get("wiki_token")
+
+        task_id = move_result.get("task_id")
+        if task_id:
+            self._poll_wiki_task(task_id, poll_interval, max_polls)
+
+    def _poll_wiki_task(self, task_id: str, poll_interval: float, max_polls: int) -> None:
+        for _ in range(max_polls):
+            task_result = api_write.get_wiki_task_result(task_id)
+            if task_result.get("status") == "done":
+                return
+            time.sleep(poll_interval)
 
     # --- contacts: departments ---
 
