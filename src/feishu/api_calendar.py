@@ -31,6 +31,15 @@ from src.feishu.retry import with_retry
 # ---------------------------------------------------------------------------
 
 
+def _call_with_option(fn, request, option):
+    return fn(request, option) if option is not None else fn(request)
+
+
+def _extend_items(target: list[dict], items) -> None:
+    if items:
+        target.extend(_unmarshal(items))
+
+
 def list_calendars(client: lark.Client) -> list[dict]:
     """List the current user's calendars.
 
@@ -46,16 +55,11 @@ def list_calendars(client: lark.Client) -> list[dict]:
             builder = builder.page_token(page_token)
         request = builder.build()
 
-        response = (
-            client.calendar.v4.calendar.list(request, option)
-            if option
-            else client.calendar.v4.calendar.list(request)
-        )
+        response = _call_with_option(client.calendar.v4.calendar.list, request, option)
         _check(response, "list_calendars")
 
         data = response.data
-        if data.calendar_list:
-            calendars.extend(_unmarshal(data.calendar_list))
+        _extend_items(calendars, data.calendar_list)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -100,16 +104,11 @@ def list_events(
             builder = builder.page_token(page_token)
         request = builder.build()
 
-        response = (
-            client.calendar.v4.calendar_event.list(request, option)
-            if option
-            else client.calendar.v4.calendar_event.list(request)
-        )
+        response = _call_with_option(client.calendar.v4.calendar_event.list, request, option)
         _check(response, "list_events")
 
         data = response.data
-        if data.items:
-            events.extend(_unmarshal(data.items))
+        _extend_items(events, data.items)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -126,11 +125,7 @@ def get_event(client: lark.Client, calendar_id: str, event_id: str) -> dict:
     """
     option = _request_option()
     request = GetCalendarEventRequest.builder().calendar_id(calendar_id).event_id(event_id).build()
-    response = (
-        client.calendar.v4.calendar_event.get(request, option)
-        if option
-        else client.calendar.v4.calendar_event.get(request)
-    )
+    response = _call_with_option(client.calendar.v4.calendar_event.get, request, option)
     _check(response, "get_event")
     return _unmarshal(response.data.event)
 
@@ -217,11 +212,7 @@ def create_event(
         .request_body(event_builder.build())
         .build()
     )
-    response = (
-        client.calendar.v4.calendar_event.create(request, option)
-        if option
-        else client.calendar.v4.calendar_event.create(request)
-    )
+    response = _call_with_option(client.calendar.v4.calendar_event.create, request, option)
     _check(response, "create_event")
     return _unmarshal(response.data.event)
 
@@ -242,11 +233,7 @@ def delete_event(client: lark.Client, calendar_id: str, event_id: str) -> bool:
         .need_notification(True)
         .build()
     )
-    response = (
-        client.calendar.v4.calendar_event.delete(request, option)
-        if option
-        else client.calendar.v4.calendar_event.delete(request)
-    )
+    response = _call_with_option(client.calendar.v4.calendar_event.delete, request, option)
     _check(response, "delete_event")
     return True
 
@@ -287,11 +274,7 @@ def freebusy_query(
             .build()
         )
         request = ListFreebusyRequest.builder().request_body(body).build()
-        response = (
-            client.calendar.v4.freebusy.list(request, option)
-            if option
-            else client.calendar.v4.freebusy.list(request)
-        )
+        response = _call_with_option(client.calendar.v4.freebusy.list, request, option)
         _check(response, "freebusy_list")
         return _unmarshal(response.data)
 
@@ -304,11 +287,7 @@ def freebusy_query(
         .build()
     )
     request = BatchFreebusyRequest.builder().request_body(body).build()
-    response = (
-        client.calendar.v4.freebusy.batch(request, option)
-        if option
-        else client.calendar.v4.freebusy.batch(request)
-    )
+    response = _call_with_option(client.calendar.v4.freebusy.batch, request, option)
     _check(response, "freebusy_batch")
     return _unmarshal(response.data)
 

@@ -60,6 +60,17 @@ class TestListCalendars:
         assert len(result) == 1
         assert result[0]["calendar_id"] == "cal_1"
 
+    def test_list_calendars_passes_request_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(calendar_list=[], has_more=False, page_token=None)
+        client.calendar.v4.calendar.list.return_value = _ok_response(data)
+        option = object()
+
+        with patch("src.feishu.api_calendar._request_option", return_value=option):
+            api_calendar.list_calendars(client)
+
+        assert client.calendar.v4.calendar.list.call_args.args[1] is option
+
     def test_list_calendars_paginated(self):
         client = _mock_lark_client()
         page1 = SimpleNamespace(
@@ -106,6 +117,16 @@ class TestListEvents:
 
         assert len(result) == 2
         assert result[0]["event_id"] == "ev_1"
+
+    def test_list_events_uses_one_arg_when_no_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(items=[], has_more=False, page_token=None)
+        client.calendar.v4.calendar_event.list.return_value = _ok_response(data)
+
+        with patch("src.feishu.api_calendar._request_option", return_value=None):
+            api_calendar.list_events(client)
+
+        assert len(client.calendar.v4.calendar_event.list.call_args.args) == 1
 
     def test_list_events_empty(self):
         client = _mock_lark_client()
@@ -183,6 +204,22 @@ class TestFreebusyQuery:
         # Called freebusy.list (not batch) for single user
         client.calendar.v4.freebusy.list.assert_called_once()
         client.calendar.v4.freebusy.batch.assert_not_called()
+
+    def test_freebusy_single_user_passes_request_option(self):
+        client = _mock_lark_client()
+        fb_data = SimpleNamespace(freebusy_list=[])
+        client.calendar.v4.freebusy.list.return_value = _ok_response(fb_data)
+        option = object()
+
+        with patch("src.feishu.api_calendar._request_option", return_value=option):
+            api_calendar.freebusy_query(
+                client,
+                user_ids=["ou_user1"],
+                start_time="2026-03-25T00:00:00+08:00",
+                end_time="2026-03-25T23:59:59+08:00",
+            )
+
+        assert client.calendar.v4.freebusy.list.call_args.args[1] is option
 
     def test_freebusy_multiple_users(self):
         client = _mock_lark_client()
