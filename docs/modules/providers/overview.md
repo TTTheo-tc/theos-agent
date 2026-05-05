@@ -31,7 +31,7 @@ Adjacent but not owned: `src/auth/store.py` (credential storage), `src/security/
 | Entry point | Purpose |
 |---|---|
 | `factory.make_provider(config)` | Primary provider for the agent loop. Reads `config.agents.defaults.model` and `.provider`. Wraps in `RecoveryProvider` when `failover_models` is configured. (`factory.py:172`) |
-| `factory.make_provider_for_model(config, model)` | Provider for a specific model (reflectors, failover targets). Always auto-detects provider from model name. (`factory.py:213`) |
+| `factory.make_provider_for_model(config, model)` | Provider for a specific model (for example failover targets). Always auto-detects provider from model name. (`factory.py:213`) |
 | `LLMProvider.chat()` | Non-streaming request. Returns `LLMResponse`. (`base.py:150`) |
 | `LLMProvider.chat_stream()` | Streaming request. Yields `StreamDelta` chunks. Default impl wraps `chat()`. (`base.py:119`) |
 

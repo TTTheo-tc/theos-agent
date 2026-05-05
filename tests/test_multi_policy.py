@@ -1,7 +1,6 @@
 """Tests for subagent policy config."""
 
-from src.agent.delegation.policy import SubagentPolicyConfig
-from src.config.schema import AgentsConfig, Config
+from src.config.schema import AgentsConfig, Config, SubagentPolicyConfig
 
 
 class TestSubagentPolicyConfig:

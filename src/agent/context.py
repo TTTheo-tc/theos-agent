@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from src.agent.skills import SkillsLoader
-from src.memory.store import MemoryStore
+from src.memory.recall import MemoryRecallService
+from src.memory.scope import MemoryScopeResolver
 
 if TYPE_CHECKING:
     from src.config.schema import AgentRoleConfig
@@ -60,12 +61,18 @@ class ContextBuilder:
     ):
         self.workspace = workspace  # global workspace (skills, templates)
         self.group_workspace = group_workspace or workspace  # per-group (memory, bootstrap)
-        self._recall_service = recall_service
+        self._recall_service = (
+            recall_service
+            if recall_service is not None
+            else MemoryRecallService(
+                scope=MemoryScopeResolver(
+                    workspace=self.group_workspace,
+                    groups_base_dir=self.group_workspace / "groups",
+                    group_memory_enabled=False,
+                )
+            )
+        )
         self._learning_enabled = learning_enabled
-        if recall_service is None:
-            self.memory = MemoryStore(self.group_workspace)
-        else:
-            self.memory = None  # recall service handles memory reads
         self.skills = SkillsLoader(workspace)  # skills always from global workspace
         self.roles = roles or {}
 
@@ -144,16 +151,11 @@ Skills with available="false" need dependencies installed first - you can try in
         # -- Dynamic sections (change per turn) ------------------------------
         dynamic: list[str] = []
 
-        if self._recall_service is not None:
-            memory = self._recall_service.get_memory_context(
-                query=current_message,
-                workspace=self.group_workspace,
-                memory_config=memory_config,
-            )
-        else:
-            memory = self.memory.get_memory_context(
-                query=current_message, memory_config=memory_config
-            )
+        memory = self._recall_service.get_memory_context(
+            query=current_message,
+            workspace=self.group_workspace,
+            memory_config=memory_config,
+        )
         if memory:
             dynamic.append(f"# Memory\n\n{memory}")
 

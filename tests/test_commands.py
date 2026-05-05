@@ -71,7 +71,6 @@ def test_optional_cli_help_keeps_implementations_lazy():
         "src.cli.report_cmd",
         "src.cli.ui_cmd",
         "src.cron.service",
-        "src.hooks.reflector",
     )
     previous_modules = {module_name: sys.modules.get(module_name) for module_name in optional_modules}
     for module_name in optional_modules:

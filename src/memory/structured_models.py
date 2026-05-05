@@ -11,8 +11,6 @@ import math
 import re
 from dataclasses import dataclass, field
 
-from src.utils.tokenize import tokenize_query  # re-export for backward compat  # noqa: F401
-
 _CODE_REF_RE = re.compile(r"(?:src|tests?|lib|hooks|instinct|skills)/[\w./-]+")
 _URL_RE = re.compile(r"https?://[^\s)]+")
 

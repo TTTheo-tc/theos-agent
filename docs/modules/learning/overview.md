@@ -20,7 +20,6 @@ src/dream/                  # Sandboxed exploration runner
 
 src/hooks/                  # Lifecycle hook runner
   runner.py                 # HookRunner: pre-chat / post-chat script executor
-  reflector.py              # DEPRECATED: lesson writing moved to reflect.js
 
 instinct/scripts/           # Node.js learning pipeline
   reflex.js                 # Pre-chat: domain routing + context injection
@@ -154,7 +153,7 @@ Dream sandbox files are written under `dreams/<session>/sandbox/`. `DreamToolReg
 
 1. Dream bash/python calls run with `working_dir` set to `sandbox_root` (`tool_registry.py:67`). `DreamToolPolicy` rejects absolute paths outside sandbox and `..` traversal (`tool_policy.py:164-207`). Note: this does not prevent all relative-path escapes — it is a best-effort guard, not container-level isolation.
 2. Dream sessions never use side-effect tools (message, deploy, write_file, etc.) -- `BLOCKED_TOOLS` set (`tool_policy.py:54-69`).
-3. `reflect.js` is the single lesson/event writer (I6) -- `Reflector._do_reflect` is a no-op (`reflector.py:73-79`).
+3. `reflect.js` is the single lesson/event writer (I6); the old Python Reflector path has been removed.
 4. Rule promotion requires: frequency >= 3, avg confidence >= 0.72, last seen within 14 days (`evolve.js:9-12`).
 5. Pre-chat hook timeout is 10s; post-chat hook timeout is 15s (`hooks/runner.py:53`, `runner.py:101`).
 6. Hooks are fire-and-forget on error -- failures are logged but never crash the agent (`hooks/runner.py:57-60`, `runner.py:102-105`).

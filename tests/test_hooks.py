@@ -200,7 +200,7 @@ async def test_genver_process_message_uses_task_workspace_for_context_and_hooks(
         captured["messages"] = initial_messages
         return "done", [], initial_messages, {}
 
-    loop._run_genver_loop = AsyncMock(side_effect=_fake_run_genver)
+    loop._genver.run_loop = AsyncMock(side_effect=_fake_run_genver)
 
     msg = InboundMessage(
         channel="cli",
@@ -242,9 +242,8 @@ async def test_genver_process_message_bypasses_non_code_request(tmp_path: Path) 
     loop._memory.build_structured_recall = AsyncMock(return_value=None)
     loop._memory.maybe_compact = AsyncMock(side_effect=lambda messages, **kw: messages)
     loop._memory.persist_structured_memory = AsyncMock()
-    loop._run_genver_loop = AsyncMock(return_value=("genver", [], [], {}))
+    loop._genver.run_loop = AsyncMock(return_value=("genver", [], [], {}))
     loop._run_agent_loop = AsyncMock(return_value=("analysis", [], [], {}))
-    loop._save_turn = MagicMock()
     loop._finalizer.save_turn = MagicMock()
     loop.sessions.save = MagicMock()
 
@@ -260,6 +259,6 @@ async def test_genver_process_message_bypasses_non_code_request(tmp_path: Path) 
     assert response is not None
     assert response.content == "analysis"
     loop._run_agent_loop.assert_awaited_once()
-    loop._run_genver_loop.assert_not_awaited()
+    loop._genver.run_loop.assert_not_awaited()
     assert loop.hooks.run_pre_chat.await_args.kwargs["workspace"] == tmp_path
     assert loop.hooks.run_post_chat.await_args.kwargs["workspace"] == tmp_path

@@ -41,7 +41,6 @@ if TYPE_CHECKING:
         MemoryConfig,
     )
     from src.cron.service import CronService
-    from src.hooks.reflector import Reflector
     from src.safety.layer import SafetyLayer
     from src.store.dashboard_writer import DashboardWriter
 
@@ -86,16 +85,6 @@ class AgentLoop:
 
     _EPHEMERAL_CONTEXT_TAG = _EPHEMERAL_CONTEXT_TAG  # re-export module constant
 
-    # DEPRECATED: use TurnContextAssembler.extract_instinct_routing() directly
-    _extract_instinct_routing = staticmethod(TurnContextAssembler.extract_instinct_routing)
-    # DEPRECATED: use TurnContextAssembler.extract_instinct_skills() directly
-    _extract_instinct_skills = staticmethod(TurnContextAssembler.extract_instinct_skills)
-
-    # DEPRECATED: use TurnFinalizer._is_invalid_request_error() directly
-    @staticmethod
-    def _is_invalid_request_error(response: str | None, usage: dict[str, int] | None) -> bool:
-        return TurnFinalizer._is_invalid_request_error(response, usage)
-
     def __init__(
         self,
         bus: MessageBus,
@@ -105,14 +94,12 @@ class AgentLoop:
         cron_service: "CronService | None" = None,
         session_manager: SessionManager | None = None,
         dashboard: "DashboardWriter | None" = None,
-        reflector: "Reflector | None" = None,
         channels_config_override: "ChannelsConfig | None" = None,
         channel_env: dict[str, str] | None = None,
     ):
         from src.config.schema import ExecToolConfig
         from src.security.secret_refs import resolve_data_secret_refs, resolve_secret_ref
 
-        self.reflector = reflector
         self.dashboard = dashboard
         self.bus = bus
         self.provider = provider
@@ -213,7 +200,6 @@ class AgentLoop:
         self._owner_ids: set[str] = {str(owner_id) for owner_id in owner_ids if owner_id}
 
         self._running = False
-        self._pending_reflector: asyncio.Task | None = None  # awaitable reflector task
         self._orchestrator_config = orchestrator_config
         self._memory_config: MemoryConfig | None = config.memory
 
@@ -233,7 +219,6 @@ class AgentLoop:
             recall_service=self._memory.recall,
             learning_enabled=self.learning_enabled,
         )
-        self.context = self._context.global_context  # backward-compat alias
         # Composed turn finalizer
         # Use lambda so tests can patch AgentLoop._get_safety after construction
         self._finalizer = TurnFinalizer(
@@ -247,7 +232,6 @@ class AgentLoop:
         from src.orchestrator.turn_lifecycle import TurnLifecycle
 
         policies: list = []
-        self._orchestrator = None
         if orchestrator_config and orchestrator_config.enabled:
             orchestrator_policy = OrchestratorPolicy(
                 max_retries=orchestrator_config.max_retries,
@@ -257,8 +241,6 @@ class AgentLoop:
                 agent=self,
             )
             policies.append(orchestrator_policy)
-            # Temporary compatibility alias while callers migrate off _orchestrator.
-            self._orchestrator = orchestrator_policy
         self._lifecycle = TurnLifecycle(self, policies=policies)
         self._dispatcher = PerGroupDispatcher(self._lifecycle.handle_message)
         self._register_default_tools()
@@ -274,13 +256,6 @@ class AgentLoop:
                 workspace=self.workspace,
                 bus=self.bus,
                 model=self.model,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                brave_api_key=self.brave_api_key,
-                web_search_provider=self._web_search_provider,
-                tavily_api_key=self._tavily_api_key,
-                exec_config=self.exec_config,
-                restrict_to_workspace=self.restrict_to_workspace,
                 roles=self.roles,
                 policy=self._subagent_policy,
             )
@@ -319,7 +294,7 @@ class AgentLoop:
         return any(name in profile_set for name in names)
 
     def _needs_subagents_for_registration(self) -> bool:
-        if self._root_agent_mode == "team" or self._is_genver:
+        if self._root_agent_mode == "team" or self.is_genver:
             return True
         return self._profile_allows_any(
             {"agent", "subagent_wait", "subagent_kill", "subagents_list"}
@@ -480,8 +455,8 @@ class AgentLoop:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             max_iterations=self.max_iterations,
-            add_assistant=self.context.add_assistant_message,
-            add_tool_result=self.context.add_tool_result,
+            add_assistant=self._context.global_context.add_assistant_message,
+            add_tool_result=self._context.global_context.add_tool_result,
             on_progress=on_progress,
             on_content_delta=on_content_delta,
             tool_context=tool_context,
@@ -497,81 +472,8 @@ class AgentLoop:
         return self._root_agent_mode
 
     @property
-    def _is_genver(self) -> bool:
+    def is_genver(self) -> bool:
         return self.genver_config is not None
-
-    # DEPRECATED: use GenVerHandler.should_run_for_request() directly
-    _should_run_genver_for_request = staticmethod(GenVerHandler.should_run_for_request)
-
-    async def _run_genver_loop(
-        self,
-        initial_messages: list[dict],
-        on_progress: Callable[..., Awaitable[None]] | None = None,
-        tool_context: Any = None,
-        session_key: str | None = None,
-        turn_id: str | None = None,
-    ) -> tuple[str | None, list[str], list[dict], dict[str, int]]:
-        """Run the Generator-Verifier loop.
-
-        DEPRECATED: use self._genver.run_loop() directly.
-        """
-        return await self._genver.run_loop(
-            initial_messages,
-            tools=self.tools,
-            model=self.model,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            restrict_to_workspace=self.restrict_to_workspace,
-            exec_config=self.exec_config,
-            brave_api_key=self.brave_api_key,
-            web_search_max_results=self._web_search_max_results,
-            web_search_provider=self._web_search_provider,
-            tavily_api_key=self._tavily_api_key,
-            orchestrator_config=self._orchestrator_config,
-            cron_service=self.cron_service,
-            stock_config=self._stock_config,
-            provider_keys=self._provider_keys,
-            channel_env=self._channel_env,
-            memory_handler=self._memory,
-            genver_config=self.genver_config,
-            context_add_assistant=self.context.add_assistant_message,
-            context_add_tool_result=self.context.add_tool_result,
-            subagent_manager=self.subagents,
-            on_progress=on_progress,
-            tool_context=tool_context,
-            session_key=session_key,
-            turn_id=turn_id,
-        )
-
-    def pop_genver_handoff(self, session_key: str) -> Any | None:
-        """Consume and return the latest GenVer handoff for the given session.
-
-        DEPRECATED: use self._genver.pop_handoff() directly.
-        """
-        if self._genver_handler is None:
-            return None
-        return self._genver_handler.pop_handoff(session_key)
-
-    async def _genver_ask_user(
-        self,
-        question: str,
-        *,
-        channel: str,
-        chat_id: str,
-        session_key: str | None,
-        turn_id: str | None = None,
-    ) -> str | None:
-        """Ask the user a question during genver loop.
-
-        DEPRECATED: use self._genver.ask_user() directly.
-        """
-        return await self._genver.ask_user(
-            question,
-            channel=channel,
-            chat_id=chat_id,
-            session_key=session_key,
-            turn_id=turn_id,
-        )
 
     def reload_roles(self, roles: dict[str, AgentRoleConfig] | None = None) -> None:
         """Hot-reload agent roles from the given dict (or from config on disk).
@@ -592,7 +494,6 @@ class AgentLoop:
                 self.roles[name] = defn
         # Rebuild global context and clear per-session cache
         self._context.rebuild_global(roles=self.roles)
-        self.context = self._context.global_context
         # Update subagent manager
         if self._subagents is not None:
             self._subagents.roles = self.roles
@@ -644,7 +545,7 @@ class AgentLoop:
             "genver_enabled": self.genver_enabled,
             "hooks": str(self.hooks.hooks_dir) if self.hooks.hooks_dir else None,
         }
-        if self._is_genver and self.genver_config:
+        if self.is_genver and self.genver_config:
             diag["genver"] = {
                 "generator": self.genver_config.generator_model,
                 "verifier": self.genver_config.verifier_model,
@@ -748,88 +649,6 @@ class AgentLoop:
             )
         )
 
-    # DEPRECATED: use self._lifecycle.handle_message
-    async def _process_message_wrapper(self, msg: InboundMessage) -> None:
-        """Process a message via the dispatcher queue.
-
-        DEPRECATED: use self._lifecycle.handle_message instead. This method is
-        retained as a compatibility shim while tests are migrated.
-
-        Every turn gets a unique turn_id and basic telemetry (duration, status)
-        regardless of whether the full orchestrator is enabled.
-        """
-        turn_id = _uuid.uuid4().hex[:12]
-        t0 = _time.monotonic()
-        status = "completed"
-        error_text: str | None = None
-        try:
-            response = await self._process_message(msg, turn_id=turn_id)
-            if response is not None:
-                response.metadata.setdefault("turn_id", turn_id)
-                await self.bus.publish_outbound(response)
-            elif msg.channel == "cli":
-                await self.bus.publish_outbound(
-                    OutboundMessage(
-                        channel=msg.channel,
-                        chat_id=msg.chat_id,
-                        content="",
-                        metadata={**(msg.metadata or {}), "turn_id": turn_id},
-                    )
-                )
-        except asyncio.CancelledError:
-            status = "cancelled"
-            logger.info("Turn {} cancelled for session {}", turn_id, msg.session_key)
-            raise
-        except Exception as exc:
-            status = "failed"
-            error_text = str(exc)
-            logger.opt(exception=True).warning(
-                "Turn {} failed for session {}", turn_id, msg.session_key
-            )
-            asyncio.create_task(
-                self.hooks.run_post_chat(
-                    msg.session_key,
-                    error=error_text,
-                    status="failed",
-                    user_message=msg.content,
-                    tools_used=[],
-                    usage={},
-                    duration_ms=None,
-                    routing_domains=[],
-                    selected_primary=None,
-                    artifacts=[],
-                    tests=[],
-                    workspace=self.workspace,
-                )
-            )
-            await self.bus.publish_outbound(
-                OutboundMessage(
-                    channel=msg.channel,
-                    chat_id=msg.chat_id,
-                    content="Sorry, I encountered an error.",
-                    metadata={"turn_id": turn_id},
-                )
-            )
-        finally:
-            duration_ms = (_time.monotonic() - t0) * 1000
-            logger.debug(
-                "Turn {} {} in {:.0f}ms (session={})",
-                turn_id,
-                status,
-                duration_ms,
-                msg.session_key,
-            )
-
-    async def drain_pending(self) -> None:
-        """Await any pending reflector task. Call before exiting the event loop."""
-        if self._pending_reflector and not self._pending_reflector.done():
-            try:
-                await self._pending_reflector
-            except Exception:
-                pass  # Reflector already logs its own errors
-            finally:
-                self._pending_reflector = None
-
     async def drain_and_consolidate(self, session_key: str = "cli:direct") -> None:
         """Flush memory tiers and run consolidation on exit if enough messages accumulated.
 
@@ -837,7 +656,6 @@ class AgentLoop:
         Low watermark: 5 unconsolidated messages (skip trivial 1-2 message sessions).
         """
         low_watermark = 5
-        await self.drain_pending()
         if not self._memory.memory_enabled():
             return
         # Flush any buffered immediate-queue entries to SQLite
@@ -910,7 +728,7 @@ class AgentLoop:
             sender_id=msg.sender_id,
             sender_is_owner=self._resolve_sender_is_owner(msg, channel),
         )
-        history = session.get_history(max_messages=self.memory_window, current_message=msg.content)
+        history = session.get_history(max_messages=self.memory_window)
         messages = ctx.build_messages(
             history=history,
             current_message=msg.content,
@@ -919,7 +737,7 @@ class AgentLoop:
             model=self.model,
             memory_config=self._memory_config,
             has_memory_tools=self._memory.search_enabled(),
-            prompt_profile=(ContextBuilder._GENVER_GENERATOR_PROFILE if self._is_genver else None),
+            prompt_profile=(ContextBuilder._GENVER_GENERATOR_PROFILE if self.is_genver else None),
         )
         initial_count = len(messages)
         final_content, _, all_msgs, usage = await self._run_agent_loop(
@@ -928,12 +746,13 @@ class AgentLoop:
             session_key=key,
             active_workspace=ctx.group_workspace,
         )
-        self._save_turn(
+        self._finalizer.save_turn(
             session,
             all_msgs,
             initial_count,
             usage=usage,
             user_message=msg.content,
+            memory_tiers=self._memory.tiers_or_none(),
         )
         self.sessions.save(session)
         return OutboundMessage(
@@ -949,9 +768,6 @@ class AgentLoop:
 
         Returns (key, session, agent_id, t0).
         """
-        import time as _time
-        import uuid as _uuid
-
         key = session_key or msg.session_key
         session = self.sessions.get_or_create(key)
         await self._memory.ensure_db(key)
@@ -1275,8 +1091,28 @@ class AgentLoop:
     ) -> tuple[str | None, list[str], list[dict], dict[str, int], int]:
         """Inner inference — may raise ProviderAuthError."""
         if run_genver:
-            content, tools_used, all_msgs, usage = await self._run_genver_loop(
+            content, tools_used, all_msgs, usage = await self._genver.run_loop(
                 initial_messages,
+                tools=self.tools,
+                model=self.model,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                restrict_to_workspace=self.restrict_to_workspace,
+                exec_config=self.exec_config,
+                brave_api_key=self.brave_api_key,
+                web_search_max_results=self._web_search_max_results,
+                web_search_provider=self._web_search_provider,
+                tavily_api_key=self._tavily_api_key,
+                orchestrator_config=self._orchestrator_config,
+                cron_service=self.cron_service,
+                stock_config=self._stock_config,
+                provider_keys=self._provider_keys,
+                channel_env=self._channel_env,
+                memory_handler=self._memory,
+                genver_config=self.genver_config,
+                context_add_assistant=self._context.global_context.add_assistant_message,
+                context_add_tool_result=self._context.global_context.add_tool_result,
+                subagent_manager=self.subagents,
                 on_progress=on_progress,
                 tool_context=tool_ctx,
                 session_key=key,
@@ -1291,7 +1127,7 @@ class AgentLoop:
                 session_key=key,
                 active_workspace=active_workspace,
             )
-            if self._is_invalid_request_error(content, usage):
+            if TurnFinalizer._is_invalid_request_error(content, usage):
                 logger.warning(
                     "Primary prompt rejected with invalid_request_error; "
                     "retrying with clean context"
@@ -1318,7 +1154,7 @@ class AgentLoop:
                         active_workspace=active_workspace,
                     )
                 )
-                if not self._is_invalid_request_error(retry_content, retry_usage):
+                if not TurnFinalizer._is_invalid_request_error(retry_content, retry_usage):
                     logger.info("Clean-context retry succeeded after invalid_request_error")
                     initial_count = retry_initial_count
                     content, tools_used, all_msgs, usage = (
@@ -1424,8 +1260,8 @@ class AgentLoop:
                 message_tool.start_turn()
 
         # 6. GenVer routing decision
-        run_genver = self._is_genver and self._should_run_genver_for_request(msg.content)
-        if self._is_genver and not run_genver:
+        run_genver = self.is_genver and GenVerHandler.should_run_for_request(msg.content)
+        if self.is_genver and not run_genver:
             logger.info(
                 "Bypassing GenVer for non-code request in session {}: {}",
                 key,
@@ -1545,7 +1381,6 @@ class AgentLoop:
             )
             history = session.get_history(
                 max_messages=self.memory_window,
-                current_message=msg.content,
                 exclude_turn_id=active_turn_id,
             )
 
@@ -1582,7 +1417,7 @@ class AgentLoop:
             )
             await _flush_stream_buffer()
 
-            # 10. Finalization (save turn, hooks, dashboard, reflector)
+            # 10. Finalization (save turn, hooks, dashboard)
             self._record_turn_checkpoint(key, active_turn_id, "finalizing")
             response = await self._finalizer.finalize_turn(
                 msg,
@@ -1601,11 +1436,9 @@ class AgentLoop:
                 agent_id=_agent_id,
                 t0=_t0,
                 dashboard=self.dashboard,
-                reflector=self.reflector,
                 memory=self._memory,
                 model=self.model,
                 bus=self.bus,
-                pending_reflector_setter=self._set_pending_reflector,
                 genver_last_handoff=self._genver.pop_handoff(key) if run_genver else None,
                 tools=self.tools,
                 workspace=self.workspace,
@@ -1667,33 +1500,6 @@ class AgentLoop:
                 persisted_history=history,
             ),
             tool_activator=self.tools.activate,
-        )
-
-    def _set_pending_reflector(self, task: asyncio.Task | None) -> None:
-        """Setter for _pending_reflector — used by TurnFinalizer."""
-        self._pending_reflector = task
-
-    # DEPRECATED: use self._finalizer.save_turn() directly
-    def _save_turn(
-        self,
-        session: Session,
-        messages: list[dict],
-        skip: int,
-        usage: dict[str, int] | None = None,
-        user_message: str | None = None,
-        turn_id: str | None = None,
-        persisted_user_message: bool = False,
-    ) -> None:
-        """Save new-turn messages into session — delegates to TurnFinalizer."""
-        self._finalizer.save_turn(
-            session,
-            messages,
-            skip,
-            usage=usage,
-            user_message=user_message,
-            memory_tiers=self._memory.tiers_or_none(),
-            turn_id=turn_id,
-            persisted_user_message=persisted_user_message,
         )
 
     async def process_direct(

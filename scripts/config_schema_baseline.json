@@ -135,9 +135,6 @@
         "orchestrator": {
           "$ref": "#/$defs/OrchestratorConfig"
         },
-        "reflector": {
-          "$ref": "#/$defs/ReflectorConfig"
-        },
         "roles": {
           "additionalProperties": {
             "$ref": "#/$defs/AgentRoleConfig"
@@ -1523,23 +1520,6 @@
         }
       },
       "title": "QQConfig",
-      "type": "object"
-    },
-    "ReflectorConfig": {
-      "description": "LLM-powered post-task reflector configuration.",
-      "properties": {
-        "enabled": {
-          "default": false,
-          "title": "Enabled",
-          "type": "boolean"
-        },
-        "model": {
-          "default": "minimax/MiniMax-M2.5",
-          "title": "Model",
-          "type": "string"
-        }
-      },
-      "title": "ReflectorConfig",
       "type": "object"
     },
     "ResponseCacheConfig": {

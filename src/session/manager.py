@@ -61,7 +61,6 @@ class Session:
     def get_history(
         self,
         max_messages: int = 500,
-        current_message: str | None = None,  # noqa: ARG002 — kept for call-site compat
         exclude_turn_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return unconsolidated messages for LLM input, aligned to a user turn.

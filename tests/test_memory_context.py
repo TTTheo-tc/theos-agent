@@ -1,4 +1,4 @@
-"""Tests for MemoryStore.get_memory_context() behavior."""
+"""Tests for MemoryRecallService.get_memory_context() behavior."""
 
 from __future__ import annotations
 
@@ -37,21 +37,32 @@ def store_with_memory(store: MemoryStore) -> MemoryStore:
     return store
 
 
+def _recall(workspace: Path, memory_config: MemoryConfig | None = None) -> MemoryRecallService:
+    scope = MemoryScopeResolver(
+        workspace=workspace,
+        groups_base_dir=workspace / "groups",
+        group_memory_enabled=False,
+    )
+    return MemoryRecallService(scope=scope, memory_config=memory_config)
+
+
 def test_with_memory(store_with_memory: MemoryStore) -> None:
-    result = store_with_memory.get_memory_context()
+    result = _recall(store_with_memory.memory_dir.parent).get_memory_context()
     assert "Long-term Memory" in result
     assert "User Preferences" in result
     assert "Project Architecture" in result
 
 
 def test_memory_disabled_skips_context_injection(store_with_memory: MemoryStore) -> None:
-    result = store_with_memory.get_memory_context(memory_config=MemoryConfig(enabled=False))
+    result = _recall(store_with_memory.memory_dir.parent).get_memory_context(
+        memory_config=MemoryConfig(enabled=False)
+    )
 
     assert result == ""
 
 
 def test_without_memory(store: MemoryStore) -> None:
-    result = store.get_memory_context()
+    result = _recall(store.memory_dir.parent).get_memory_context()
     assert result == ""
 
 
@@ -63,7 +74,9 @@ def test_retrieval_mode_selects_relevant_sections(store_with_memory: MemoryStore
             fallback_to_full=False,
         )
     )
-    result = store_with_memory.get_memory_context(query="asyncio provider", memory_config=config)
+    result = _recall(store_with_memory.memory_dir.parent).get_memory_context(
+        query="asyncio provider", memory_config=config
+    )
     assert "Project Architecture" in result
     assert "vim" not in result
 
@@ -88,7 +101,9 @@ def test_retrieval_mode_respects_budget(store: MemoryStore) -> None:
         )
     )
 
-    result = store.get_memory_context(query="asyncio provider", memory_config=config)
+    result = _recall(store.memory_dir.parent).get_memory_context(
+        query="asyncio provider", memory_config=config
+    )
 
     assert result.startswith("## Long-term Memory (filtered)")
     assert "Asyncio Architecture" in result
@@ -104,7 +119,7 @@ def test_retrieval_no_match_fallback(store_with_memory: MemoryStore) -> None:
             fallback_to_full=True,
         )
     )
-    result = store_with_memory.get_memory_context(
+    result = _recall(store_with_memory.memory_dir.parent).get_memory_context(
         query="xyznonexistent", memory_config=config_fallback
     )
     assert "Long-term Memory" in result
@@ -118,7 +133,7 @@ def test_retrieval_no_match_fallback(store_with_memory: MemoryStore) -> None:
             fallback_to_full=False,
         )
     )
-    result = store_with_memory.get_memory_context(
+    result = _recall(store_with_memory.memory_dir.parent).get_memory_context(
         query="xyznonexistent", memory_config=config_no_fallback
     )
     assert result == ""

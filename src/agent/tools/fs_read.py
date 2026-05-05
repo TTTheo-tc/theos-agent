@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 from src.agent.tools.fs_write import WriteFileTool
 from src.agent.tools.tool_security import policy_error
 from src.utils.path import resolve_path as _resolve_path
@@ -29,10 +29,8 @@ _BINARY_PROBE_SIZE = 8192
 _BINARY_ALLOW_EXTENSIONS = frozenset({".pdf"})
 
 
-class ReadFileTool(Tool):
+class ReadFileTool(ContextAwareTool):
     """Read file contents with optional offset/limit (line-based)."""
-
-    accepts_context = True
 
     # Per-session read dedup state, keyed by session_key.
     # Inner dict maps resolved file path → (mtime, offset, limit).

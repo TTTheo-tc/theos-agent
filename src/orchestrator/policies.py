@@ -129,7 +129,16 @@ class OrchestratorPolicy(ExecutionPolicy):
         if self.review_mode == "always":
             return True
         # auto: review only when GenVer mode is active and handoff is present
-        return self._agent._is_genver and task.handoff is not None
+        return self._agent.is_genver and task.handoff is not None
+
+    def _pop_genver_handoff(self, session_key: str) -> Any | None:
+        """Consume the latest GenVer handoff when the agent is in GenVer mode."""
+        if not self._agent.is_genver:
+            return None
+        genver = getattr(self._agent, "_genver", None)
+        if genver is None:
+            return None
+        return genver.pop_handoff(session_key)
 
     # ------------------------------------------------------------------
     # Public accessors (preserve Orchestrator API surface)
@@ -215,7 +224,7 @@ class OrchestratorPolicy(ExecutionPolicy):
         task.result = response.content if response else None
 
         # Retrieve genver handoff for this session
-        handoff = self._agent.pop_genver_handoff(turn.session_key)
+        handoff = self._pop_genver_handoff(turn.session_key)
         if handoff is not None:
             task.handoff = {
                 "summary": handoff.summary,

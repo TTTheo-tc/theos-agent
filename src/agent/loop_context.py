@@ -47,7 +47,7 @@ class TurnContextAssembler:
 
     @property
     def global_context(self) -> ContextBuilder:
-        """The global fallback ContextBuilder (replaces old ``loop.context``)."""
+        """The global fallback ContextBuilder."""
         return self._global_context
 
     # -- cache management ----------------------------------------------------

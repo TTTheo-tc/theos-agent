@@ -601,16 +601,6 @@ class SubagentExecutor:
             )
             has_changes = bool(proc.stdout.strip())
 
-            # Also check if there are new commits beyond HEAD
-            await asyncio.to_thread(
-                subprocess.run,
-                ["git", "log", "HEAD..HEAD", "--oneline"],
-                cwd=str(record.worktree_path),
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-
             if not has_changes:
                 # No changes — clean up worktree and branch
                 await asyncio.to_thread(
@@ -678,28 +668,37 @@ class SubagentExecutor:
     # ------------------------------------------------------------------
 
     async def _announce_top_level_result(self, record: SubagentTaskRecord) -> None:
-        """Publish an InboundMessage on the bus for top-level task results."""
+        """Publish a root-session message asking the main agent to summarize the result."""
         if self._bus is None:
             return
 
         from src.bus.events import InboundMessage
 
-        summary = (
-            f"[Subagent {record.label!r} ({record.task_id})] " f"Status: {record.status.value}\n"
-        )
-        if record.result:
-            summary += f"Result: {record.result}"
-        elif record.error:
-            summary += f"Error: {record.error}"
+        status_text = "completed successfully" if record.result and not record.error else "failed"
+        result_body = record.result if record.result else (record.error or "No output.")
+        content = f"""[Subagent '{record.label}' {status_text}]
+
+Task: {record.task}
+
+Result:
+{result_body}
+
+Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not mention technical details like "subagent" or task IDs."""
 
         msg = InboundMessage(
-            channel=record.origin_channel,
-            sender_id="system",
-            chat_id=record.origin_chat_id,
-            content=summary,
+            channel="system",
+            sender_id="subagent",
+            chat_id=f"{record.origin_channel}:{record.origin_chat_id}",
+            content=content,
             session_key_override=record.root_session_key,
         )
         await self._bus.publish_inbound(msg)
+        logger.debug(
+            "Subagent [{}] announced result to {}:{}",
+            record.task_id,
+            record.origin_channel,
+            record.origin_chat_id,
+        )
 
     # ------------------------------------------------------------------
     # GC

@@ -56,7 +56,7 @@ Config (BaseSettings)
   |     +-- AgentDefaults (model, max_tokens, failover_models, ...)
   |     +-- dict[str, AgentRoleConfig]  (team roles)
   |     +-- GenVerConfig (generator/verifier models, phases, commands)
-  |     +-- OrchestratorConfig, ReflectorConfig, SubagentPolicyConfig
+  |     +-- OrchestratorConfig, SubagentPolicyConfig
   +-- ChannelsConfig (WhatsApp, Discord, Feishu, Telegram, Slack, DingTalk, QQ, Email, ...)
   +-- ProvidersConfig (16 provider slots, each a ProviderConfig with api_key/api_base/extra_headers)
   +-- GatewayConfig (host, port, HeartbeatConfig, PollersConfig, UIConfig)
@@ -72,7 +72,7 @@ All models extend a `Base(BaseModel)` with `alias_generator=to_camel` and `popul
 
 1. **Config load**: `load_config()` reads `~/.theos/config.json`, runs `_migrate_config()` for legacy fields, decrypts secrets via `ConfigSecretsManager`, validates with `Config.model_validate()`, then applies proxy env vars (`loader.py:26-90`).
 2. **Config save**: `save_config()` serializes with `model_dump(by_alias=True)`, encrypts sensitive fields if a master key is available, writes JSON (`loader.py:93-122`).
-3. **Agent command**: loads config, creates `MessageBus`, `make_provider()`, `CronService`, optional `Reflector`, then constructs `AgentLoop`. Single-message mode calls `process_direct()`; interactive mode starts the bus consumer loop (`agent_cmd.py:90-352`).
+3. **Agent command**: loads config, creates `MessageBus`, `make_provider()`, optional `CronService`, then constructs `AgentLoop`. Single-message mode calls `process_direct()`; interactive mode starts the bus consumer loop (`agent_cmd.py:90-352`).
 4. **Gateway command**: loads config, runs startup checks, creates `AgentLoop`, `ChannelManager`, `CronService`, `HeartbeatService`, `PollerService`, optional OAuth callback server, optional UI server, then enters the async event loop (`gateway_cmd.py:269-750`).
 5. **Init wizard**: sequential steps -- reset (optional), config create/refresh, symlinks, hooks, proxy, workspace+soul, providers, channels, web search, orchestration mode, daemon install (`init_cmd.py:199-426`).
 

@@ -470,7 +470,3 @@ class OpenAICompatProvider(LLMProvider):
 
     def get_default_model(self) -> str:
         return self._default_model
-
-
-# Backward-compatible alias
-CustomProvider = OpenAICompatProvider

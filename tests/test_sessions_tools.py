@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from src.agent.delegation.types import SubagentStatus, SubagentTaskRecord
 from src.agent.tools.context import ToolContext
 from src.agent.tools.sessions import (
     SessionsHistoryTool,
@@ -49,10 +49,29 @@ def bus() -> MessageBus:
 
 def _make_subagent_manager() -> MagicMock:
     mgr = MagicMock()
-    mgr.executor = None  # No executor — triggers legacy fallback path
-    mgr._running_tasks = {}
-    mgr._session_tasks = {}
+    mgr.executor = MagicMock()
+    mgr.executor.list_tasks.return_value = []
     return mgr
+
+
+def _subagent_record(
+    task_id: str,
+    *,
+    status: SubagentStatus,
+    root_session_key: str = "cli:direct",
+) -> SubagentTaskRecord:
+    return SubagentTaskRecord(
+        task_id=task_id,
+        task=task_id,
+        label=task_id,
+        role=None,
+        parent_task_id=None,
+        root_session_key=root_session_key,
+        depth=0,
+        origin_channel="cli",
+        origin_chat_id="direct",
+        status=status,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -347,16 +366,10 @@ class TestSubagentsListTool:
     @pytest.mark.asyncio
     async def test_with_running_tasks(self):
         mgr = _make_subagent_manager()
-
-        # Simulate running tasks
-        loop = asyncio.get_event_loop()
-        future1 = loop.create_future()
-        task1 = asyncio.ensure_future(future1)
-        future2 = loop.create_future()
-        task2 = asyncio.ensure_future(future2)
-
-        mgr._running_tasks = {"abc123": task1, "def456": task2}
-        mgr._session_tasks = {"cli:direct": {"abc123", "def456"}}
+        mgr.executor.list_tasks.return_value = [
+            _subagent_record("abc123", status=SubagentStatus.RUNNING),
+            _subagent_record("def456", status=SubagentStatus.RUNNING),
+        ]
 
         tool = SubagentsListTool(manager=mgr)
         result = json.loads(await tool.execute())
@@ -374,22 +387,12 @@ class TestSubagentsListTool:
 
         assert "cli:direct" in result["session_tasks"]
 
-        # Cleanup
-        future1.set_result(None)
-        future2.set_result(None)
-        await asyncio.gather(task1, task2, return_exceptions=True)
-
     @pytest.mark.asyncio
     async def test_with_done_task(self):
         mgr = _make_subagent_manager()
-
-        async def noop():
-            pass
-
-        task = asyncio.ensure_future(noop())
-        await task  # let it complete
-
-        mgr._running_tasks = {"done1": task}
+        mgr.executor.list_tasks.return_value = [
+            _subagent_record("done1", status=SubagentStatus.COMPLETED)
+        ]
 
         tool = SubagentsListTool(manager=mgr)
         result = json.loads(await tool.execute())
@@ -483,11 +486,7 @@ class TestRegistration:
 class TestSubagentsListToolExtended:
     @pytest.mark.asyncio
     async def test_with_executor_records(self):
-        from src.agent.delegation.types import SubagentStatus, SubagentTaskRecord
-
         mgr = MagicMock()
-        mgr._running_tasks = {}
-        mgr._session_tasks = {}
 
         executor = MagicMock()
         records = [

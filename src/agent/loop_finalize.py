@@ -1,8 +1,7 @@
 """Turn finalization for AgentLoop (composition object).
 
 Owns post-LLM processing: outbound safety scan, session save, structured
-memory persistence, dashboard updates, hooks, reflector, and response
-construction.
+memory persistence, dashboard updates, hooks, and response construction.
 """
 
 from __future__ import annotations
@@ -154,11 +153,9 @@ class TurnFinalizer:
         agent_id: str,
         t0: float,
         dashboard: Any | None,
-        reflector: Any | None,
         memory: Any,
         model: str,
         bus: Any,
-        pending_reflector_setter: Callable[[asyncio.Task | None], None],
         genver_last_handoff: Any | None,
         tools: Any,
         workspace: Path,
@@ -166,7 +163,7 @@ class TurnFinalizer:
         turn_id: str | None = None,
         persisted_user_message: bool = False,
     ) -> OutboundMessage | None:
-        """Post-LLM processing: safety scan, save, hooks, reflector, response."""
+        """Post-LLM processing: safety scan, save, hooks, and response."""
         import time as _time
 
         if final_content is None:
@@ -256,10 +253,8 @@ class TurnFinalizer:
             )
             asyncio.ensure_future(dashboard.emit_event(key, "agent_finished", agent_id=agent_id))
 
-        # Post-chat hook: fire-and-forget
-        # NOTE: reflector_active is kept for backward compat but is effectively
-        # meaningless now that Reflector no longer writes lessons (I6).
-        # Remove this flag once all downstream hooks stop reading it.
+        # Post-chat hook: fire-and-forget. The reflector_active payload field is
+        # kept for post-chat script compatibility; reflect.js ignores it.
         asyncio.create_task(
             self.hooks.run_post_chat(
                 key,
@@ -273,29 +268,11 @@ class TurnFinalizer:
                 routing_domains=routing_domains,
                 selected_primary=selected_primary,
                 workspace=task_workspace if run_genver else workspace,
-                reflector_active=reflector is not None,
+                reflector_active=False,
                 artifacts=post_chat_artifacts,
                 tests=post_chat_tests,
             )
         )
-
-        # LLM Reflector (deprecated for lesson writing — see I6).
-        # The reflect() call is now a no-op but kept for interface stability.
-        if reflector:
-            pending_reflector_setter(
-                asyncio.ensure_future(
-                    reflector.reflect(
-                        user_message=msg.content,
-                        response=final_content,
-                        tools_used=tools_used,
-                        usage=usage,
-                        duration_ms=_duration_ms,
-                        session_key=key,
-                        status=task_status,
-                        error=task_error,
-                    )
-                )
-            )
 
         if (
             (mt := tools.get("message"))

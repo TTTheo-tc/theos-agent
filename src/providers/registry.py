@@ -54,9 +54,6 @@ class ProviderSpec:
     # OAuth-based providers (e.g., OpenAI Codex) don't use API keys
     is_oauth: bool = False  # if True, uses OAuth flow instead of API key
 
-    # Direct providers use config credentials directly (e.g., CustomProvider)
-    is_direct: bool = False
-
     # Backend implementation: "anthropic" | "openai_compat" | "codex"
     backend: str = "openai_compat"
 
@@ -80,7 +77,6 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         env_key="",
         display_name="Custom",
         model_prefix="",
-        is_direct=True,
         backend="openai_compat",
     ),
     # === Gateways (detected by api_key / api_base, not model name) =========

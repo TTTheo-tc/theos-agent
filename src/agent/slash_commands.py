@@ -124,7 +124,7 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
     subcommand = parts[1].lower() if len(parts) > 1 else ""
 
     if subcommand == "single":
-        if loop.mode == "single" and not loop._is_genver:
+        if loop.mode == "single" and not loop.is_genver:
             return OutboundMessage(
                 channel=msg.channel,
                 chat_id=msg.chat_id,
@@ -238,7 +238,7 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
         return _genver_status_message(loop, msg)
 
     # Show current status or usage
-    if loop._is_genver:
+    if loop.is_genver:
         status = "Generator-Verifier mode"
     elif loop.mode == "team":
         role_lines = [f"  • {r}: {c.model}" for r, c in loop.roles.items()]

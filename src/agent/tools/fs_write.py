@@ -6,7 +6,7 @@ import difflib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 from src.agent.tools.tool_security import policy_error
 from src.utils.path import resolve_path as _resolve_path
 
@@ -14,10 +14,8 @@ if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
 
 
-class WriteFileTool(Tool):
+class WriteFileTool(ContextAwareTool):
     """Write content to a file, creating parent directories if needed."""
-
-    accepts_context = True
 
     # Per-session shared read-state, keyed by session_key.
     # Inner dict maps resolved file path → mtime at read time.

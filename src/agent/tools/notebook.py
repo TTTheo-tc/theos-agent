@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 from src.agent.tools.fs_write import WriteFileTool
 from src.agent.tools.tool_security import policy_error
 from src.utils.path import resolve_path as _resolve_path
@@ -15,10 +15,8 @@ if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
 
 
-class NotebookReadTool(Tool):
+class NotebookReadTool(ContextAwareTool):
     """Read all cells from a Jupyter notebook (.ipynb)."""
-
-    accepts_context = True
 
     def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
         self._workspace = workspace
@@ -112,10 +110,8 @@ class NotebookReadTool(Tool):
             return f"Error reading notebook: {str(e)}"
 
 
-class NotebookEditTool(Tool):
+class NotebookEditTool(ContextAwareTool):
     """Edit a specific cell in a Jupyter notebook (.ipynb)."""
-
-    accepts_context = True
 
     def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
         self._workspace = workspace

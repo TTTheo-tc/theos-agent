@@ -36,7 +36,7 @@ Adjacent but outside scope: `src/agent/loop_core.py` (shared tool loop), `src/ag
 | `prepare_genver_tools()` | `runner.py:23` | Build generator tool registry before a GenVer run |
 | `resolve_task_workspace()` | `workspace.py:167` | Derive project subdirectory from user request |
 
-Callers: `src/agent/loop.py` (AgentLoop) creates `GenVerLoop` or `GenVerPipeline` depending on config. `runner.py` is called from `AgentLoop._run_genver_loop`.
+Callers: `src/agent/loop.py` delegates GenVer turns to `GenVerHandler`, which prepares tools through `runner.py` and runs `GenVerPipeline`.
 
 ## Architecture
 

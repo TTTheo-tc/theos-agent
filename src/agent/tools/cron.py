@@ -2,17 +2,15 @@
 
 from typing import Any
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 from src.cron.service import CronService
 from src.cron.types import CronSchedule
 
 _MAX_JOBS = 50
 
 
-class CronTool(Tool):
+class CronTool(ContextAwareTool):
     """Tool to schedule reminders and recurring tasks."""
-
-    accepts_context = True
 
     @property
     def owner_only(self) -> bool:

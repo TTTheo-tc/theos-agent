@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool, Tool
 from src.session.runtime_state import build_session_runtime_state
 
 if TYPE_CHECKING:
@@ -274,10 +274,8 @@ class SessionsHistoryTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class SessionsSendTool(Tool):
+class SessionsSendTool(ContextAwareTool):
     """Send a message into another session via the message bus."""
-
-    accepts_context = True
 
     def __init__(self, bus: "MessageBus") -> None:
         self._bus = bus
@@ -371,10 +369,8 @@ class SessionsSendTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class SubagentsListTool(Tool):
+class SubagentsListTool(ContextAwareTool):
     """List currently active subagent tasks."""
-
-    accepts_context = True
 
     def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
@@ -397,54 +393,29 @@ class SubagentsListTool(Tool):
 
     async def execute(self, _context: Any = None, **kwargs: Any) -> str:
         executor = getattr(self._manager, "executor", None)
-        if executor is not None:
-            records = executor.list_tasks(context=_context)
-            running = sum(1 for r in records if not r.is_terminal)
-            tasks = []
-            session_map: dict[str, list[str]] = {}
-            for r in records:
-                tasks.append(
-                    {
-                        "task_id": r.task_id,
-                        "role": r.role,
-                        "status": r.status.value,
-                        "parent_task_id": r.parent_task_id,
-                        "depth": r.depth,
-                        "done": r.is_terminal,
-                        "cancelled": r.status.value == "cancelled",
-                        "has_result": r.result is not None,
-                    }
-                )
-                session_map.setdefault(r.root_session_key, []).append(r.task_id)
-            return json.dumps(
+        records = executor.list_tasks(context=_context) if executor is not None else []
+        running = sum(1 for r in records if not r.is_terminal)
+        tasks = []
+        session_map: dict[str, list[str]] = {}
+        for r in records:
+            tasks.append(
                 {
-                    "count": len(tasks),
-                    "running": running,
-                    "tasks": tasks,
-                    "session_tasks": session_map,
+                    "task_id": r.task_id,
+                    "role": r.role,
+                    "status": r.status.value,
+                    "parent_task_id": r.parent_task_id,
+                    "depth": r.depth,
+                    "done": r.is_terminal,
+                    "cancelled": r.status.value == "cancelled",
+                    "has_result": r.result is not None,
                 }
             )
-
-        # Legacy fallback
-        all_tasks = self._manager._running_tasks
-        entries = []
-        for tid, t in all_tasks.items():
-            entries.append(
-                {
-                    "task_id": tid,
-                    "done": t.done(),
-                    "cancelled": t.cancelled(),
-                }
-            )
-        running = sum(1 for e in entries if not e["done"])
-        session_map = {}
-        for sk, tids in self._manager._session_tasks.items():
-            session_map[sk] = list(tids)
+            session_map.setdefault(r.root_session_key, []).append(r.task_id)
         return json.dumps(
             {
-                "count": len(entries),
+                "count": len(tasks),
                 "running": running,
-                "tasks": entries,
+                "tasks": tasks,
                 "session_tasks": session_map,
             }
         )

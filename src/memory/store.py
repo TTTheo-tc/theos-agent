@@ -22,12 +22,7 @@ from loguru import logger
 from src.utils.helpers import ensure_dir
 
 if TYPE_CHECKING:
-    from src.config.schema import MemoryConfig
     from src.providers.base import LLMProvider
-
-
-# Rough token estimation: ~4 chars per token
-_CHARS_PER_TOKEN = 4
 
 
 class MemoryStore:
@@ -117,43 +112,6 @@ class MemoryStore:
 
         summary = " | ".join(snippets) if snippets else "No textual content captured."
         return f"[{timestamp}] Archived {len(messages)} messages. Summary: {summary}"
-
-    # DEPRECATED: consolidation moved to MemoryConsolidationService
-    # (see src/memory/consolidation.py)
-
-    # ------------------------------------------------------------------
-    # Context injection (Phase A: query-aware)
-    # DEPRECATED: retrieval policy now owned by MemoryRecallService.
-    # This method is kept for backward compatibility only.
-    # New callers should use MemoryRecallService.get_memory_context().
-    # ------------------------------------------------------------------
-
-    def get_memory_context(
-        self,
-        query: str | None = None,
-        memory_config: "MemoryConfig | None" = None,
-    ) -> str:
-        """Return memory context for system prompt injection.
-
-        .. deprecated::
-            Use ``MemoryRecallService.get_memory_context()`` instead.
-            This method is retained for backward compatibility only.
-        """
-        from src.memory.recall import MemoryRecallService
-        from src.memory.scope import MemoryScopeResolver
-
-        workspace = self.memory_dir.parent
-        scope = MemoryScopeResolver(
-            workspace=workspace,
-            groups_base_dir=workspace / "groups",
-            group_memory_enabled=False,
-        )
-        recall = MemoryRecallService(scope=scope, memory_config=memory_config)
-        return recall.get_memory_context(
-            query=query,
-            workspace=workspace,
-            memory_config=memory_config,
-        )
 
     # ------------------------------------------------------------------
     # Phase D: Compaction (emergency context overflow protection)

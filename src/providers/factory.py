@@ -56,7 +56,7 @@ def _resolve_spec_for_model(
         force_provider: If set and not "auto", use this provider name directly
             instead of auto-detecting from the model name. Used by make_provider()
             to respect config.agents.defaults.provider. Not used by
-            make_provider_for_model() so reflectors always auto-detect.
+            make_provider_for_model() so explicit model callers always auto-detect.
 
     Returns:
         (spec, provider_name) tuple. Either or both may be None if unresolved.
@@ -211,7 +211,7 @@ def make_provider(config: "Config") -> "LLMProvider":
 
 
 def make_provider_for_model(config: "Config", model: str) -> "LLMProvider":
-    """Create a provider for a specific model (e.g. reflector).
+    """Create a provider for a specific model.
 
     Always auto-detects provider from model name — never uses forced provider.
     Raises ValueError if no provider or API key is available.

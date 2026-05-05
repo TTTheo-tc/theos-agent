@@ -5,15 +5,13 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 
 if TYPE_CHECKING:
     from src.agent.delegation.executor import SubagentExecutor
 
 
-class SubagentWaitTool(Tool):
-    accepts_context = True
-
+class SubagentWaitTool(ContextAwareTool):
     def __init__(self, executor: SubagentExecutor):
         self._executor = executor
 

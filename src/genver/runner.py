@@ -1,7 +1,6 @@
 """GenVer runner helpers — tool registry preparation for GenVer mode.
 
-Extracted from AgentLoop._run_genver_loop to keep GenVer-specific
-tool wiring inside the genver package.
+Keeps GenVer-specific tool wiring inside the genver package.
 """
 
 from __future__ import annotations

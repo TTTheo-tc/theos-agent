@@ -235,13 +235,6 @@ class OrchestratorConfig(Base):
     cache_keepalive_threshold_s: int = 240  # Send keepalive if tool takes longer than this
 
 
-class ReflectorConfig(Base):
-    """LLM-powered post-task reflector configuration."""
-
-    enabled: bool = False
-    model: str = "minimax/MiniMax-M2.5"
-
-
 class LearningConfig(Base):
     """Optional learning, instinct, and dream subsystem."""
 
@@ -270,7 +263,6 @@ class AgentsConfig(Base):
     roles: dict[str, AgentRoleConfig] = Field(default_factory=dict)
     genver: GenVerConfig = Field(default_factory=GenVerConfig)
     orchestrator: OrchestratorConfig = Field(default_factory=OrchestratorConfig)
-    reflector: ReflectorConfig = Field(default_factory=ReflectorConfig)
     subagents: SubagentPolicyConfig = Field(default_factory=SubagentPolicyConfig)
 
 

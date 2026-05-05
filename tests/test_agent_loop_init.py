@@ -188,21 +188,18 @@ def test_channels_config_override(tmp_path: Path):
 
 
 def test_runtime_deps_injection(tmp_path: Path):
-    """session_manager, dashboard, reflector are set when passed."""
+    """session_manager and dashboard are set when passed."""
     mock_sm = MagicMock()
     mock_dash = MagicMock()
-    mock_refl = MagicMock()
 
     loop = _make_loop(
         tmp_path,
         session_manager=mock_sm,
         dashboard=mock_dash,
-        reflector=mock_refl,
     )
 
     assert loop.sessions is mock_sm
     assert loop.dashboard is mock_dash
-    assert loop.reflector is mock_refl
 
 
 # --- Test 5: sender_is_owner respected by _resolve_sender_is_owner ---

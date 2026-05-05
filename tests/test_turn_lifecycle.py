@@ -44,6 +44,7 @@ def _make_agent(bus: MessageBus | None = None, workspace: Path | None = None) ->
     agent.hooks.run_post_chat = AsyncMock()
     agent.workspace = workspace or Path("/tmp/test")
     agent._process_message = AsyncMock(return_value=_make_response())
+    agent.is_genver = False
     return agent
 
 
@@ -299,8 +300,6 @@ async def test_orchestrator_policy_concurrent_sessions():
 async def test_orchestrator_policy_success():
     """after_success transitions TaskRecord to APPROVED and cleans up _active."""
     agent = _make_agent()
-    agent.pop_genver_handoff = MagicMock(return_value=None)
-    agent._is_genver = False
 
     policy = OrchestratorPolicy(
         max_retries=3,

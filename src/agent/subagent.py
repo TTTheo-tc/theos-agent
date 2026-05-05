@@ -1,13 +1,7 @@
-"""Subagent manager for background task execution.
-
-SubagentManager is a thin facade that preserves the original public API
-while delegating actual execution to :class:`SubagentExecutor`.
-"""
+"""Subagent manager for background task execution."""
 
 from __future__ import annotations
 
-import asyncio
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,51 +9,13 @@ from loguru import logger
 
 from src.agent.delegation.executor import SubagentExecutor
 from src.agent.delegation.runtime import RuntimeRoleConfig
-from src.agent.delegation.types import SubagentTaskRecord
 from src.bus.queue import MessageBus
-from src.config.schema import ExecToolConfig, SubagentPolicyConfig
+from src.config.schema import SubagentPolicyConfig
 from src.providers.base import LLMProvider
 from src.session.subagent_store import SubagentStore
 
 if TYPE_CHECKING:
     from src.config.schema import AgentRoleConfig
-
-
-class _LegacyExecutor(SubagentExecutor):
-    """Executor subclass that announces results in the legacy format."""
-
-    async def _announce_top_level_result(self, record: SubagentTaskRecord) -> None:
-        if self._bus is None:
-            return
-
-        from src.bus.events import InboundMessage
-
-        status_text = "completed successfully" if record.result and not record.error else "failed"
-        result_body = record.result if record.result else (record.error or "No output.")
-
-        content = f"""[Subagent '{record.label}' {status_text}]
-
-Task: {record.task}
-
-Result:
-{result_body}
-
-Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not mention technical details like "subagent" or task IDs."""
-
-        msg = InboundMessage(
-            channel="system",
-            sender_id="subagent",
-            chat_id=f"{record.origin_channel}:{record.origin_chat_id}",
-            content=content,
-            session_key_override=record.root_session_key,
-        )
-        await self._bus.publish_inbound(msg)
-        logger.debug(
-            "Subagent [{}] announced result to {}:{}",
-            record.task_id,
-            record.origin_channel,
-            record.origin_chat_id,
-        )
 
 
 class SubagentManager:
@@ -72,50 +28,28 @@ class SubagentManager:
     def __init__(
         self,
         provider: LLMProvider,
-        workspace: Path,
+        workspace: Path | str,
         bus: MessageBus,
         model: str | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        brave_api_key: str | None = None,
-        web_search_provider: str = "duckduckgo",
-        tavily_api_key: str | None = None,
-        exec_config: "ExecToolConfig | None" = None,
-        restrict_to_workspace: bool = False,
         roles: "dict[str, AgentRoleConfig] | None" = None,
         policy: SubagentPolicyConfig | None = None,
     ):
         self.provider = provider
-        self.workspace = workspace
+        self.workspace = Path(workspace)
         self.bus = bus
         self.model = model or provider.get_default_model()
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.brave_api_key = brave_api_key
-        self.web_search_provider = web_search_provider
-        self.tavily_api_key = tavily_api_key
-        self.exec_config = exec_config or ExecToolConfig()
-        self.restrict_to_workspace = restrict_to_workspace
         self.roles = roles or {}
-        self.store: SubagentStore | None = None
-        if isinstance(workspace, (str, os.PathLike, Path)):
-            self.store = SubagentStore(Path(workspace))
-            interrupted = self.store.mark_interrupted_inflight()
-            if interrupted:
-                logger.warning("Marked {} in-flight subagent task(s) as interrupted", interrupted)
+        self.store = SubagentStore(self.workspace)
+        interrupted = self.store.mark_interrupted_inflight()
+        if interrupted:
+            logger.warning("Marked {} in-flight subagent task(s) as interrupted", interrupted)
 
-        # Legacy compat attrs — some tools/tests access these directly.
-        self._running_tasks: dict[str, asyncio.Task[None]] = {}
-        self._session_tasks: dict[str, set[str]] = {}  # session_key -> {task_id, ...}
-
-        # Executor uses _LegacyExecutor to preserve the original announcement
-        # format (channel="system", sender_id="subagent").
-        self.executor: SubagentExecutor = _LegacyExecutor(
+        self.executor = SubagentExecutor(
             policy=policy or SubagentPolicyConfig(),
             bus=bus,
             roles=self._resolve_all_roles(),
             provider=provider,
-            workspace=workspace,
+            workspace=self.workspace,
             subagent_manager=self,
             store=self.store,
         )
@@ -172,22 +106,6 @@ class SubagentManager:
 
         # Extract task_id from executor message ("Subagent started: task_id=sub-xxx, ...")
         task_id = result_msg.split("task_id=")[1].split(",")[0] if "task_id=" in result_msg else ""
-
-        # Maintain legacy compat dicts for SubagentsListTool / tests.
-        atask = self.executor._tasks.get(task_id)
-        if atask is not None:
-            self._running_tasks[task_id] = atask
-            if root_session:
-                self._session_tasks.setdefault(root_session, set()).add(task_id)
-
-            def _cleanup(_: asyncio.Task) -> None:
-                self._running_tasks.pop(task_id, None)
-                if root_session and (ids := self._session_tasks.get(root_session)):
-                    ids.discard(task_id)
-                    if not ids:
-                        del self._session_tasks[root_session]
-
-            atask.add_done_callback(_cleanup)
 
         logger.info("Agent [{}]: {}", task_id, display_label)
         parts = [f"Agent [{display_label}] started (id: {task_id})."]

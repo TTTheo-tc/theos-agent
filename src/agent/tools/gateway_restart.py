@@ -17,16 +17,14 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 
 _RESTART_DELAY_S = 3
 _NOTIFY_FILE = Path.home() / ".theos" / "restart-notify.json"
 
 
-class GatewayRestartTool(Tool):
+class GatewayRestartTool(ContextAwareTool):
     """Restart the gateway process safely with a delayed kill."""
-
-    accepts_context = True
 
     @property
     def name(self) -> str:

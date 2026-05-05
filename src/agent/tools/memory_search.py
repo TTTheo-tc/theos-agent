@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 
 if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
@@ -77,10 +77,8 @@ def _format_kg_results(kg_results: list[dict[str, Any]]) -> str:
     return "\n\n".join(lines)
 
 
-class MemorySearchTool(Tool):
+class MemorySearchTool(ContextAwareTool):
     """Search long-term memory, conversation history, and knowledge graph."""
-
-    accepts_context = True
 
     def __init__(
         self,
@@ -341,10 +339,8 @@ class MemorySearchTool(Tool):
         return "\n\n".join(results_parts)
 
 
-class MemoryGetTool(Tool):
+class MemoryGetTool(ContextAwareTool):
     """Retrieve a specific memory section by title."""
-
-    accepts_context = True
 
     def __init__(
         self,

@@ -2,16 +2,14 @@
 
 from typing import TYPE_CHECKING, Any
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 
 if TYPE_CHECKING:
     from src.agent.subagent import SubagentManager
 
 
-class AgentTool(Tool):
+class AgentTool(ContextAwareTool):
     """Launch a subagent to handle a task autonomously."""
-
-    accepts_context = True
 
     @property
     def owner_only(self) -> bool:
@@ -114,7 +112,3 @@ class AgentTool(Tool):
             depth=ctx.spawn_depth + 1,
             handoff=handoff,
         )
-
-
-# Backward-compatible alias
-SpawnTool = AgentTool

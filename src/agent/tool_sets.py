@@ -97,7 +97,9 @@ def register_standard_tools(
 
     # --- verifier: read-only fs + bash (autonomous verification agent) ---
     if mode == "verifier":
-        from src.agent.tools.filesystem import GlobTool, GrepTool, ListDirTool, ReadFileTool
+        from src.agent.tools.fs_list import ListDirTool
+        from src.agent.tools.fs_read import ReadFileTool
+        from src.agent.tools.fs_search import GlobTool, GrepTool
         from src.agent.tools.shell import ExecTool
 
         registry.register(ExecTool(working_dir=str(workspace), timeout=300))
@@ -109,18 +111,18 @@ def register_standard_tools(
 
     # --- filesystem tools ---
     if _should("read_file"):
-        from src.agent.tools.filesystem import ReadFileTool
+        from src.agent.tools.fs_read import ReadFileTool
 
         _reg(ReadFileTool(workspace=workspace, allowed_dir=allowed_dir))
 
     if is_team_mode:
         if _should("write_docs"):
-            from src.agent.tools.filesystem import DocWriteFileTool
+            from src.agent.tools.fs_write import DocWriteFileTool
 
             _reg(DocWriteFileTool(workspace=workspace, allowed_dir=allowed_dir))
     else:
         if _should("write_file"):
-            from src.agent.tools.filesystem import WriteFileTool
+            from src.agent.tools.fs_write import WriteFileTool
 
             _reg(
                 WriteFileTool(
@@ -130,7 +132,7 @@ def register_standard_tools(
                 )
             )
         if _should("edit_file"):
-            from src.agent.tools.filesystem import EditFileTool
+            from src.agent.tools.fs_edit import EditFileTool
 
             _reg(
                 EditFileTool(
@@ -141,20 +143,20 @@ def register_standard_tools(
             )
 
     if _should("list_dir"):
-        from src.agent.tools.filesystem import ListDirTool
+        from src.agent.tools.fs_list import ListDirTool
 
         _reg(ListDirTool(workspace=workspace, allowed_dir=allowed_dir))
     if _should("glob"):
-        from src.agent.tools.filesystem import GlobTool
+        from src.agent.tools.fs_search import GlobTool
 
         _reg(GlobTool(workspace=workspace, allowed_dir=allowed_dir))
     if _should("grep"):
-        from src.agent.tools.filesystem import GrepTool
+        from src.agent.tools.fs_search import GrepTool
 
         _reg(GrepTool(workspace=workspace, allowed_dir=allowed_dir))
 
     if not is_team_mode and _should("multi_edit"):
-        from src.agent.tools.filesystem import MultiEditTool
+        from src.agent.tools.fs_edit import MultiEditTool
 
         _reg(MultiEditTool(workspace=workspace, allowed_dir=allowed_dir))
 

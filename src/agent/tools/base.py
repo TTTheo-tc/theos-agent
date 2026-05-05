@@ -64,12 +64,8 @@ class Tool(ABC):
 
     @property
     def requires_context(self) -> bool:
-        """Whether this tool needs ToolContext injection.
-
-        Defaults to checking legacy `accepts_context` attribute for backward compat.
-        Override in subclasses to declare explicitly.
-        """
-        return getattr(self, "accepts_context", False)
+        """Whether this tool needs ToolContext injection."""
+        return False
 
     @property
     def parallel_safe(self) -> bool:
@@ -138,3 +134,11 @@ class Tool(ABC):
                 "parameters": self.parameters,
             },
         }
+
+
+class ContextAwareTool(Tool):
+    """Base class for tools that receive ToolContext as ``_context``."""
+
+    @property
+    def requires_context(self) -> bool:
+        return True

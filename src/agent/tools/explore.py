@@ -67,12 +67,9 @@ class ExploreTool(Tool):
     async def execute(self, task: str, **kwargs: Any) -> str:
         """Run the exploration sub-loop and return a workspace pointer."""
         from src.agent.loop_core import run_tool_loop
-        from src.agent.tools.filesystem import (
-            GlobTool,
-            GrepTool,
-            ListDirTool,
-            ReadFileTool,
-        )
+        from src.agent.tools.fs_list import ListDirTool
+        from src.agent.tools.fs_read import ReadFileTool
+        from src.agent.tools.fs_search import GlobTool, GrepTool
         from src.agent.tools.registry import ToolRegistry
 
         # Build read-only tool set

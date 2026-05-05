@@ -37,8 +37,8 @@ from src.memory.structured_models import (
     is_noise_response,
     is_research_hint,
     normalize_rule,
-    tokenize_query,
 )
+from src.utils.tokenize import tokenize_query
 
 
 @dataclass
@@ -607,32 +607,6 @@ class StructuredMemoryStore:
 
         current_primary = str(selected_primary or "").strip().lower()
         existing_primary = str(existing_meta.get("selected_primary") or "").strip().lower()
-        if current_primary and current_primary == existing_primary and overlap:
-            return True
-
-        current_domain = current_primary.split("/", 1)[0] if current_primary else ""
-        existing_domain = existing_primary.split("/", 1)[0] if existing_primary else ""
-        if current_domain and current_domain == existing_domain and len(overlap) >= 2:
-            return True
-
-        return len(overlap) >= 3
-
-    # -- _same_task_topic (legacy, kept for backward compat) ----------------
-
-    @staticmethod
-    def _same_task_topic(task: Any, existing: dict[str, Any]) -> bool:
-        """Check topic overlap -- accepts legacy TaskMemory or dict."""
-        task_refs = set(getattr(task, "source_refs", []) + getattr(task, "artifacts", []))
-        existing_refs = set(existing.get("source_refs", []) + existing.get("artifacts", []))
-        if task_refs and existing_refs and task_refs & existing_refs:
-            return True
-
-        current_terms = set(tokenize_query(getattr(task, "user_message", "")))
-        existing_terms = set(tokenize_query(str(existing.get("user_message", ""))))
-        overlap = current_terms & existing_terms
-
-        current_primary = str(getattr(task, "selected_primary", "") or "").strip().lower()
-        existing_primary = str(existing.get("selected_primary") or "").strip().lower()
         if current_primary and current_primary == existing_primary and overlap:
             return True
 

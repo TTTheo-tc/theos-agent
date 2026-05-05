@@ -336,30 +336,6 @@ def gateway(
     cron_store_path = get_data_dir() / "cron" / "jobs.json"
     cron = CronService(cron_store_path)
 
-    # Create reflector for post-task lesson generation
-    from src.hooks.reflector import Reflector
-
-    reflector_cfg = config.agents.reflector
-    reflector = None
-    if reflector_cfg.enabled:
-        from src.providers.factory import make_provider_for_model
-
-        try:
-            reflector_provider = make_provider_for_model(config, reflector_cfg.model)
-            reflector_model = reflector_cfg.model
-        except ValueError:
-            logger.warning(
-                "Reflector model '{}' has no API key, falling back to main model",
-                reflector_cfg.model,
-            )
-            reflector_provider = provider
-            reflector_model = config.agents.defaults.model
-        reflector = Reflector(
-            provider=reflector_provider,
-            model=reflector_model,
-            workspace=config.workspace_path,
-        )
-
     # Create agent with cron service
     agent = AgentLoop(
         bus=bus,
@@ -368,7 +344,6 @@ def gateway(
         cron_service=cron,
         session_manager=session_manager,
         dashboard=dashboard,
-        reflector=reflector,
     )
     _phase("agent created")
 
@@ -597,7 +572,6 @@ def gateway(
             heartbeat.stop()
             cron.stop()
             agent.stop()
-            await agent.drain_pending()
             if wait_outbound:
                 await channels.wait_outbound_idle(timeout=5.0)
             await channels.stop_all()

@@ -75,29 +75,6 @@ def agent(
     else:
         logger.remove()  # silence all loguru output
 
-    reflector_cfg = config.agents.reflector
-    reflector = None
-    if reflector_cfg.enabled:
-        from src.hooks.reflector import Reflector
-        from src.providers.factory import make_provider_for_model
-
-        # Create reflector for post-task lesson generation only when explicitly enabled.
-        try:
-            reflector_provider = make_provider_for_model(config, reflector_cfg.model)
-            reflector_model = reflector_cfg.model
-        except ValueError:
-            logger.warning(
-                "Reflector model '{}' has no API key, falling back to main model",
-                reflector_cfg.model,
-            )
-            reflector_provider = provider
-            reflector_model = config.agents.defaults.model
-        reflector = Reflector(
-            provider=reflector_provider,
-            model=reflector_model,
-            workspace=config.workspace_path,
-        )
-
     # CLI interactive mode: always show tool hints so user sees agent progress
     cli_channels = resolve_data_secret_refs(config.channels.model_copy())
     cli_channels.send_tool_hints = True
@@ -107,13 +84,12 @@ def agent(
         provider=provider,
         config=config,
         cron_service=cron,
-        reflector=reflector,
         channels_config_override=cli_channels,
     )
 
     # Subtle thinking indicator (like Claude Code)
     def _thinking_ctx():
-        if logs or agent_loop._is_genver:
+        if logs or agent_loop.is_genver:
             from contextlib import nullcontext
 
             return nullcontext()

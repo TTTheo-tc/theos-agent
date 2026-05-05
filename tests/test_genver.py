@@ -10,6 +10,7 @@ import pytest
 
 from src.agent.agentfs import AgentFS
 from src.agent.loop import AgentLoop
+from src.agent.tools.context import ToolContext
 from src.agent.tools.explore import ExploreTool
 from src.agent.tools.registry import ToolRegistry
 from src.bus.events import InboundMessage
@@ -489,8 +490,28 @@ async def test_agent_loop_passes_task_subdir_to_genver_loop(tmp_path: Path, monk
     monkeypatch.setattr("src.genver.pipeline.GenVerPipeline.run", _fake_run)
 
     try:
-        await loop._run_genver_loop(
-            [{"role": "user", "content": "帮我搭建一个金融模型，类似彭博社那种的"}]
+        msg = InboundMessage(
+            channel="cli",
+            sender_id="u1",
+            chat_id="chat1",
+            content="帮我搭建一个金融模型，类似彭博社那种的",
+        )
+        tool_ctx = ToolContext(
+            channel="cli",
+            chat_id="chat1",
+            session_key="cli:chat1",
+            sender_id="u1",
+            sender_is_owner=True,
+        )
+        ctx = loop._get_context_for_session("cli:chat1")
+        await loop._run_inference_inner(
+            msg,
+            [{"role": "user", "content": msg.content}],
+            None,
+            tool_ctx,
+            True,
+            "cli:chat1",
+            ctx,
         )
 
         assert captured["workspace"] != tmp_path / "finance"
@@ -712,7 +733,7 @@ async def test_genver_ask_user_publishes_to_current_channel_and_session(tmp_path
 
     try:
         task = asyncio.create_task(
-            loop._genver_ask_user(
+            loop._genver.ask_user(
                 "Need clarification",
                 channel="telegram",
                 chat_id="12345",
@@ -751,7 +772,7 @@ async def test_genver_ask_user_records_waiting_checkpoint_when_turn_id_present(t
 
     try:
         task = asyncio.create_task(
-            loop._genver_ask_user(
+            loop._genver.ask_user(
                 "Need clarification",
                 channel="telegram",
                 chat_id="12345",

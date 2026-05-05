@@ -1,6 +1,5 @@
-"""Hooks subsystem — lifecycle hook runner and post-task reflector."""
+"""Hooks subsystem — lifecycle hook runner."""
 
-from src.hooks.reflector import Reflector
 from src.hooks.runner import HookRunner
 
-__all__ = ["HookRunner", "Reflector"]
+__all__ = ["HookRunner"]

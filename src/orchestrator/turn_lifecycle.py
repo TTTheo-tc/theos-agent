@@ -1,8 +1,4 @@
-"""TurnLifecycle — unified dispatcher entry point for message processing.
-
-Replaces both ``_process_message_wrapper`` and ``Orchestrator.handle_message``
-with a single code path that supports pluggable execution policies.
-"""
+"""TurnLifecycle — unified dispatcher entry point for message processing."""
 
 from __future__ import annotations
 
@@ -28,8 +24,8 @@ class TurnLifecycle:
     Every message flows through ``handle_message`` which creates a ``TurnRecord``,
     runs policy hooks (before/after/retry), and publishes the response.
 
-    When no policies are installed, behaviour matches the old
-    ``_process_message_wrapper`` (always-on failed post-chat hook + error fallback).
+    When no policies are installed, failures still run the post-chat hook and
+    publish a fallback error response.
     """
 
     def __init__(
@@ -43,8 +39,7 @@ class TurnLifecycle:
     async def handle_message(self, msg: InboundMessage) -> None:
         """Single entry point for PerGroupDispatcher.
 
-        Replaces both ``_process_message_wrapper`` and
-        ``Orchestrator.handle_message``.
+        Runs message processing with optional policy hooks.
         """
         turn = TurnRecord(turn_id=uuid4().hex[:12], session_key=msg.session_key)
 
@@ -102,7 +97,7 @@ class TurnLifecycle:
     async def _run_failed_post_chat(
         self, turn: TurnRecord, msg: InboundMessage, exc: Exception
     ) -> None:
-        """Always-on failed hook path inherited from ``_process_message_wrapper``.
+        """Always-on failed hook path for the no-policy lifecycle.
 
         Only fires when no policies are installed — when policies are present,
         they own failure handling via ``after_failure``.

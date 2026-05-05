@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.providers.base import LLMResponse, StreamDelta, ToolCallRequest
-from src.providers.custom_provider import CustomProvider, OpenAICompatProvider
+from src.providers.custom_provider import OpenAICompatProvider
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,23 +67,6 @@ async def _make_async_iter(items: list[Any]):
     """Turn a list into an async iterator."""
     for item in items:
         yield item
-
-
-# ---------------------------------------------------------------------------
-# TestBackwardCompat
-# ---------------------------------------------------------------------------
-
-
-class TestBackwardCompat:
-    """CustomProvider is an alias for OpenAICompatProvider."""
-
-    def test_alias_identity(self):
-        assert CustomProvider is OpenAICompatProvider
-
-    def test_isinstance_both(self):
-        p = _make_provider()
-        assert isinstance(p, CustomProvider)
-        assert isinstance(p, OpenAICompatProvider)
 
 
 # ---------------------------------------------------------------------------

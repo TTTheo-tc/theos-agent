@@ -2,10 +2,9 @@
 
 import pytest
 
-from src.agent.tools.filesystem import DocWriteFileTool
 from src.agent.tools.fs_edit import EditFileTool
 from src.agent.tools.fs_read import ReadFileTool
-from src.agent.tools.fs_write import WriteFileTool
+from src.agent.tools.fs_write import DocWriteFileTool, WriteFileTool
 
 
 @pytest.fixture

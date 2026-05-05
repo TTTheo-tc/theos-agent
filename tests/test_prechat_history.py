@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.agent.loop import AgentLoop
+from src.agent.loop_context import TurnContextAssembler
 from src.bus.events import InboundMessage
 from src.bus.queue import MessageBus
 from src.config.schema import Config
@@ -27,25 +28,22 @@ def _make_loop(tmp_path: Path) -> AgentLoop:
 
 
 class TestPreChatHistory:
-    def test_extract_instinct_routing(self, tmp_path: Path) -> None:
-        loop = _make_loop(tmp_path)
-        domains, primary = loop._extract_instinct_routing(
+    def test_extract_instinct_routing(self) -> None:
+        domains, primary = TurnContextAssembler.extract_instinct_routing(
             "🧠 [Instinct] Domain routing activated.\n【脑干】core\n【finance/general】\nfoo\n【paper/reading】"
         )
 
         assert domains == ["finance/general", "paper/reading"]
         assert primary == "finance/general"
 
-    def test_extract_instinct_skills(self, tmp_path: Path) -> None:
-        loop = _make_loop(tmp_path)
-        skills = loop._extract_instinct_skills(
+    def test_extract_instinct_skills(self) -> None:
+        skills = TurnContextAssembler.extract_instinct_skills(
             "推荐 Skills（按需 read_file 加载 SKILL.md）:\n  - summarize: fetch URLs\n  → read: /tmp/x\n  - reference: clone repo"
         )
 
         assert skills == ["summarize", "reference"]
 
-    def test_extract_instinct_routing_prefers_structured_sidecar(self, tmp_path: Path) -> None:
-        loop = _make_loop(tmp_path)
+    def test_extract_instinct_routing_prefers_structured_sidecar(self) -> None:
         hook_ctx = (
             "🧠 [Instinct] Domain routing activated.\n"
             "【finance/general】\n"
@@ -53,13 +51,12 @@ class TestPreChatHistory:
             '"skills":["systematic-debugging"],"selected_primary":"coding/general"} -->'
         )
 
-        domains, primary = loop._extract_instinct_routing(hook_ctx)
+        domains, primary = TurnContextAssembler.extract_instinct_routing(hook_ctx)
 
         assert domains == ["coding/general", "paper/reading"]
         assert primary == "coding/general"
 
-    def test_extract_instinct_skills_prefers_structured_sidecar(self, tmp_path: Path) -> None:
-        loop = _make_loop(tmp_path)
+    def test_extract_instinct_skills_prefers_structured_sidecar(self) -> None:
         hook_ctx = (
             "推荐 Skills（按需 read_file 加载 SKILL.md）:\n"
             "  - summarize: fetch URLs\n"
@@ -68,7 +65,7 @@ class TestPreChatHistory:
             '"selected_primary":"coding/general"} -->'
         )
 
-        skills = loop._extract_instinct_skills(hook_ctx)
+        skills = TurnContextAssembler.extract_instinct_skills(hook_ctx)
 
         assert skills == ["systematic-debugging", "writing-plans"]
 
@@ -161,7 +158,13 @@ class TestPreChatHistory:
             }
         ]
 
-        loop._save_turn(session, messages, skip=0, user_message="hello")
+        loop._finalizer.save_turn(
+            session,
+            messages,
+            skip=0,
+            user_message="hello",
+            memory_tiers=loop._memory.tiers_or_none(),
+        )
 
         persisted = session.messages[-1]["tool_calls"][0]["function"]["arguments"]
         assert json.loads(persisted) == {"_note": "tool arguments too large to include"}

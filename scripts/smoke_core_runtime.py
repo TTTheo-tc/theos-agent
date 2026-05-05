@@ -105,7 +105,6 @@ OPTIONAL_RUNTIME_MODULES = {
     "src.dream.runner",
     "src.feishu.client",
     "src.genver.pipeline",
-    "src.hooks.reflector",
     "src.poller.service",
     "src.ui.server",
 }

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, Callable
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 from src.memory.structured import StructuredMemoryStore
 
 if TYPE_CHECKING:
@@ -14,10 +14,8 @@ if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
 
 
-class StructuredMemorySearchTool(Tool):
+class StructuredMemorySearchTool(ContextAwareTool):
     """Search structured task, rule, and research-note objects."""
-
-    accepts_context = True
 
     def __init__(
         self,
@@ -134,10 +132,8 @@ class StructuredMemorySearchTool(Tool):
         return "\n\n".join(lines)
 
 
-class ResearchNoteGetTool(Tool):
+class ResearchNoteGetTool(ContextAwareTool):
     """Retrieve a structured research note by ID."""
-
-    accepts_context = True
 
     def __init__(self, *, workspace_resolver: Callable[[str | None], "Path"] | None = None) -> None:
         self._workspace_resolver = workspace_resolver
@@ -191,10 +187,8 @@ class ResearchNoteGetTool(Tool):
         return json.dumps(note, ensure_ascii=False, indent=2)
 
 
-class TaskMemoryGetTool(Tool):
+class TaskMemoryGetTool(ContextAwareTool):
     """Retrieve a structured task memory by ID."""
-
-    accepts_context = True
 
     def __init__(self, *, workspace_resolver: Callable[[str | None], "Path"] | None = None) -> None:
         self._workspace_resolver = workspace_resolver
@@ -248,10 +242,8 @@ class TaskMemoryGetTool(Tool):
         return json.dumps(task, ensure_ascii=False, indent=2)
 
 
-class DomainRuleGetTool(Tool):
+class DomainRuleGetTool(ContextAwareTool):
     """Retrieve a structured domain rule by ID."""
-
-    accepts_context = True
 
     def __init__(
         self,

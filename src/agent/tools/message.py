@@ -2,14 +2,12 @@
 
 from typing import Any, Awaitable, Callable
 
-from src.agent.tools.base import Tool
+from src.agent.tools.base import ContextAwareTool
 from src.bus.events import OutboundMessage
 
 
-class MessageTool(Tool):
+class MessageTool(ContextAwareTool):
     """Tool to send messages to users on chat channels."""
-
-    accepts_context = True
 
     @property
     def owner_only(self) -> bool:

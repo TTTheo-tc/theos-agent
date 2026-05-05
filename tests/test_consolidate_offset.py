@@ -137,7 +137,7 @@ class TestSessionImmutableHistory:
         session.add_message("user", "我该怎么使用我的飞书呢？")
         session.add_message("assistant", "需要飞书开放平台的应用凭据。")
 
-        history = session.get_history(max_messages=10, current_message="今天美股什么形式呢？")
+        history = session.get_history(max_messages=10)
 
         assert len(history) == 4  # all turns preserved
 
@@ -147,7 +147,7 @@ class TestSessionImmutableHistory:
         session.add_message("user", "你能在我的日历里添加吗？")
         session.add_message("assistant", "我现在不能直接写入系统日历。")
 
-        history = session.get_history(max_messages=10, current_message="你是缺少什么权限呢？")
+        history = session.get_history(max_messages=10)
 
         assert len(history) == 2
         assert history[0]["role"] == "user"
