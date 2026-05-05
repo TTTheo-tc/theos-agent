@@ -1,12 +1,14 @@
 """Async message queue for decoupled channel-agent communication."""
 
 import asyncio
+from typing import TypeVar
 
 from loguru import logger
 
 from src.bus.events import InboundMessage, OutboundMessage
 
 _MAX_QUEUE_SIZE = 1000
+T = TypeVar("T")
 
 
 class MessageBus:
@@ -18,15 +20,7 @@ class MessageBus:
 
     async def publish_inbound(self, msg: InboundMessage) -> None:
         """Publish a message from a channel to the agent."""
-        try:
-            self.inbound.put_nowait(msg)
-        except asyncio.QueueFull:
-            logger.warning("Inbound queue full ({}), dropping oldest message", self.inbound.qsize())
-            try:
-                self.inbound.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            await self.inbound.put(msg)
+        await self._publish_with_drop_oldest(self.inbound, msg, "Inbound")
 
     async def consume_inbound(self) -> InboundMessage:
         """Consume the next inbound message (blocks until available)."""
@@ -34,17 +28,27 @@ class MessageBus:
 
     async def publish_outbound(self, msg: OutboundMessage) -> None:
         """Publish a response from the agent to channels."""
+        await self._publish_with_drop_oldest(self.outbound, msg, "Outbound")
+
+    async def _publish_with_drop_oldest(
+        self,
+        queue: asyncio.Queue[T],
+        msg: T,
+        label: str,
+    ) -> None:
         try:
-            self.outbound.put_nowait(msg)
+            queue.put_nowait(msg)
         except asyncio.QueueFull:
-            logger.warning(
-                "Outbound queue full ({}), dropping oldest message", self.outbound.qsize()
-            )
-            try:
-                self.outbound.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            await self.outbound.put(msg)
+            logger.warning("{} queue full ({}), dropping oldest message", label, queue.qsize())
+            self._drop_oldest(queue)
+            await queue.put(msg)
+
+    @staticmethod
+    def _drop_oldest(queue: asyncio.Queue[T]) -> None:
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
 
     async def consume_outbound(self) -> OutboundMessage:
         """Consume the next outbound message (blocks until available)."""
