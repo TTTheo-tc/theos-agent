@@ -10,6 +10,9 @@ import pytest
 from src.feishu.api_sheets import (
     _build_range_str,
     _escape_md_cell,
+    _raw_get,
+    _raw_post,
+    _raw_put,
     append_sheet_values,
     get_sheet_metadata,
     parse_sheet_url,
@@ -178,6 +181,59 @@ class TestReadSheetValues:
         req_obj = call_args[0][0]
         assert "sheet1" in req_obj.uri
         assert "!" not in req_obj.uri
+
+
+@patch("src.feishu.api_sheets.ctx_current_token")
+class TestRawRequest:
+    def test_raw_get_uses_tenant_token_without_user_token(self, mock_ctx):
+        import lark_oapi as lark
+
+        mock_ctx.get.return_value = None
+        client = _mock_client_response({"ok": True})
+
+        with patch("src.feishu.api_sheets._request_option", return_value=None):
+            result = _raw_get(client, "/uri")
+
+        req_obj = client.request.call_args.args[0]
+        assert result == {"ok": True}
+        assert req_obj.http_method == lark.HttpMethod.GET
+        assert req_obj.token_types == {lark.AccessTokenType.TENANT}
+        assert len(client.request.call_args.args) == 1
+
+    def test_raw_get_passes_request_option_and_user_token_type(self, mock_ctx):
+        import lark_oapi as lark
+
+        mock_ctx.get.return_value = "user-token"
+        client = _mock_client_response({"ok": True})
+        option = object()
+
+        with patch("src.feishu.api_sheets._request_option", return_value=option):
+            _raw_get(client, "/uri")
+
+        req_obj = client.request.call_args.args[0]
+        assert req_obj.token_types == {lark.AccessTokenType.USER}
+        assert client.request.call_args.args[1] is option
+
+    def test_raw_write_wrappers_set_method_uri_and_body(self, mock_ctx):
+        import lark_oapi as lark
+
+        mock_ctx.get.return_value = None
+        put_client = _mock_client_response({"updatedCells": 1})
+        post_client = _mock_client_response({"tableRange": "s1!A1:B2"})
+        body = {"valueRange": {"range": "s1!A1:B1", "values": [["a", "b"]]}}
+
+        with patch("src.feishu.api_sheets._request_option", return_value=None):
+            _raw_put(put_client, "/put-uri", body)
+            _raw_post(post_client, "/post-uri", body)
+
+        put_req = put_client.request.call_args.args[0]
+        post_req = post_client.request.call_args.args[0]
+        assert put_req.http_method == lark.HttpMethod.PUT
+        assert put_req.uri == "/put-uri"
+        assert put_req.body is body
+        assert post_req.http_method == lark.HttpMethod.POST
+        assert post_req.uri == "/post-uri"
+        assert post_req.body is body
 
 
 @patch("src.feishu.api_sheets._request_option", return_value=None)

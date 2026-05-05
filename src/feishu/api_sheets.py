@@ -20,42 +20,33 @@ from src.feishu.retry import with_retry
 
 def _raw_get(client: lark.Client, uri: str) -> dict:
     """Issue a raw GET and return the ``data`` dict from the JSON response."""
-    req = lark.BaseRequest()
-    req.http_method = lark.HttpMethod.GET
-    req.uri = uri
-    token = ctx_current_token.get()
-    req.token_types = {lark.AccessTokenType.USER} if token else {lark.AccessTokenType.TENANT}
-    option = _request_option()
-    response = client.request(req, option) if option else client.request(req)
-    _check(response, f"GET {uri}")
-    return json.loads(response.raw.content).get("data", {})
+    return _raw_request(client, lark.HttpMethod.GET, "GET", uri)
 
 
 def _raw_put(client: lark.Client, uri: str, body: dict) -> dict:
     """Issue a raw PUT with JSON body and return the ``data`` dict."""
-    req = lark.BaseRequest()
-    req.http_method = lark.HttpMethod.PUT
-    req.uri = uri
-    req.body = body
-    token = ctx_current_token.get()
-    req.token_types = {lark.AccessTokenType.USER} if token else {lark.AccessTokenType.TENANT}
-    option = _request_option()
-    response = client.request(req, option) if option else client.request(req)
-    _check(response, f"PUT {uri}")
-    return json.loads(response.raw.content).get("data", {})
+    return _raw_request(client, lark.HttpMethod.PUT, "PUT", uri, body=body)
 
 
 def _raw_post(client: lark.Client, uri: str, body: dict) -> dict:
     """Issue a raw POST with JSON body and return the ``data`` dict."""
+    return _raw_request(client, lark.HttpMethod.POST, "POST", uri, body=body)
+
+
+def _raw_request(
+    client: lark.Client, method, action_method: str, uri: str, body: dict | None = None
+) -> dict:
+    """Issue a raw sheets request and return the ``data`` dict."""
     req = lark.BaseRequest()
-    req.http_method = lark.HttpMethod.POST
+    req.http_method = method
     req.uri = uri
-    req.body = body
+    if body is not None:
+        req.body = body
     token = ctx_current_token.get()
     req.token_types = {lark.AccessTokenType.USER} if token else {lark.AccessTokenType.TENANT}
     option = _request_option()
-    response = client.request(req, option) if option else client.request(req)
-    _check(response, f"POST {uri}")
+    response = client.request(req, option) if option is not None else client.request(req)
+    _check(response, f"{action_method} {uri}")
     return json.loads(response.raw.content).get("data", {})
 
 
