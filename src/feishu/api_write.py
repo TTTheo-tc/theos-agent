@@ -1567,6 +1567,28 @@ def _patch_block_with_retry(
     raise AssertionError(msg)
 
 
+def _with_document_revision(key: str, value: dict) -> dict:
+    return {
+        key: value,
+        "document_revision_id": -1,
+    }
+
+
+_TABLE_OPERATION_FIELDS: dict[str, tuple[str, ...]] = {
+    "insert_table_row": ("row_index",),
+    "delete_table_rows": ("row_start_index", "row_end_index"),
+    "insert_table_column": ("column_index",),
+    "delete_table_columns": ("column_start_index", "column_end_index"),
+    "merge_table_cells": (
+        "row_start_index",
+        "row_end_index",
+        "column_start_index",
+        "column_end_index",
+    ),
+    "unmerge_table_cells": ("row_index", "column_index"),
+}
+
+
 def update_block_text(
     document_id: str,
     block_id: str,
@@ -1586,12 +1608,12 @@ def update_block_text(
     Returns:
         Updated block dict.
     """
-    body: dict = {
-        "update_text_elements": {
+    body: dict = _with_document_revision(
+        "update_text_elements",
+        {
             "elements": elements,
         },
-        "document_revision_id": -1,
-    }
+    )
     if client_token:
         body["client_token"] = client_token
     return _patch_block_with_retry(document_id, block_id, body)
@@ -1625,36 +1647,13 @@ def update_table(
     Returns:
         API response data dict.
     """
-    op_body: dict = {}
-    if operation == "insert_table_row":
-        op_body["insert_table_row"] = {"row_index": params["row_index"]}
-    elif operation == "delete_table_rows":
-        op_body["delete_table_rows"] = {
-            "row_start_index": params["row_start_index"],
-            "row_end_index": params["row_end_index"],
-        }
-    elif operation == "insert_table_column":
-        op_body["insert_table_column"] = {"column_index": params["column_index"]}
-    elif operation == "delete_table_columns":
-        op_body["delete_table_columns"] = {
-            "column_start_index": params["column_start_index"],
-            "column_end_index": params["column_end_index"],
-        }
-    elif operation == "merge_table_cells":
-        op_body["merge_table_cells"] = {
-            "row_start_index": params["row_start_index"],
-            "row_end_index": params["row_end_index"],
-            "column_start_index": params["column_start_index"],
-            "column_end_index": params["column_end_index"],
-        }
-    elif operation == "unmerge_table_cells":
-        op_body["unmerge_table_cells"] = {
-            "row_index": params["row_index"],
-            "column_index": params["column_index"],
-        }
-    else:
+    fields = _TABLE_OPERATION_FIELDS.get(operation)
+    if fields is None:
         msg = f"unsupported table operation: {operation}"
         raise ValueError(msg)
 
-    op_body["document_revision_id"] = -1
+    op_body = _with_document_revision(
+        operation,
+        {field: params[field] for field in fields},
+    )
     return _patch_block_with_retry(document_id, table_block_id, op_body)
