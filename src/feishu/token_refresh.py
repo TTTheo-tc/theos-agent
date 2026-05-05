@@ -154,31 +154,25 @@ def handle_token_refresh_event(config, bus=None) -> str:
 
 def _send_reauth_warning(config, bus, days_remaining: float) -> None:
     """Send a warning to the owner that refresh_token is expiring soon."""
-    import asyncio
-
-    from src.bus.events import OutboundMessage
-
-    owner = config.channels.owner_ids[0] if config.channels.owner_ids else None
-    if not owner:
-        return
-
     msg = (
         f"⚠️ 飞书 refresh_token 将在 {days_remaining:.1f} 天后过期。\n"
         "请尽快重新授权，否则到期后飞书工具将不可用。\n\n"
         "回复「授权飞书」或使用 feishu_auth 工具重新授权。"
     )
-
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            bus.publish_outbound(OutboundMessage(channel="feishu", chat_id=owner, content=msg))
-        )
-    except RuntimeError:
-        logger.warning("Cannot send re-auth warning: no running event loop")
+    _send_reauth_message(config, bus, msg, "re-auth warning")
 
 
 def _send_reauth_expired(config, bus) -> None:
     """Notify the owner that the refresh_token has expired."""
+    msg = (
+        "❌ 飞书 refresh_token 已过期，飞书工具暂时不可用。\n"
+        "请重新授权：回复「授权飞书」或使用 feishu_auth 工具。"
+    )
+    _send_reauth_message(config, bus, msg, "re-auth expired notification")
+
+
+def _send_reauth_message(config, bus, msg: str, log_label: str) -> None:
+    """Publish a Feishu re-auth message to the configured owner, if available."""
     import asyncio
 
     from src.bus.events import OutboundMessage
@@ -187,15 +181,10 @@ def _send_reauth_expired(config, bus) -> None:
     if not owner:
         return
 
-    msg = (
-        "❌ 飞书 refresh_token 已过期，飞书工具暂时不可用。\n"
-        "请重新授权：回复「授权飞书」或使用 feishu_auth 工具。"
-    )
-
     try:
         loop = asyncio.get_running_loop()
         loop.create_task(
             bus.publish_outbound(OutboundMessage(channel="feishu", chat_id=owner, content=msg))
         )
     except RuntimeError:
-        logger.warning("Cannot send re-auth expired notification: no running event loop")
+        logger.warning("Cannot send {}: no running event loop", log_label)
