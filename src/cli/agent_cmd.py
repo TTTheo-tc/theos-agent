@@ -23,6 +23,7 @@ from src.cli.repl import (
     restore_terminal,
 )
 from src.utils.helpers import sync_workspace_templates
+from src.utils.usage import merge_usage
 
 
 def _profile_allows_tool(profile: str | None, tool_name: str) -> bool:
@@ -186,7 +187,19 @@ def agent(
             wizard_active.set()  # cleared while wizard is running
             turn_response: list[str] = []
             turn_usage: list[dict] = []
+            session_usage: dict[str, int] = {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
             turn_streamed = False  # True if streaming deltas were printed this turn
+
+            def _print_turn_usage() -> None:
+                if not turn_usage:
+                    return
+                usage = turn_usage[-1]
+                merge_usage(session_usage, usage)
+                print_token_usage(usage, session_usage=session_usage)
 
             async def _consume_outbound():
                 nonlocal turn_streamed
@@ -333,10 +346,12 @@ def agent(
                             # Streaming already printed the content inline;
                             # just add a newline to end the stream block.
                             console.print()
+                            _print_turn_usage()
                         elif turn_response:
                             print_agent_response(turn_response[0], render_markdown=markdown)
-                            if turn_usage:
-                                print_token_usage(turn_usage[0])
+                            _print_turn_usage()
+                        else:
+                            _print_turn_usage()
                     except KeyboardInterrupt:
                         restore_terminal()
                         console.print("\nGoodbye!")

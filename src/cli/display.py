@@ -213,22 +213,59 @@ def print_agent_response(response: str, render_markdown: bool) -> None:
     console.print(body)
 
 
-def print_token_usage(usage: dict[str, int] | None) -> None:
-    """Display token usage in a compact line, Claude Code style."""
+def _format_token_count(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}k"
+    return str(n)
+
+
+def _usage_counts(usage: dict | None) -> tuple[int, int, int]:
     if not usage:
-        return
-    prompt = usage.get("prompt_tokens", 0)
-    completion = usage.get("completion_tokens", 0)
+        return 0, 0, 0
+    prompt = usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0
+    completion = usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0
     total = usage.get("total_tokens", 0) or (prompt + completion)
+    return int(prompt), int(completion), int(total)
 
-    def _fmt(n: int) -> str:
-        if n >= 1_000_000:
-            return f"{n / 1_000_000:.1f}M"
-        if n >= 1_000:
-            return f"{n / 1_000:.1f}k"
-        return str(n)
 
-    console.print(f"\n[dim]{_fmt(prompt)} → {_fmt(completion)} tokens (total: {_fmt(total)})[/dim]")
+def format_token_usage_line(usage: dict | None, session_usage: dict | None = None) -> str | None:
+    """Return a compact token usage summary for one CLI turn."""
+    prompt, completion, total = _usage_counts(usage)
+    if prompt <= 0 and completion <= 0 and total <= 0:
+        return None
+
+    parts = [
+        f"in {_format_token_count(prompt)}",
+        f"out {_format_token_count(completion)}",
+    ]
+    if usage:
+        cache_read = usage.get("cache_read_input_tokens", 0) or 0
+        cache_write = usage.get("cache_creation_input_tokens", 0) or 0
+        if cache_read or cache_write:
+            parts.append(
+                f"cache {_format_token_count(cache_read)} read/{_format_token_count(cache_write)} write"
+            )
+    parts.append(f"turn {_format_token_count(total)}")
+
+    session_total = _usage_counts(session_usage)[2]
+    if session_total > 0:
+        parts.append(f"session {_format_token_count(session_total)}")
+    return "usage │ " + " │ ".join(parts)
+
+
+def print_token_usage(usage: dict | None, session_usage: dict | None = None) -> None:
+    """Display token usage in a compact line, Claude Code style."""
+    line = format_token_usage_line(usage, session_usage=session_usage)
+    if not line:
+        return
+
+    label, _, rest = line.partition(" │ ")
+    console.print(
+        f"\n[dim {THEOS_MUTED}]╰─[/] [bold {THEOS_ACCENT}]{label}[/] "
+        f"[dim]│ {rest}[/dim]"
+    )
 
     # Per-role breakdown for GenVer mode
     breakdown = usage.get("_breakdown")
@@ -240,6 +277,8 @@ def print_token_usage(usage: dict[str, int] | None) -> None:
             rp = info.get("prompt_tokens", 0)
             rc = info.get("completion_tokens", 0)
             if rp or rc:
-                parts.append(f"{label} {model}: {_fmt(rp)} → {_fmt(rc)}")
+                parts.append(
+                    f"{label} {model}: {_format_token_count(rp)} → {_format_token_count(rc)}"
+                )
         if parts:
             console.print(f"[dim]  {'  '.join(parts)}[/dim]")

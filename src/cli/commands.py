@@ -12,6 +12,8 @@ Registers all Typer commands. Heavy implementations live in sub-modules:
 - repl.py        — terminal / prompt_toolkit helpers
 """
 
+import warnings
+
 import typer
 from rich.markup import escape
 
@@ -23,6 +25,12 @@ from src.cli.display import (
     make_status_row,
     print_cli_home,
     print_status_header,
+)
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"urllib3 .* doesn't match a supported version!",
+    module=r"requests",
 )
 
 app = typer.Typer(
