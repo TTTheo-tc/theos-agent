@@ -289,7 +289,7 @@ def add_comment(
         body["reply_id"] = reply_id
 
     uri = f"/open-apis/drive/v1/files/{file_token}/comments"
-    return _raw_comment_request(client, lark.HttpMethod.POST, uri, "add_comment", body=body)
+    return _raw_request(client, lark.HttpMethod.POST, uri, "add_comment", body=body)
 
 
 def resolve_comment(
@@ -321,7 +321,7 @@ def resolve_comment(
     }
 
     uri = f"/open-apis/drive/v1/files/{file_token}/comments/{comment_id}"
-    return _raw_comment_request(client, lark.HttpMethod.PATCH, uri, "resolve_comment", body=body)
+    return _raw_request(client, lark.HttpMethod.PATCH, uri, "resolve_comment", body=body)
 
 
 def delete_comment(
@@ -346,7 +346,7 @@ def delete_comment(
     _rate_limiter.wait()
 
     uri = f"/open-apis/drive/v1/files/{file_token}/comments/{comment_id}"
-    _raw_comment_request(
+    _raw_request(
         client,
         lark.HttpMethod.DELETE,
         uri,
@@ -356,7 +356,7 @@ def delete_comment(
     return True
 
 
-def _raw_comment_request(
+def _raw_request(
     client: lark.Client,
     method,
     uri: str,
@@ -580,11 +580,7 @@ def create_wiki_node(
         .build()
     )
 
-    response = (
-        client.wiki.v2.space_node.create(request, option)
-        if option
-        else client.wiki.v2.space_node.create(request)
-    )
+    response = _call_with_option(client.wiki.v2.space_node.create, request, option)
     _check(response, "create_wiki_node")
     return _unmarshal(response.data.node)
 
@@ -636,11 +632,7 @@ def create_descendant_blocks(
         .build()
     )
 
-    response = (
-        client.docx.v1.document_block_descendant.create(request, option)
-        if option
-        else client.docx.v1.document_block_descendant.create(request)
-    )
+    response = _call_with_option(client.docx.v1.document_block_descendant.create, request, option)
     _check(response, "create_descendant_blocks")
     return _unmarshal(response.data)
 
@@ -735,11 +727,7 @@ def create_block_children(
         .build()
     )
 
-    response = (
-        client.docx.v1.document_block_children.create(request, option)
-        if option
-        else client.docx.v1.document_block_children.create(request)
-    )
+    response = _call_with_option(client.docx.v1.document_block_children.create, request, option)
     _check(response, "create_block_children")
     return _unmarshal(response.data)
 
@@ -783,10 +771,8 @@ def delete_blocks(
         .build()
     )
 
-    response = (
-        client.docx.v1.document_block_children.batch_delete(request, option)
-        if option
-        else client.docx.v1.document_block_children.batch_delete(request)
+    response = _call_with_option(
+        client.docx.v1.document_block_children.batch_delete, request, option
     )
     _check(response, "delete_blocks")
     return _unmarshal(response.data)
@@ -918,23 +904,8 @@ def delete_wiki_node(
     """
     _rate_limiter.wait()
 
-    req = lark.BaseRequest()
-    req.http_method = lark.HttpMethod.DELETE
-    req.uri = f"/open-apis/wiki/v2/spaces/{space_id}/nodes/{node_token}"
-
-    token = ctx_current_token.get()
-    if token:
-        req.token_types = {lark.AccessTokenType.USER}
-    else:
-        req.token_types = {lark.AccessTokenType.TENANT}
-
-    option = _request_option()
-    response = client.request(req, option) if option else client.request(req)
-    _check(response, "delete_wiki_node")
-
-    raw = response.raw.content
-    data = json.loads(raw).get("data", {}) if raw else {}
-    return data
+    uri = f"/open-apis/wiki/v2/spaces/{space_id}/nodes/{node_token}"
+    return _raw_request(client, lark.HttpMethod.DELETE, uri, "delete_wiki_node")
 
 
 # ---------------------------------------------------------------------------
