@@ -145,6 +145,31 @@ async def test_collect_with_time_filter(db_with_events: Database):
     assert m["failed"] == 0
 
 
+async def test_collect_with_until_filter(db_with_events: Database):
+    collector = MetricsCollector(db_with_events)
+    until = datetime(2025, 6, 1, 10, 30, 0)
+    m = await collector.collect(until=until)
+
+    assert m["total_tasks"] == 1
+    assert m["completed"] == 1
+    assert m["failed"] == 0
+    assert m["sessions_active"] == 1
+
+
+async def test_collect_with_since_and_until_filter(db_with_events: Database):
+    collector = MetricsCollector(db_with_events)
+    m = await collector.collect(
+        since=datetime(2025, 6, 1, 10, 30, 0),
+        until=datetime(2025, 6, 1, 11, 30, 0),
+    )
+
+    assert m["total_tasks"] == 1
+    assert m["completed"] == 0
+    assert m["failed"] == 1
+    assert m["retried"] == 1
+    assert m["events_by_type"] == {"created": 1, "transition": 3}
+
+
 async def test_daily(db_with_events: Database):
     collector = MetricsCollector(db_with_events)
     m = await collector.daily(date=datetime(2025, 6, 1))

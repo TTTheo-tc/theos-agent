@@ -42,35 +42,16 @@ class MetricsCollector:
         where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
         # Total unique tasks
-        row = await self._db.fetchone(
-            f"SELECT COUNT(DISTINCT task_id) FROM task_events{where_clause}",
-            tuple(params),
-        )
-        total_tasks = row[0] if row else 0
+        total_tasks = await self._count_distinct_tasks(where_parts, params)
 
         # Completed (new_state = 'approved')
-        row = await self._db.fetchone(
-            f"SELECT COUNT(DISTINCT task_id) FROM task_events"
-            f"{' WHERE ' + ' AND '.join(where_parts + ['new_state = ?']) if where_parts else ' WHERE new_state = ?'}",
-            tuple(params + ["approved"]),
-        )
-        completed = row[0] if row else 0
+        completed = await self._count_tasks_in_state("approved", where_parts, params)
 
         # Failed (new_state = 'failed')
-        row = await self._db.fetchone(
-            f"SELECT COUNT(DISTINCT task_id) FROM task_events"
-            f"{' WHERE ' + ' AND '.join(where_parts + ['new_state = ?']) if where_parts else ' WHERE new_state = ?'}",
-            tuple(params + ["failed"]),
-        )
-        failed = row[0] if row else 0
+        failed = await self._count_tasks_in_state("failed", where_parts, params)
 
         # Tasks that had exec_failed (retried)
-        row = await self._db.fetchone(
-            f"SELECT COUNT(DISTINCT task_id) FROM task_events"
-            f"{' WHERE ' + ' AND '.join(where_parts + ['new_state = ?']) if where_parts else ' WHERE new_state = ?'}",
-            tuple(params + ["exec_failed"]),
-        )
-        retried = row[0] if row else 0
+        retried = await self._count_tasks_in_state("exec_failed", where_parts, params)
 
         # Events by type
         rows = await self._db.fetchall(
@@ -80,11 +61,7 @@ class MetricsCollector:
         events_by_type = {r[0]: r[1] for r in rows}
 
         # Active sessions
-        row = await self._db.fetchone(
-            f"SELECT COUNT(DISTINCT session_key) FROM task_events{where_clause}",
-            tuple(params),
-        )
-        sessions_active = row[0] if row else 0
+        sessions_active = await self._count_distinct_sessions(where_parts, params)
 
         retry_rate = retried / total_tasks if total_tasks > 0 else 0.0
 
@@ -108,6 +85,36 @@ class MetricsCollector:
         since = day.replace(hour=0, minute=0, second=0, microsecond=0)
         until = since + timedelta(days=1)
         return await self.collect(since=since, until=until)
+
+    async def _count_distinct_tasks(self, where_parts: list[str], params: list[Any]) -> int:
+        return await self._count_distinct("task_id", where_parts, params)
+
+    async def _count_tasks_in_state(
+        self,
+        state: str,
+        where_parts: list[str],
+        params: list[Any],
+    ) -> int:
+        return await self._count_distinct_tasks(
+            [*where_parts, "new_state = ?"],
+            [*params, state],
+        )
+
+    async def _count_distinct_sessions(self, where_parts: list[str], params: list[Any]) -> int:
+        return await self._count_distinct("session_key", where_parts, params)
+
+    async def _count_distinct(
+        self,
+        column: str,
+        where_parts: list[str],
+        params: list[Any],
+    ) -> int:
+        where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+        row = await self._db.fetchone(
+            f"SELECT COUNT(DISTINCT {column}) FROM task_events{where_clause}",
+            tuple(params),
+        )
+        return row[0] if row else 0
 
     async def weekly(self, end_date: datetime | None = None) -> dict[str, Any]:
         """Collect metrics for the past 7 days."""
