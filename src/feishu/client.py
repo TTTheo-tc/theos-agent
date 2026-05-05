@@ -1257,45 +1257,45 @@ class FeishuClient:
 
     def perm_list(self, url: str) -> list[dict]:
         """List all collaborators on a document."""
-        self.ensure_token()
-        file_token, file_type = self._resolve_file_params(url)
+        file_token, file_type = self._resolve_permission_target(url)
         return api_write.list_permission_members(self._client, file_token, file_type)
 
     def perm_add(self, url: str, member_id: str, perm: str = "full_access") -> dict:
         """Grant permission to a member on a document."""
-        self.ensure_token()
-        file_token, file_type = self._resolve_file_params(url)
-        member_type = api_write.detect_member_type(member_id)
+        file_token, file_type, member_type = self._resolve_member_permission_target(url, member_id)
         return api_write.add_permission_member(
             self._client, file_token, file_type, member_type, member_id, perm=perm
         )
 
     def perm_update(self, url: str, member_id: str, perm: str) -> dict:
         """Update a collaborator's permission level."""
-        self.ensure_token()
-        file_token, file_type = self._resolve_file_params(url)
-        member_type = api_write.detect_member_type(member_id)
+        file_token, file_type, member_type = self._resolve_member_permission_target(url, member_id)
         return api_write.update_permission_member(
             self._client, file_token, file_type, member_type, member_id, perm
         )
 
     def perm_remove(self, url: str, member_id: str) -> bool:
         """Remove a collaborator from a document."""
-        self.ensure_token()
-        file_token, file_type = self._resolve_file_params(url)
-        member_type = api_write.detect_member_type(member_id)
+        file_token, file_type, member_type = self._resolve_member_permission_target(url, member_id)
         return api_write.remove_permission_member(
             self._client, file_token, file_type, member_type, member_id
         )
 
     def perm_transfer(self, url: str, new_owner: str) -> dict:
         """Transfer document ownership."""
-        self.ensure_token()
-        file_token, file_type = self._resolve_file_params(url)
+        file_token, file_type = self._resolve_permission_target(url)
         new_owner_type = api_write.detect_member_type(new_owner)
         return api_write.transfer_owner(
             self._client, file_token, file_type, new_owner, new_owner_type=new_owner_type
         )
+
+    def _resolve_permission_target(self, url: str) -> tuple[str, str]:
+        self.ensure_token()
+        return self._resolve_file_params(url)
+
+    def _resolve_member_permission_target(self, url: str, member_id: str) -> tuple[str, str, str]:
+        file_token, file_type = self._resolve_permission_target(url)
+        return file_token, file_type, api_write.detect_member_type(member_id)
 
     # --- chat/group management ---
 

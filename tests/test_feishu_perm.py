@@ -320,3 +320,89 @@ class TestFeishuPermToolActions:
 
         mock_client.perm_transfer.assert_called_once_with("https://feishu.cn/wiki/abc", "ou_new")
         assert "success" in result
+
+
+# ---------------------------------------------------------------------------
+# FeishuClient permission wrappers
+# ---------------------------------------------------------------------------
+
+
+class TestFeishuClientPermissionWrappers:
+    def _make_client(self):
+        with patch("src.feishu.client.make_client"), patch("src.feishu.client.get_access_token"):
+            from src.feishu.client import FeishuClient
+
+            client = FeishuClient(app_id="id", app_secret="secret")
+        client.ensure_token = MagicMock()
+        client._resolve_file_params = MagicMock(return_value=("doc_token", "docx"))
+        return client
+
+    def test_perm_list_resolves_target_once(self):
+        client = self._make_client()
+
+        with patch(
+            "src.feishu.client.api_write.list_permission_members",
+            return_value=[{"member_id": "ou_1"}],
+        ) as api_call:
+            result = client.perm_list("https://feishu.cn/wiki/abc")
+
+        client.ensure_token.assert_called_once()
+        client._resolve_file_params.assert_called_once_with("https://feishu.cn/wiki/abc")
+        api_call.assert_called_once_with(client._client, "doc_token", "docx")
+        assert result == [{"member_id": "ou_1"}]
+
+    def test_perm_add_resolves_member_type(self):
+        client = self._make_client()
+
+        with patch(
+            "src.feishu.client.api_write.add_permission_member",
+            return_value={"member_id": "oc_1"},
+        ) as api_call:
+            result = client.perm_add("https://feishu.cn/wiki/abc", "oc_1", perm="edit")
+
+        client.ensure_token.assert_called_once()
+        client._resolve_file_params.assert_called_once_with("https://feishu.cn/wiki/abc")
+        api_call.assert_called_once_with(
+            client._client,
+            "doc_token",
+            "docx",
+            "chatid",
+            "oc_1",
+            perm="edit",
+        )
+        assert result == {"member_id": "oc_1"}
+
+    def test_perm_update_and_remove_share_member_target_resolution(self):
+        client = self._make_client()
+
+        with (
+            patch("src.feishu.client.api_write.update_permission_member", return_value={}) as upd,
+            patch("src.feishu.client.api_write.remove_permission_member", return_value=True) as rem,
+        ):
+            client.perm_update("https://feishu.cn/wiki/abc", "ou_1", "view")
+            client.perm_remove("https://feishu.cn/wiki/abc", "ou_1")
+
+        assert client.ensure_token.call_count == 2
+        assert client._resolve_file_params.call_count == 2
+        upd.assert_called_once_with(client._client, "doc_token", "docx", "openid", "ou_1", "view")
+        rem.assert_called_once_with(client._client, "doc_token", "docx", "openid", "ou_1")
+
+    def test_perm_transfer_resolves_owner_type(self):
+        client = self._make_client()
+
+        with patch(
+            "src.feishu.client.api_write.transfer_owner",
+            return_value={"success": True},
+        ) as api_call:
+            result = client.perm_transfer("https://feishu.cn/wiki/abc", "ou_owner")
+
+        client.ensure_token.assert_called_once()
+        client._resolve_file_params.assert_called_once_with("https://feishu.cn/wiki/abc")
+        api_call.assert_called_once_with(
+            client._client,
+            "doc_token",
+            "docx",
+            "ou_owner",
+            new_owner_type="openid",
+        )
+        assert result == {"success": True}
