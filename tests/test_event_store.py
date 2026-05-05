@@ -60,11 +60,30 @@ async def test_append_batch(store: EventStore):
             "old_state": "executing",
             "new_state": "approved",
             "timestamp": "2025-01-01T00:02:00",
+            "metadata": {"review_round": 1},
         },
     ]
     await store.append_batch("t2", "sess1", events)
     result = await store.get_events("t2")
     assert len(result) == 3
+    assert result[2]["metadata"] == {"review_round": 1}
+
+
+async def test_append_preserves_metadata(store: EventStore):
+    await store.append(
+        "t-meta",
+        "sess1",
+        {
+            "type": "transition",
+            "new_state": "approved",
+            "timestamp": "2025-01-01T00:00:00",
+            "metadata": {"reviewer": "verifier", "attempt": 2},
+        },
+    )
+
+    result = await store.get_events("t-meta")
+
+    assert result[0]["metadata"] == {"reviewer": "verifier", "attempt": 2}
 
 
 async def test_get_events_by_session(store: EventStore):

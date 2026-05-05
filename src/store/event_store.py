@@ -8,6 +8,13 @@ from typing import Any
 
 from src.store.database import Database
 
+_EVENT_COLUMNS = "id, task_id, session_key, event_type, old_state, new_state, timestamp, metadata"
+_INSERT_EVENT_SQL = (
+    "INSERT INTO task_events "
+    "(task_id, session_key, event_type, old_state, new_state, timestamp, metadata) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?)"
+)
+
 
 class EventStore:
     """Append-only event log backed by the ``task_events`` table."""
@@ -23,17 +30,8 @@ class EventStore:
     ) -> None:
         """Insert a single event."""
         await self._db.execute(
-            "INSERT INTO task_events (task_id, session_key, event_type, old_state, new_state, timestamp, metadata)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                task_id,
-                session_key,
-                event.get("type", "unknown"),
-                event.get("old_state"),
-                event.get("new_state"),
-                event.get("timestamp", datetime.now().isoformat()),
-                json.dumps(event.get("metadata", {})),
-            ),
+            _INSERT_EVENT_SQL,
+            self._event_params(task_id, session_key, event),
         )
 
     async def append_batch(
@@ -46,27 +44,14 @@ class EventStore:
         if not events:
             return
         await self._db.execute_many(
-            "INSERT INTO task_events (task_id, session_key, event_type, old_state, new_state, timestamp, metadata)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    task_id,
-                    session_key,
-                    e.get("type", "unknown"),
-                    e.get("old_state"),
-                    e.get("new_state"),
-                    e.get("timestamp", datetime.now().isoformat()),
-                    json.dumps(e.get("metadata", {})),
-                )
-                for e in events
-            ],
+            _INSERT_EVENT_SQL,
+            [self._event_params(task_id, session_key, e) for e in events],
         )
 
     async def get_events(self, task_id: str) -> list[dict[str, Any]]:
         """Return all events for a task, ordered by id."""
         rows = await self._db.fetchall(
-            "SELECT id, task_id, session_key, event_type, old_state, new_state, timestamp, metadata"
-            " FROM task_events WHERE task_id = ? ORDER BY id",
+            f"SELECT {_EVENT_COLUMNS} FROM task_events WHERE task_id = ? ORDER BY id",
             (task_id,),
         )
         return [self._row_to_dict(r) for r in rows]
@@ -80,14 +65,13 @@ class EventStore:
         """Return events for a session, optionally filtered by time."""
         if since:
             rows = await self._db.fetchall(
-                "SELECT id, task_id, session_key, event_type, old_state, new_state, timestamp, metadata"
-                " FROM task_events WHERE session_key = ? AND timestamp >= ? ORDER BY id",
+                f"SELECT {_EVENT_COLUMNS} FROM task_events"
+                " WHERE session_key = ? AND timestamp >= ? ORDER BY id",
                 (session_key, since.isoformat()),
             )
         else:
             rows = await self._db.fetchall(
-                "SELECT id, task_id, session_key, event_type, old_state, new_state, timestamp, metadata"
-                " FROM task_events WHERE session_key = ? ORDER BY id",
+                f"SELECT {_EVENT_COLUMNS} FROM task_events WHERE session_key = ? ORDER BY id",
                 (session_key,),
             )
         return [self._row_to_dict(r) for r in rows]
@@ -95,11 +79,27 @@ class EventStore:
     async def get_latest_state(self, task_id: str) -> dict[str, Any] | None:
         """Return the last transition event's new_state for a task."""
         row = await self._db.fetchone(
-            "SELECT id, task_id, session_key, event_type, old_state, new_state, timestamp, metadata"
+            f"SELECT {_EVENT_COLUMNS}"
             " FROM task_events WHERE task_id = ? AND new_state IS NOT NULL ORDER BY id DESC LIMIT 1",
             (task_id,),
         )
         return self._row_to_dict(row) if row else None
+
+    @staticmethod
+    def _event_params(
+        task_id: str,
+        session_key: str,
+        event: dict[str, Any],
+    ) -> tuple[Any, ...]:
+        return (
+            task_id,
+            session_key,
+            event.get("type", "unknown"),
+            event.get("old_state"),
+            event.get("new_state"),
+            event.get("timestamp", datetime.now().isoformat()),
+            json.dumps(event.get("metadata", {})),
+        )
 
     @staticmethod
     def _row_to_dict(row: Any) -> dict[str, Any]:
