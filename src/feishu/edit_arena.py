@@ -343,55 +343,16 @@ class EditArena:
         # Step 2: Build table block line-range index for detecting table regions
         table_anno_map = _build_table_anno_map(self._original_annotations)
 
-        # Step 2a: Pre-scan opcodes — group changes within the same table block
-        # into a single table_cell_patch op using full table regions.
         raw_opcodes = [
             (tag, i1, i2, j1, j2) for tag, i1, i2, j1, j2 in sm.get_opcodes() if tag != "equal"
         ]
-        # Collect which opcodes touch each table block
-        table_ops_by_block: dict[str, list] = {}
-        opcode_consumed = [False] * len(raw_opcodes)
-        if self._block_map:
-            for idx, (tag, i1, i2, _j1, _j2) in enumerate(raw_opcodes):
-                for block_id, tbl_anno in table_anno_map.items():
-                    ts = tbl_anno["md_start_line"]
-                    te = tbl_anno["md_end_line"]
-                    if tag == "insert":
-                        # For inserts, only claim if strictly inside the table
-                        # content area (not at the boundary after </table>).
-                        if ts < i1 < te - 1:
-                            table_ops_by_block.setdefault(block_id, []).append(idx)
-                            break
-                    # For replace/delete, standard overlap check
-                    elif i1 < te and i2 > ts:
-                        table_ops_by_block.setdefault(block_id, []).append(idx)
-                        break
-
-        # Build table_cell_patch ops from grouped opcodes
-        table_patch_ops = []
-        for block_id, op_indices in table_ops_by_block.items():
-            tbl_anno = table_anno_map[block_id]
-            ts = tbl_anno["md_start_line"]
-            te = tbl_anno["md_end_line"]
-            old_chunk = "".join(orig_lines[ts:te])
-
-            # Compute the corresponding new lines by applying the offset from opcodes
-            new_table_lines = _rebuild_new_region(
-                orig_lines, work_lines, raw_opcodes, op_indices, ts, te
-            )
-            new_chunk = "".join(new_table_lines)
-
-            if old_chunk != new_chunk:
-                table_patch_ops.append(
-                    {
-                        "type": "table_cell_patch",
-                        "old_chunk": old_chunk,
-                        "new_chunk": new_chunk,
-                        "affected_blocks": [tbl_anno],
-                    }
-                )
-            for oi in op_indices:
-                opcode_consumed[oi] = True
+        table_patch_ops, opcode_consumed = _build_table_patch_ops(
+            orig_lines,
+            work_lines,
+            raw_opcodes,
+            table_anno_map,
+            enabled=bool(self._block_map),
+        )
 
         # Step 2b: Process remaining (non-table) opcodes normally
         commit_ops = []
@@ -477,26 +438,11 @@ class EditArena:
             return CommitResult(success=True, skipped=skipped_ops)
 
         if dry_run:
-            dry_applied = []
-            for op in all_ops:
-                if op.get("type") == "table_cell_patch":
-                    dry_applied.append(
-                        {
-                            "type": "table_cell_patch",
-                            "old_chunk": op["old_chunk"],
-                            "new_chunk": op["new_chunk"],
-                            "dry_run": True,
-                        }
-                    )
-                else:
-                    dry_applied.append(
-                        {
-                            "delete_range": [op["delete_start"], op["delete_end"]],
-                            "new_chunk": op["new_chunk"],
-                            "dry_run": True,
-                        }
-                    )
-            return CommitResult(success=True, applied=dry_applied, skipped=skipped_ops)
+            return CommitResult(
+                success=True,
+                applied=[_format_dry_run_op(op) for op in all_ops],
+                skipped=skipped_ops,
+            )
 
         # Step 4: Execute in reverse index order
         from src.feishu.api_write import (  # noqa: PLC0415
@@ -650,6 +596,80 @@ def _build_table_anno_map(annotations: dict) -> dict[str, dict]:
         if b.get("block_type") == 31:
             result[b["block_id"]] = b
     return result
+
+
+def _build_table_patch_ops(
+    orig_lines: list[str],
+    work_lines: list[str],
+    raw_opcodes: list[tuple],
+    table_anno_map: dict[str, dict],
+    *,
+    enabled: bool,
+) -> tuple[list[dict], list[bool]]:
+    """Build table cell PATCH ops and mark raw opcodes they consume."""
+    opcode_consumed = [False] * len(raw_opcodes)
+    if not enabled:
+        return [], opcode_consumed
+
+    table_ops_by_block: dict[str, list[int]] = {}
+    for idx, (tag, i1, i2, _j1, _j2) in enumerate(raw_opcodes):
+        for block_id, tbl_anno in table_anno_map.items():
+            ts = tbl_anno["md_start_line"]
+            te = tbl_anno["md_end_line"]
+            if tag == "insert":
+                # For inserts, only claim if strictly inside the table content
+                # area (not at the boundary after </table>).
+                if ts < i1 < te - 1:
+                    table_ops_by_block.setdefault(block_id, []).append(idx)
+                    break
+            elif i1 < te and i2 > ts:
+                table_ops_by_block.setdefault(block_id, []).append(idx)
+                break
+
+    table_patch_ops: list[dict] = []
+    for block_id, op_indices in table_ops_by_block.items():
+        tbl_anno = table_anno_map[block_id]
+        ts = tbl_anno["md_start_line"]
+        te = tbl_anno["md_end_line"]
+        old_chunk = "".join(orig_lines[ts:te])
+        new_table_lines = _rebuild_new_region(
+            orig_lines,
+            work_lines,
+            raw_opcodes,
+            op_indices,
+            ts,
+            te,
+        )
+        new_chunk = "".join(new_table_lines)
+
+        if old_chunk != new_chunk:
+            table_patch_ops.append(
+                {
+                    "type": "table_cell_patch",
+                    "old_chunk": old_chunk,
+                    "new_chunk": new_chunk,
+                    "affected_blocks": [tbl_anno],
+                }
+            )
+        for oi in op_indices:
+            opcode_consumed[oi] = True
+
+    return table_patch_ops, opcode_consumed
+
+
+def _format_dry_run_op(op: dict) -> dict:
+    if op.get("type") == "table_cell_patch":
+        return {
+            "type": "table_cell_patch",
+            "old_chunk": op["old_chunk"],
+            "new_chunk": op["new_chunk"],
+            "dry_run": True,
+        }
+    return {
+        "delete_range": [op["delete_start"], op["delete_end"]],
+        "new_chunk": op["new_chunk"],
+        "dry_run": True,
+    }
 
 
 def _rebuild_new_region(
