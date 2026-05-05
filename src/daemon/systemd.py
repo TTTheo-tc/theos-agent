@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import signal
 import subprocess
 from pathlib import Path
 
-from src.daemon.base import GatewayService
+from src.daemon.base import GatewayService, send_sighup
 
 _DEFAULT_UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
 
@@ -93,14 +91,8 @@ WantedBy=default.target
 
     def restart(self):
         # Prefer SIGHUP for graceful restart
-        st = self.status()
-        pid = st.get("pid")
-        if pid:
-            try:
-                os.kill(pid, signal.SIGHUP)
-                return
-            except ProcessLookupError:
-                pass
+        if send_sighup(self.status().get("pid")):
+            return
         # Fallback: systemctl restart
         self._systemctl("restart", self.UNIT_NAME, check=True)
 

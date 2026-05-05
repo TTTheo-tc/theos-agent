@@ -109,3 +109,16 @@ def test_restart_falls_back_to_systemctl_when_no_pid(svc):
         svc.restart()
         calls = [c[0][0] for c in mock_run.call_args_list]
         assert any("restart" in cmd for cmd in calls)
+
+
+def test_restart_falls_back_to_systemctl_when_pid_disappears(svc):
+    """restart() falls back to systemctl restart when SIGHUP sees a stale PID."""
+    with (
+        patch.object(svc, "status", return_value={"pid": 12345, "state": "active", "loaded": True}),
+        patch("src.daemon.base.os.kill", side_effect=ProcessLookupError),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = MagicMock(returncode=0)
+        svc.restart()
+        calls = [c[0][0] for c in mock_run.call_args_list]
+        assert any("restart" in cmd for cmd in calls)

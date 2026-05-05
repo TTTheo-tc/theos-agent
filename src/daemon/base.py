@@ -2,7 +2,20 @@
 
 from __future__ import annotations
 
+import os
+import signal
 from abc import ABC, abstractmethod
+
+
+def send_sighup(pid: int | None) -> bool:
+    """Send SIGHUP to a running service PID. Return False if it disappeared."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, signal.SIGHUP)
+        return True
+    except ProcessLookupError:
+        return False
 
 
 class GatewayService(ABC):

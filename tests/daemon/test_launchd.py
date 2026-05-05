@@ -96,3 +96,19 @@ def test_restart_falls_back_to_kickstart_when_no_pid(svc):
         svc.restart()
         args = mock_run.call_args[0][0]
         assert "kickstart" in args
+
+
+def test_restart_falls_back_to_kickstart_when_pid_disappears(svc):
+    """restart() falls back to launchctl kickstart when SIGHUP sees a stale PID."""
+    with (
+        patch.object(
+            svc, "status", return_value={"pid": 12345, "state": "running", "loaded": True}
+        ),
+        patch("src.daemon.base.os.kill", side_effect=ProcessLookupError),
+        patch.object(svc, "is_loaded", return_value=True),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = MagicMock(returncode=0)
+        svc.restart()
+        args = mock_run.call_args[0][0]
+        assert "kickstart" in args

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import os
 import plistlib
-import signal
 import subprocess
 from pathlib import Path
 
-from src.daemon.base import GatewayService
+from src.daemon.base import GatewayService, send_sighup
 
 _DEFAULT_PLIST_DIR = Path.home() / "Library" / "LaunchAgents"
 _DEFAULT_LOG_DIR = Path.home() / ".theos" / "logs"
@@ -82,14 +81,8 @@ class LaunchdService(GatewayService):
 
     def restart(self):
         # Prefer SIGHUP for graceful restart
-        st = self.status()
-        pid = st.get("pid")
-        if pid:
-            try:
-                os.kill(pid, signal.SIGHUP)
-                return
-            except ProcessLookupError:
-                pass
+        if send_sighup(self.status().get("pid")):
+            return
         # Fallback: kickstart
         if self.is_loaded():
             subprocess.run(
