@@ -876,6 +876,19 @@ class TestChatStream:
         assert deltas[0].finish_reason == "error"
         assert deltas[0].error_type == "RuntimeError"
 
+    async def test_stream_error_content_is_truncated(self, provider):
+        """Long stream errors are bounded before being returned to callers."""
+        mock_stream = AsyncMock()
+        mock_stream.__aenter__ = AsyncMock(side_effect=RuntimeError("x" * 510))
+        mock_stream.__aexit__ = AsyncMock(return_value=False)
+        provider._client.messages.stream.return_value = mock_stream
+
+        deltas = []
+        async for delta in provider.chat_stream(messages=[{"role": "user", "content": "Hi"}]):
+            deltas.append(delta)
+
+        assert deltas[0].content == f"Error: {'x' * 500}..."
+
 
 # ===========================================================================
 # TestGetDefaultModel

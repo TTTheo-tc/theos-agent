@@ -3,7 +3,7 @@
 import pytest
 
 from src.providers.base import LLMResponse
-from src.providers.errors import FailureClass, classify_failure
+from src.providers.errors import FailureClass, classify_failure, short_error_message
 
 # ---------------------------------------------------------------------------
 # Response path
@@ -173,3 +173,8 @@ class TestEdgeCases:
         resp = LLMResponse(content="ok", finish_reason="stop")
         exc = ValueError("bad")
         assert classify_failure(response=resp, exception=exc) == FailureClass.NON_RETRYABLE
+
+    def test_short_error_message_truncates_long_exceptions(self):
+        exc = RuntimeError("x" * 510)
+
+        assert short_error_message(exc) == ("x" * 500) + "..."

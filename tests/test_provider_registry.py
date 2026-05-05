@@ -7,6 +7,7 @@ from src.providers.registry import (
     core_providers,
     extended_providers,
     find_by_name,
+    iter_model_matches,
     oauth_providers,
     ordered_providers,
 )
@@ -63,3 +64,15 @@ class TestProviderBackend:
         names = [spec.name for spec in ordered_providers()]
         assert names[:3] == ["custom", "anthropic", "openai"]
         assert set(names) == {spec.name for spec in PROVIDERS}
+
+    def test_iter_model_matches_can_include_gateway_prefix(self):
+        names = [
+            spec.name
+            for spec in iter_model_matches(
+                "openrouter/anthropic/claude-sonnet-4-6",
+                include_gateways=True,
+            )
+        ]
+
+        assert names[0] == "openrouter"
+        assert "anthropic" in names

@@ -12,7 +12,13 @@ import openai
 from loguru import logger
 from openai import AsyncOpenAI
 
-from src.providers.base import LLMProvider, LLMResponse, StreamDelta, ToolCallRequest
+from src.providers.base import (
+    LLMProvider,
+    LLMResponse,
+    StreamDelta,
+    ToolCallRequest,
+)
+from src.providers.errors import short_error_message
 from src.providers.tool_call_parser import FALLBACK_PROVIDER_ALLOWLIST, parse_tool_calls_from_text
 
 if TYPE_CHECKING:
@@ -232,9 +238,7 @@ class OpenAICompatProvider(LLMProvider):
             response = await self._client.chat.completions.create(**kwargs)
             return self._parse_response(response)
         except openai.AuthenticationError as e:
-            err_msg = str(e)
-            if len(err_msg) > 500:
-                err_msg = err_msg[:500] + "..."
+            err_msg = short_error_message(e)
             logger.error(
                 "OpenAI-compat authentication failed (model={}): {}",
                 resolved_model,
@@ -246,9 +250,7 @@ class OpenAICompatProvider(LLMProvider):
                 error_type="AuthenticationError",
             )
         except openai.RateLimitError as e:
-            err_msg = str(e)
-            if len(err_msg) > 500:
-                err_msg = err_msg[:500] + "..."
+            err_msg = short_error_message(e)
             logger.warning(
                 "OpenAI-compat rate limited (model={}): {}",
                 resolved_model,
@@ -260,9 +262,7 @@ class OpenAICompatProvider(LLMProvider):
                 error_type="RateLimitError",
             )
         except Exception as e:
-            err_msg = str(e)
-            if len(err_msg) > 500:
-                err_msg = err_msg[:500] + "..."
+            err_msg = short_error_message(e)
             logger.warning("OpenAI-compat call failed (model={}): {}", resolved_model, err_msg)
             return LLMResponse(
                 content=f"Error calling LLM: {err_msg}",
@@ -419,9 +419,7 @@ class OpenAICompatProvider(LLMProvider):
             )
 
         except openai.AuthenticationError as e:
-            err_msg = str(e)
-            if len(err_msg) > 500:
-                err_msg = err_msg[:500] + "..."
+            err_msg = short_error_message(e)
             logger.error(
                 "OpenAI-compat stream auth failed (model={}): {}",
                 resolved_model,
@@ -434,9 +432,7 @@ class OpenAICompatProvider(LLMProvider):
             )
 
         except openai.RateLimitError as e:
-            err_msg = str(e)
-            if len(err_msg) > 500:
-                err_msg = err_msg[:500] + "..."
+            err_msg = short_error_message(e)
             logger.warning(
                 "OpenAI-compat stream rate limited (model={}): {}",
                 resolved_model,
@@ -449,9 +445,7 @@ class OpenAICompatProvider(LLMProvider):
             )
 
         except Exception as e:
-            err_msg = str(e)
-            if len(err_msg) > 500:
-                err_msg = err_msg[:500] + "..."
+            err_msg = short_error_message(e)
             logger.warning(
                 "OpenAI-compat stream failed (model={}): {}",
                 resolved_model,

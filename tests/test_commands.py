@@ -211,6 +211,14 @@ def test_config_matches_openai_codex_with_hyphen_prefix():
     assert config.get_provider_name() == "openai_codex"
 
 
+def test_config_match_skips_unconfigured_gateway_prefix_for_keyword_provider():
+    config = Config()
+    config.agents.defaults.model = "openrouter/anthropic/claude-sonnet-4-6"
+    config.providers.anthropic.api_key = "sk-ant-test"
+
+    assert config.get_provider_name() == "anthropic"
+
+
 def test_find_by_model_prefers_explicit_prefix_over_generic_codex_keyword():
     spec = find_by_model("github-copilot/gpt-5.3-codex")
 

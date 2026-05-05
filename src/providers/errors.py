@@ -22,6 +22,12 @@ class FailureClass(Enum):
     NON_RETRYABLE = "non_retryable"
 
 
+def short_error_message(exc: BaseException, max_chars: int = 500) -> str:
+    """Return a bounded exception string for provider logs and user-facing errors."""
+    msg = str(exc)
+    return msg[:max_chars] + "..." if len(msg) > max_chars else msg
+
+
 # ---------------------------------------------------------------------------
 # Regex patterns applied to lowercased error text (ordered: most specific first)
 # ---------------------------------------------------------------------------

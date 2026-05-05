@@ -423,26 +423,49 @@ def ordered_providers(*, core_first: bool = True) -> tuple[ProviderSpec, ...]:
 # ---------------------------------------------------------------------------
 
 
-def find_by_model(model: str) -> ProviderSpec | None:
-    """Match a standard provider by model-name keyword (case-insensitive).
-    Skips gateways/local — those are matched by api_key/api_base instead."""
+def iter_model_matches(
+    model: str,
+    *,
+    include_gateways: bool = False,
+    include_local: bool = False,
+) -> tuple[ProviderSpec, ...]:
+    """Return provider candidates matched by explicit model prefix, then keywords."""
     model_lower = model.lower()
     model_normalized = model_lower.replace("-", "_")
     model_prefix = model_lower.split("/", 1)[0] if "/" in model_lower else ""
     normalized_prefix = model_prefix.replace("-", "_")
-    std_specs = [s for s in PROVIDERS if not s.is_gateway and not s.is_local]
+    specs = tuple(
+        spec
+        for spec in PROVIDERS
+        if (include_gateways or not spec.is_gateway) and (include_local or not spec.is_local)
+    )
+
+    matches: list[ProviderSpec] = []
+    seen: set[str] = set()
+
+    def add_match(spec: ProviderSpec) -> None:
+        if spec.name not in seen:
+            matches.append(spec)
+            seen.add(spec.name)
 
     # Prefer explicit provider prefix — prevents `github-copilot/...codex` matching openai_codex.
-    for spec in std_specs:
+    for spec in specs:
         if model_prefix and normalized_prefix == spec.name:
-            return spec
+            add_match(spec)
 
-    for spec in std_specs:
+    for spec in specs:
         if any(
             kw in model_lower or kw.replace("-", "_") in model_normalized for kw in spec.keywords
         ):
-            return spec
-    return None
+            add_match(spec)
+    return tuple(matches)
+
+
+def find_by_model(model: str) -> ProviderSpec | None:
+    """Match a standard provider by model-name keyword (case-insensitive).
+    Skips gateways/local — those are matched by api_key/api_base instead."""
+    matches = iter_model_matches(model)
+    return matches[0] if matches else None
 
 
 def find_gateway(

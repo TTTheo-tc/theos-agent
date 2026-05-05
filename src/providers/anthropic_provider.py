@@ -15,7 +15,13 @@ from typing import Any
 import json_repair
 from loguru import logger
 
-from src.providers.base import LLMProvider, LLMResponse, StreamDelta, ToolCallRequest
+from src.providers.base import (
+    LLMProvider,
+    LLMResponse,
+    StreamDelta,
+    ToolCallRequest,
+)
+from src.providers.errors import short_error_message
 
 _ALNUM = string.ascii_letters + string.digits
 
@@ -508,9 +514,7 @@ class AnthropicProvider(LLMProvider):
                 if retry_exc is not None:
                     e = retry_exc
 
-            err_msg = str(e)
-            if len(err_msg) > 500:
-                err_msg = err_msg[:500] + "..."
+            err_msg = short_error_message(e)
 
             if isinstance(e, _anthropic.AuthenticationError):
                 logger.error("Anthropic auth failed (model={}): {}", model_name, err_msg)
@@ -649,12 +653,10 @@ class AnthropicProvider(LLMProvider):
                 except Exception as retry_exc:
                     e = retry_exc  # retry also failed, use new error
 
-            err_msg = str(e)
-            if len(err_msg) > 500:
-                err_msg = err_msg[:500] + "..."
+            err_msg = short_error_message(e)
             logger.warning("Anthropic stream failed (model={}): {}", model_name, err_msg)
             yield StreamDelta(
-                content=f"Error: {e}",
+                content=f"Error: {err_msg}",
                 is_final=True,
                 finish_reason="error",
                 error_type=type(e).__name__,
