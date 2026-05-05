@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TheOS Knowledge UI
 
-## Getting Started
+React single-page workspace for personal memory, learning notes, scheduled work, and plans.
 
-First, run the development server:
+## Current Scope
+
+Only four frontend pages are in scope:
+
+| Path | Page | Purpose |
+|---|---|---|
+| `/memory` | Memory | Knowledge graph nodes and memory search |
+| `/wiki` | Wiki | Document-style learning notes from memory markdown |
+| `/cron` | Cron | Scheduled jobs and recurring prompts |
+| `/plans` | Plans | Daily focus and long-term plans |
+
+`/` redirects to `/memory`. Unknown routes also redirect to `/memory`.
+
+Removed from the frontend scope: dashboard overview, timeline, cost analytics, channel status, logs, config editor, tool registry, and settings.
+
+## Stack
+
+- React 19
+- React Router 7
+- Vite 6
+- TypeScript 5
+- Tailwind CSS 4
+- shadcn/Radix UI components
+- Lucide icons
+- cmdk command palette
+
+## Development
+
+Install dependencies first:
+
+```bash
+npm install
+```
+
+Run the Vite dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev server uses Vite's default port from `vite.config.ts`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:5173
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+During development, `/api/*` requests are proxied to the Python dashboard server at:
 
-## Learn More
+```text
+http://localhost:8080
+```
 
-To learn more about Next.js, take a look at the following resources:
+Start the backend dashboard API with the gateway or standalone UI command before using live data.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run dev      # start Vite dev server
+npm run build    # type-check and build static assets
+npm run preview  # preview the production build
+```
 
-## Deploy on Vercel
+## Source Layout
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```text
+src/
+  App.tsx                    # four-page React Router table
+  main.tsx                   # React root entry
+  app/globals.css            # Tailwind v4 and theme variables
+  pages/
+    Memory.tsx               # memory nodes and search
+    Wiki.tsx                 # markdown-backed learning notes
+    Cron.tsx                 # cron job list/actions
+    Plans.tsx                # local daily/long-term plans
+  components/layout/         # sidebar, header, command palette
+  components/ui/             # shadcn/Radix primitives
+  lib/utils.ts               # className merge helper
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Backend Contract
+
+Relevant endpoints currently used by the UI:
+
+| Endpoint | Methods | Used by |
+|---|---|---|
+| `/api/memory/nodes` | GET | Memory node list |
+| `/api/memory/search` | GET | Memory search |
+| `/api/memory/markdown` | GET | Wiki document sections |
+| `/api/cron/jobs` | GET | Cron job list |
+| `/api/cron/jobs/{job_id}` | PUT, DELETE | Cron enable/disable and delete |
+| `/api/cron/jobs/{job_id}/run` | POST | Cron manual run |
+
+Plans currently persist in `localStorage` under `theos.ui.plans`. Add a backend API before treating plans as shared or durable across browsers.
+
+## Production Build
+
+Build static assets with:
+
+```bash
+npm run build
+```
+
+The Python UI server serves `ui/dist/` when it exists, or packaged static files from `src/ui/ui_static/`.

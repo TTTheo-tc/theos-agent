@@ -1,29 +1,15 @@
 import { Link, useLocation } from 'react-router'
-import {
-  LayoutDashboard, Clock, DollarSign, Radio, Bot,
-  ScrollText, Brain, CalendarClock, FileJson, Wrench, Settings,
-} from 'lucide-react'
+import { Bot, Brain, CalendarClock, BookOpenText, ListChecks } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const SECTIONS = [
   {
-    label: 'Observe',
-    items: [
-      { href: '/', label: 'Overview', icon: LayoutDashboard },
-      { href: '/timeline', label: 'Timeline', icon: Clock },
-      { href: '/cost', label: 'Cost', icon: DollarSign },
-      { href: '/channels', label: 'Channels', icon: Radio },
-      { href: '/logs', label: 'Logs', icon: ScrollText },
-    ],
-  },
-  {
-    label: 'Manage',
+    label: 'Workspace',
     items: [
       { href: '/memory', label: 'Memory', icon: Brain },
+      { href: '/wiki', label: 'Wiki', icon: BookOpenText },
       { href: '/cron', label: 'Cron', icon: CalendarClock },
-      { href: '/config', label: 'Config', icon: FileJson },
-      { href: '/tools', label: 'Tools', icon: Wrench },
-      { href: '/settings', label: 'Settings', icon: Settings },
+      { href: '/plans', label: 'Plans', icon: ListChecks },
     ],
   },
 ]
@@ -38,8 +24,8 @@ export function Sidebar() {
           <Bot size={18} className="text-white" />
         </div>
         <div>
-          <h1 className="text-sm font-bold text-slate-100 leading-tight">Superbot</h1>
-          <p className="text-[10px] text-slate-500 leading-tight">Agent Dashboard</p>
+          <h1 className="text-sm font-bold text-slate-100 leading-tight">TheOS</h1>
+          <p className="text-[10px] text-slate-500 leading-tight">Knowledge Hub</p>
         </div>
       </div>
       <nav className="flex-1 p-3 space-y-4 overflow-y-auto">

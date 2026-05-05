@@ -36,20 +36,14 @@ export function CommandPalette() {
         <kbd className="ml-2 text-[10px] text-slate-600 bg-slate-900 px-1.5 py-0.5 rounded">⌘K</kbd>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Search sessions, agents, channels..." />
+        <CommandInput placeholder="Search pages..." />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Pages">
-            <CommandItem onSelect={() => { navigate('/'); setOpen(false) }}>Overview</CommandItem>
-            <CommandItem onSelect={() => { navigate('/timeline'); setOpen(false) }}>Timeline</CommandItem>
-            <CommandItem onSelect={() => { navigate('/cost'); setOpen(false) }}>Cost Analytics</CommandItem>
-            <CommandItem onSelect={() => { navigate('/channels'); setOpen(false) }}>Channels</CommandItem>
-            <CommandItem onSelect={() => { navigate('/logs'); setOpen(false) }}>Logs</CommandItem>
             <CommandItem onSelect={() => { navigate('/memory'); setOpen(false) }}>Memory</CommandItem>
+            <CommandItem onSelect={() => { navigate('/wiki'); setOpen(false) }}>Wiki</CommandItem>
             <CommandItem onSelect={() => { navigate('/cron'); setOpen(false) }}>Cron</CommandItem>
-            <CommandItem onSelect={() => { navigate('/config'); setOpen(false) }}>Config</CommandItem>
-            <CommandItem onSelect={() => { navigate('/tools'); setOpen(false) }}>Tools</CommandItem>
-            <CommandItem onSelect={() => { navigate('/settings'); setOpen(false) }}>Settings</CommandItem>
+            <CommandItem onSelect={() => { navigate('/plans'); setOpen(false) }}>Plans</CommandItem>
           </CommandGroup>
         </CommandList>
       </CommandDialog>

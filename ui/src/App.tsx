@@ -1,15 +1,9 @@
-import { BrowserRouter, Routes, Route } from 'react-router'
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router'
 import { Sidebar } from '@/components/layout/sidebar'
-import DashboardPage from '@/pages/Dashboard'
-import TimelinePage from '@/pages/Timeline'
-import CostPage from '@/pages/Cost'
-import ChannelsPage from '@/pages/Channels'
 import MemoryPage from '@/pages/Memory'
+import WikiPage from '@/pages/Wiki'
 import CronPage from '@/pages/Cron'
-import LogsPage from '@/pages/Logs'
-import ConfigPage from '@/pages/Config'
-import ToolsPage from '@/pages/Tools'
-import SettingsPage from '@/pages/Settings'
+import PlansPage from '@/pages/Plans'
 
 export function App() {
   return (
@@ -18,16 +12,12 @@ export function App() {
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0">
           <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/timeline" element={<TimelinePage />} />
-            <Route path="/cost" element={<CostPage />} />
-            <Route path="/channels" element={<ChannelsPage />} />
+            <Route path="/" element={<Navigate to="/memory" replace />} />
             <Route path="/memory" element={<MemoryPage />} />
+            <Route path="/wiki" element={<WikiPage />} />
             <Route path="/cron" element={<CronPage />} />
-            <Route path="/logs" element={<LogsPage />} />
-            <Route path="/config" element={<ConfigPage />} />
-            <Route path="/tools" element={<ToolsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/plans" element={<PlansPage />} />
+            <Route path="*" element={<Navigate to="/memory" replace />} />
           </Routes>
         </div>
       </div>
