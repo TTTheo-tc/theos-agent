@@ -16,6 +16,7 @@ def test_action_tracker_not_limited_when_disabled():
     for _ in range(100):
         tracker.record()
     assert not tracker.is_limited()
+    assert len(tracker._timestamps) == 0
 
 
 def test_action_tracker_limits_after_max():

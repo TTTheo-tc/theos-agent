@@ -59,6 +59,8 @@ class ActionTracker:
         self._timestamps: deque[float] = deque()
 
     def record(self) -> None:
+        if self._max <= 0:
+            return
         self._timestamps.append(time.monotonic())
 
     def is_limited(self) -> bool:
@@ -123,7 +125,7 @@ class AutonomyPolicy:
 
     def check_rate_limit(self) -> str | None:
         if self._tracker.is_limited():
-            return f"Rate limited: exceeded " f"{self._config.max_actions_per_hour} actions/hour"
+            return f"Rate limited: exceeded {self._config.max_actions_per_hour} actions/hour"
         return None
 
     def record_action(self) -> None:
