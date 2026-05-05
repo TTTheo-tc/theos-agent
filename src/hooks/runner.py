@@ -80,7 +80,46 @@ class HookRunner:
         hook = self._hook(self.POST_CHAT)
         if not hook:
             return
-        payload = json.dumps(
+        payload = self._post_chat_payload(
+            session_key=session_key,
+            response=response,
+            error=error,
+            status=status,
+            user_message=user_message,
+            tools_used=tools_used,
+            usage=usage,
+            duration_ms=duration_ms,
+            routing_domains=routing_domains,
+            selected_primary=selected_primary,
+            artifacts=artifacts,
+            tests=tests,
+            reflector_active=reflector_active,
+        )
+        try:
+            await self._run(hook, stdin=payload, timeout=15, workspace=workspace)
+        except asyncio.TimeoutError:
+            logger.warning("post-chat hook timed out (>15s)")
+        except Exception as e:
+            logger.warning("post-chat hook failed: {}", e)
+
+    @staticmethod
+    def _post_chat_payload(
+        *,
+        session_key: str,
+        response: str | None,
+        error: str | None,
+        status: str | None,
+        user_message: str | None,
+        tools_used: list[str] | None,
+        usage: dict[str, int] | None,
+        duration_ms: float | None,
+        routing_domains: list[str] | None,
+        selected_primary: str | None,
+        artifacts: list[str] | None,
+        tests: list[str] | None,
+        reflector_active: bool,
+    ) -> str:
+        return json.dumps(
             {
                 "session_key": session_key,
                 "response": response,
@@ -97,12 +136,13 @@ class HookRunner:
                 "reflector_active": reflector_active,
             }
         )
-        try:
-            await self._run(hook, stdin=payload, timeout=15, workspace=workspace)
-        except asyncio.TimeoutError:
-            logger.warning("post-chat hook timed out (>15s)")
-        except Exception as e:
-            logger.warning("post-chat hook failed: {}", e)
+
+    @staticmethod
+    def _hook_env(workspace: Path | None = None) -> dict[str, str]:
+        env = {**os.environ}
+        if workspace:
+            env["ARIESCLAW_WORKSPACE"] = str(workspace)
+        return env
 
     @staticmethod
     async def _run(
@@ -111,17 +151,13 @@ class HookRunner:
         timeout: float,
         workspace: Path | None = None,
     ) -> str:
-        env = {**os.environ}
-        if workspace:
-            env["ARIESCLAW_WORKSPACE"] = str(workspace)
-
         proc = await asyncio.create_subprocess_exec(
             str(script),
             cwd=str(script.parent),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env,
+            env=HookRunner._hook_env(workspace),
         )
         try:
             stdout, stderr = await asyncio.wait_for(

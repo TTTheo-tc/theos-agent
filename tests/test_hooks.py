@@ -117,6 +117,37 @@ cat > "{payload_path}"
         assert payload["tests"] == []
         assert payload["reflector_active"] is True
 
+    def test_post_chat_payload_defaults_optional_collections(self) -> None:
+        payload = json.loads(
+            HookRunner._post_chat_payload(
+                session_key="cli:test",
+                response=None,
+                error=None,
+                status=None,
+                user_message=None,
+                tools_used=None,
+                usage=None,
+                duration_ms=None,
+                routing_domains=None,
+                selected_primary=None,
+                artifacts=None,
+                tests=None,
+                reflector_active=False,
+            )
+        )
+
+        assert payload["tools_used"] == []
+        assert payload["usage"] == {}
+        assert payload["routing_domains"] == []
+        assert payload["artifacts"] == []
+        assert payload["tests"] == []
+        assert payload["reflector_active"] is False
+
+    def test_hook_env_includes_workspace(self, tmp_path: Path) -> None:
+        env = HookRunner._hook_env(tmp_path)
+
+        assert env["ARIESCLAW_WORKSPACE"] == str(tmp_path)
+
 
 @pytest.mark.asyncio
 async def test_lifecycle_error_post_chat_passes_explicit_empty_fields(
