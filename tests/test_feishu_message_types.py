@@ -138,7 +138,17 @@ class TestSendImage:
         assert mock.call_args[0][2] == "image"
         content = json.loads(mock.call_args[0][3])
         assert content["image_key"] == "img_v2_xxx"
+        assert mock.call_args.kwargs["receive_id_type"] == "open_id"
         assert result["message_id"] == "m3"
+
+    def test_send_image_keeps_ascii_json_default(self):
+        client = self._make_client()
+        client.ensure_token = MagicMock()
+
+        with patch("src.feishu.client.api.send_message", return_value={}) as mock:
+            client.send_image("ou_user1", "图像")
+
+        assert mock.call_args[0][3] == '{"image_key": "\\u56fe\\u50cf"}'
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +176,17 @@ class TestSendFile:
         assert mock.call_args[0][2] == "file"
         content = json.loads(mock.call_args[0][3])
         assert content["file_key"] == "file_v2_xxx"
+        assert mock.call_args.kwargs["receive_id_type"] == "open_id"
         assert result["message_id"] == "m4"
+
+    def test_send_file_keeps_ascii_json_default(self):
+        client = self._make_client()
+        client.ensure_token = MagicMock()
+
+        with patch("src.feishu.client.api.send_message", return_value={}) as mock:
+            client.send_file("ou_user1", "文件")
+
+        assert mock.call_args[0][3] == '{"file_key": "\\u6587\\u4ef6"}'
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +223,19 @@ class TestSendPost:
         assert content["zh_cn"]["title"] == "Post Title"
         assert len(content["zh_cn"]["content"]) == 1
         assert content["zh_cn"]["content"][0][0]["tag"] == "text"
+        assert mock.call_args.kwargs["receive_id_type"] == "open_id"
         assert result["message_id"] == "m5"
+
+    def test_send_post_keeps_unicode_json(self):
+        client = self._make_client()
+        client.ensure_token = MagicMock()
+
+        with patch("src.feishu.client.api.send_message", return_value={}) as mock:
+            client.send_post("ou_user1", "标题", [[{"tag": "text", "text": "你好"}]])
+
+        assert "\\u" not in mock.call_args[0][3]
+        assert "标题" in mock.call_args[0][3]
+        assert "你好" in mock.call_args[0][3]
 
 
 # ---------------------------------------------------------------------------

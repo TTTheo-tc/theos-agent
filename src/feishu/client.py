@@ -744,10 +744,20 @@ class FeishuClient:
 
     def send_message(self, user: str, message: str) -> dict:
         """Send a text message to a user (open_id) or chat (chat_id)."""
-        receive_id, receive_id_type = self._resolve_recipient(user)
-        content = json.dumps({"text": message})
+        return self._send_json_message(user, "text", {"text": message})
+
+    def _send_json_message(
+        self,
+        user_or_chat: str,
+        msg_type: str,
+        payload: dict,
+        *,
+        ensure_ascii: bool = True,
+    ) -> dict:
+        receive_id, receive_id_type = self._resolve_recipient(user_or_chat)
+        content = json.dumps(payload, ensure_ascii=ensure_ascii)
         return api.send_message(
-            self._client, receive_id, "text", content, receive_id_type=receive_id_type
+            self._client, receive_id, msg_type, content, receive_id_type=receive_id_type
         )
 
     def send_card(
@@ -798,11 +808,7 @@ class FeishuClient:
             user_or_chat: Recipient open_id (ou_xxx) or chat_id (oc_xxx).
             image_key: Image key obtained from image upload API.
         """
-        receive_id, receive_id_type = self._resolve_recipient(user_or_chat)
-        content = json.dumps({"image_key": image_key})
-        return api.send_message(
-            self._client, receive_id, "image", content, receive_id_type=receive_id_type
-        )
+        return self._send_json_message(user_or_chat, "image", {"image_key": image_key})
 
     def send_file(self, user_or_chat: str, file_key: str) -> dict:
         """Send a file message.
@@ -811,11 +817,7 @@ class FeishuClient:
             user_or_chat: Recipient open_id (ou_xxx) or chat_id (oc_xxx).
             file_key: File key obtained from file upload API.
         """
-        receive_id, receive_id_type = self._resolve_recipient(user_or_chat)
-        content = json.dumps({"file_key": file_key})
-        return api.send_message(
-            self._client, receive_id, "file", content, receive_id_type=receive_id_type
-        )
+        return self._send_json_message(user_or_chat, "file", {"file_key": file_key})
 
     def send_post(self, user_or_chat: str, title: str, content: list[list[dict]]) -> dict:
         """Send a rich text (post) message.
@@ -827,10 +829,11 @@ class FeishuClient:
                 Example: ``[[{"tag": "text", "text": "hello "},
                              {"tag": "a", "href": "https://...", "text": "link"}]]``
         """
-        receive_id, receive_id_type = self._resolve_recipient(user_or_chat)
-        post_body = json.dumps({"zh_cn": {"title": title, "content": content}}, ensure_ascii=False)
-        return api.send_message(
-            self._client, receive_id, "post", post_body, receive_id_type=receive_id_type
+        return self._send_json_message(
+            user_or_chat,
+            "post",
+            {"zh_cn": {"title": title, "content": content}},
+            ensure_ascii=False,
         )
 
     # --- read_comments ---
