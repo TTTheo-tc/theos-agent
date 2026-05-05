@@ -51,12 +51,7 @@ class GitHubCopilotPlugin:
             api_key_info = self._exchange_for_api_key(cred.refresh)
             if not api_key_info:
                 return None
-            return OAuthCredential(
-                provider="github_copilot",
-                access=api_key_info["token"],
-                refresh=cred.refresh,  # GitHub access token is reused
-                expires=int(api_key_info["expires_at"]) * 1000,  # to ms
-            )
+            return self._credential_from_api_key(api_key_info, cred.refresh)
         except Exception:
             logger.opt(exception=True).debug("GitHub Copilot API key refresh failed")
             return None
@@ -96,12 +91,7 @@ class GitHubCopilotPlugin:
                 logger.warning("GitHub Copilot: failed to exchange access token for API key")
                 return None
 
-            return OAuthCredential(
-                provider="github_copilot",
-                access=api_key_info["token"],
-                refresh=access_token,  # Store the GitHub access token for future refresh
-                expires=int(api_key_info["expires_at"]) * 1000,
-            )
+            return self._credential_from_api_key(api_key_info, access_token)
         except Exception:
             logger.opt(exception=True).warning("GitHub Copilot device flow failed")
             return None
@@ -125,6 +115,18 @@ class GitHubCopilotPlugin:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _credential_from_api_key(
+        self,
+        api_key_info: dict,
+        github_access_token: str,
+    ) -> OAuthCredential:
+        return OAuthCredential(
+            provider="github_copilot",
+            access=api_key_info["token"],
+            refresh=github_access_token,
+            expires=int(api_key_info["expires_at"]) * 1000,
+        )
 
     def _poll_for_access_token(self, device_code: str) -> str | None:
         """Poll GitHub for the access token after user authorizes the device."""
@@ -228,12 +230,7 @@ class GitHubCopilotPlugin:
         # API key expired or missing — try to refresh with the access token
         api_key_info = self._exchange_for_api_key(access_token)
         if api_key_info:
-            return OAuthCredential(
-                provider="github_copilot",
-                access=api_key_info["token"],
-                refresh=access_token,
-                expires=int(api_key_info["expires_at"]) * 1000,
-            )
+            return self._credential_from_api_key(api_key_info, access_token)
         return None
 
     def _read_hosts_json(self, hosts_path: Path) -> OAuthCredential | None:
@@ -250,12 +247,7 @@ class GitHubCopilotPlugin:
             # Exchange for API key
             api_key_info = self._exchange_for_api_key(oauth_token)
             if api_key_info:
-                return OAuthCredential(
-                    provider="github_copilot",
-                    access=api_key_info["token"],
-                    refresh=oauth_token,
-                    expires=int(api_key_info["expires_at"]) * 1000,
-                )
+                return self._credential_from_api_key(api_key_info, oauth_token)
         except Exception:
             logger.opt(exception=True).debug("Failed to read github-copilot hosts.json")
         return None

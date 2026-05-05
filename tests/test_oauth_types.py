@@ -170,6 +170,23 @@ def test_oauth_credential_lookup_normalizes_hyphen_provider_name():
     assert result == (cred, "github_copilot:default")
 
 
+def test_oauth_lookup_reads_legacy_hyphenated_default():
+    cred = OAuthCredential(
+        provider="github-copilot",
+        access="legacy-copilot-token",
+        refresh="legacy-github-token",
+        expires=9999999999999,
+    )
+    fake_store = AuthProfileStore(
+        profiles={"github-copilot:manual": cred},
+        last_good={"github-copilot": "github-copilot:manual"},
+    )
+    with patch("src.auth.store.load_auth_store", return_value=fake_store):
+        result = get_oauth_credential_for_provider("github_copilot")
+
+    assert result == (cred, "github-copilot:manual")
+
+
 def test_static_lookup_reads_legacy_hyphenated_profiles():
     fake_store = AuthProfileStore(
         profiles={

@@ -9,7 +9,9 @@ Profile ID format: "provider:name"  (e.g. "anthropic:default", "openai:work")
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import TypeVar
 
 from loguru import logger
 
@@ -20,6 +22,9 @@ from src.auth.types import (
     ProfileUsageStats,
     TokenCredential,
 )
+
+Credential = ApiKeyCredential | TokenCredential | OAuthCredential
+T = TypeVar("T")
 
 
 def _normalize_provider(provider: str) -> str:
@@ -137,17 +142,18 @@ def _decrypt_file(path: Path) -> str:
 
 def _coerce_store(data: dict) -> AuthProfileStore:
     """Parse raw JSON into AuthProfileStore, coercing credential discriminant."""
-    profiles: dict[str, ApiKeyCredential | TokenCredential | OAuthCredential] = {}
+    credential_types: dict[str, type[Credential]] = {
+        "api_key": ApiKeyCredential,
+        "token": TokenCredential,
+        "oauth": OAuthCredential,
+    }
+    profiles: dict[str, Credential] = {}
     for pid, cred_data in data.get("profiles", {}).items():
-        ctype = cred_data.get("type", "api_key")
+        model = credential_types.get(cred_data.get("type", "api_key"))
+        if model is None:
+            continue
         try:
-            if ctype == "api_key":
-                profiles[pid] = ApiKeyCredential.model_validate(cred_data)
-            elif ctype == "token":
-                profiles[pid] = TokenCredential.model_validate(cred_data)
-            elif ctype == "oauth":
-                profiles[pid] = OAuthCredential.model_validate(cred_data)
-            # Unknown types skipped silently
+            profiles[pid] = model.model_validate(cred_data)
         except Exception:
             pass
 
@@ -173,7 +179,7 @@ def _coerce_store(data: dict) -> AuthProfileStore:
 
 
 def _extract_key(
-    cred: ApiKeyCredential | TokenCredential | OAuthCredential,
+    cred: Credential,
 ) -> str | None:
     if isinstance(cred, ApiKeyCredential) and cred.key:
         return cred.key
@@ -184,70 +190,69 @@ def _extract_key(
     return None
 
 
+def _extract_static_key(cred: Credential) -> str | None:
+    if isinstance(cred, ApiKeyCredential) and cred.key:
+        return cred.key
+    if isinstance(cred, TokenCredential) and cred.token:
+        return cred.token
+    return None
+
+
+def _iter_lookup_candidates(
+    store: AuthProfileStore,
+    provider: str,
+) -> Iterator[tuple[str, Credential]]:
+    preferred_id = _preferred_profile_id(store, provider)
+    seen: set[str] = set()
+    if preferred_id:
+        cred = store.profiles.get(preferred_id)
+        if cred is not None:
+            seen.add(preferred_id)
+            yield preferred_id, cred
+
+    for pid, cred in store.profiles.items():
+        if pid in seen or _normalize_provider(cred.provider) != provider:
+            continue
+        yield pid, cred
+
+
+def _lookup_profile(
+    provider: str,
+    extract: Callable[[Credential], T | None],
+) -> tuple[T, str] | None:
+    provider = _normalize_provider(provider)
+    store = load_auth_store()
+    for pid, cred in _iter_lookup_candidates(store, provider):
+        value = extract(cred)
+        if value:
+            return value, pid
+    return None
+
+
+def _mark_profile_default(store: AuthProfileStore, provider: str, profile_id: str) -> None:
+    store.last_good[provider] = profile_id
+    store.usage_stats.setdefault(profile_id, ProfileUsageStats())
+
+
 def get_credential_for_provider(provider: str) -> tuple[str, str | None] | None:
     """Return ``(api_key, profile_id)`` for *provider*, or None.
 
     Prefer ``last_good`` profile, fall back to any matching profile.
     """
-    provider = _normalize_provider(provider)
-    store = load_auth_store()
-
-    preferred_id = _preferred_profile_id(store, provider)
-    if preferred_id and preferred_id in store.profiles:
-        key = _extract_key(store.profiles[preferred_id])
-        if key:
-            return key, preferred_id
-
-    for pid, cred in store.profiles.items():
-        if _normalize_provider(cred.provider) != provider:
-            continue
-        key = _extract_key(cred)
-        if key:
-            return key, pid
-
-    return None
+    return _lookup_profile(provider, _extract_key)
 
 
 def get_static_credential_for_provider(provider: str) -> tuple[str, str | None] | None:
     """Return an API-key/token credential for *provider*, excluding OAuth profiles."""
-    provider = _normalize_provider(provider)
-    store = load_auth_store()
-
-    preferred_id = _preferred_profile_id(store, provider)
-    if preferred_id and preferred_id in store.profiles:
-        cred = store.profiles[preferred_id]
-        if isinstance(cred, ApiKeyCredential) and cred.key:
-            return cred.key, preferred_id
-        if isinstance(cred, TokenCredential) and cred.token:
-            return cred.token, preferred_id
-
-    for pid, cred in store.profiles.items():
-        if _normalize_provider(cred.provider) != provider:
-            continue
-        if isinstance(cred, ApiKeyCredential) and cred.key:
-            return cred.key, pid
-        if isinstance(cred, TokenCredential) and cred.token:
-            return cred.token, pid
-
-    return None
+    return _lookup_profile(provider, _extract_static_key)
 
 
 def get_oauth_credential_for_provider(provider: str) -> tuple[OAuthCredential, str] | None:
     """Return an OAuth credential and profile ID for *provider*, if one exists."""
-    provider = _normalize_provider(provider)
-    store = load_auth_store()
-
-    preferred_id = _preferred_profile_id(store, provider)
-    if preferred_id and preferred_id in store.profiles:
-        cred = store.profiles[preferred_id]
-        if isinstance(cred, OAuthCredential):
-            return cred, preferred_id
-
-    for pid, cred in store.profiles.items():
-        if _normalize_provider(cred.provider) == provider and isinstance(cred, OAuthCredential):
-            return cred, pid
-
-    return None
+    return _lookup_profile(
+        provider,
+        lambda cred: cred if isinstance(cred, OAuthCredential) else None,
+    )
 
 
 def get_api_key_for_provider(provider: str) -> str | None:
@@ -275,9 +280,7 @@ def add_api_key_profile(
         key=key,
         email=email,
     )
-    store.last_good[provider] = profile_id
-    if profile_id not in store.usage_stats:
-        store.usage_stats[profile_id] = ProfileUsageStats()
+    _mark_profile_default(store, provider, profile_id)
 
     save_auth_store(store)
     return profile_id
@@ -312,9 +315,7 @@ def add_oauth_profile(
         client_id=client_id,
         account_id=account_id,
     )
-    store.last_good[provider] = profile_id
-    if profile_id not in store.usage_stats:
-        store.usage_stats[profile_id] = ProfileUsageStats()
+    _mark_profile_default(store, provider, profile_id)
 
     save_auth_store(store)
     return profile_id

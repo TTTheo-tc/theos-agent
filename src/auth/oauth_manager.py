@@ -19,8 +19,6 @@ def _normalize_provider(provider: str) -> str:
 class OAuthManager:
     """Manages OAuth credential lifecycle: resolve, refresh, background upkeep."""
 
-    EXPIRY_BUFFER_S = 300
-
     def __init__(
         self,
         plugins: dict[str, OAuthPlugin],
@@ -38,9 +36,8 @@ class OAuthManager:
     def resolve(self, provider: str, profile_id: str) -> tuple[str, dict[str, str]] | None:
         """Return (api_key, headers) for *profile_id*, refreshing if needed."""
         provider = _normalize_provider(provider)
-        store = self._load_store()
-        cred = store.profiles.get(profile_id)
-        if cred is None or not isinstance(cred, OAuthCredential):
+        cred = self._get_credential(profile_id)
+        if cred is None:
             return None
 
         plugin = self._plugins.get(provider)
@@ -71,9 +68,8 @@ class OAuthManager:
         perform token refresh, network I/O, or subprocess calls on the request hot path.
         """
         provider = _normalize_provider(provider)
-        store = self._load_store()
-        cred = store.profiles.get(profile_id)
-        if cred is None or not isinstance(cred, OAuthCredential):
+        cred = self._get_credential(profile_id)
+        if cred is None:
             return None
         plugin = self._plugins.get(provider)
         if plugin is None:
@@ -119,6 +115,10 @@ class OAuthManager:
         api_key = plugin.format_api_key(cred)
         headers = plugin.auth_headers(api_key)
         return (api_key, headers)
+
+    def _get_credential(self, profile_id: str) -> OAuthCredential | None:
+        cred = self._load_store().profiles.get(profile_id)
+        return cred if isinstance(cred, OAuthCredential) else None
 
     def _refresh_with_lock(
         self,
