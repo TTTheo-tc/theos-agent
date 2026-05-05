@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
+from src.agent.approval import ApprovalGate, ApprovalRequest, ApprovalResponse, RiskLevel
+from src.agent.tools.base import Tool
+from src.agent.tools.registry import ToolRegistry
 from src.security.autonomy import ActionTracker, AutonomyLevel, AutonomyPolicy
 
 
@@ -136,3 +140,68 @@ def test_rate_limit_enforced(tmp_path):
     err = policy.check_rate_limit()
     assert err is not None
     assert "rate limited" in err.lower()
+
+
+class _RiskyTool(Tool):
+    @property
+    def name(self) -> str:
+        return "risky"
+
+    @property
+    def description(self) -> str:
+        return "Risk-assessment test tool."
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {"type": "object", "properties": {"command": {"type": "string"}}}
+
+    @property
+    def risk_level(self) -> str:
+        return "medium"
+
+    def assess_risk(self, command: str = "", **_: Any) -> str:
+        return "high" if "danger" in command else "medium"
+
+    async def execute(self, **kwargs: Any) -> str:
+        return "ok"
+
+
+async def test_registry_approval_gate_runs_with_autonomy_full(tmp_path):
+    cfg = _FakeConfig()
+    cfg.level = AutonomyLevel.FULL
+    policy = AutonomyPolicy(cfg, tmp_path)
+    seen: list[ApprovalRequest] = []
+
+    async def approve(req: ApprovalRequest) -> ApprovalResponse:
+        seen.append(req)
+        return ApprovalResponse(approved=True)
+
+    registry = ToolRegistry(approval_gate=ApprovalGate(callback=approve))
+    registry.set_autonomy(policy)
+    registry.register(_RiskyTool())
+
+    result = await registry.execute("risky", {"command": "safe"})
+
+    assert result == "ok"
+    assert len(seen) == 1
+    assert seen[0].risk_level == RiskLevel.MEDIUM
+
+
+async def test_registry_approval_uses_dynamic_risk_with_autonomy(tmp_path):
+    cfg = _FakeConfig()
+    policy = AutonomyPolicy(cfg, tmp_path)
+    seen: list[ApprovalRequest] = []
+
+    async def approve(req: ApprovalRequest) -> ApprovalResponse:
+        seen.append(req)
+        return ApprovalResponse(approved=True)
+
+    registry = ToolRegistry(approval_gate=ApprovalGate(callback=approve))
+    registry.set_autonomy(policy)
+    registry.register(_RiskyTool())
+
+    result = await registry.execute("risky", {"command": "danger"})
+
+    assert result == "ok"
+    assert len(seen) == 1
+    assert seen[0].risk_level == RiskLevel.HIGH

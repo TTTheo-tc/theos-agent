@@ -15,6 +15,7 @@ from src.bus.queue import MessageBus
 from src.config.schema import AgentRoleConfig, Config
 from src.config.schema_channels import ChannelsConfig
 from src.orchestrator.policies import GenVerExecutionPolicy, OrchestratorPolicy
+from src.security.autonomy import AutonomyLevel
 
 
 def _make_test_config(workspace: Path) -> Config:
@@ -68,6 +69,44 @@ def test_default_runtime_does_not_eagerly_create_optional_managers(tmp_path: Pat
     assert loop.hooks.hooks_dir is None
     assert loop._memory.tiers_enabled() is False
     assert loop._memory._memory_tiers is None
+    assert loop._autonomy_policy is None
+    assert loop.tools.autonomy_policy is None
+
+
+def test_rebuild_tools_preserves_autonomy_policy(tmp_path: Path):
+    config = _make_test_config(tmp_path)
+    config.security.autonomy.level = AutonomyLevel.FULL
+    loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+
+    loop.rebuild_tools()
+
+    assert loop._autonomy_policy is not None
+    assert loop.tools.autonomy_policy is loop._autonomy_policy
+
+
+def test_rebuild_tools_preserves_approval_gate(tmp_path: Path):
+    config = _make_test_config(tmp_path)
+    config.agents.orchestrator.approval_gate.enabled = True
+    loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+    approval_gate = loop.tools.approval_gate
+
+    loop.rebuild_tools()
+
+    assert approval_gate is not None
+    assert loop.tools.approval_gate is approval_gate
+
+
+def test_readonly_autonomy_registers_browser_readonly(tmp_path: Path):
+    config = _make_test_config(tmp_path)
+    config.tools.profile = "coding"
+    config.tools.browser.enabled = True
+    config.security.autonomy.level = AutonomyLevel.READONLY
+
+    loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+    browser = loop.tools.get("browser")
+
+    assert browser is not None
+    assert browser._readonly is True
 
 
 def test_orchestrator_runtime_installs_genver_execution_strategy(tmp_path: Path):

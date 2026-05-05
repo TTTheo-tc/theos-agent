@@ -59,6 +59,16 @@ class ToolRegistry:
         """Attach an approval gate (replaces any existing)."""
         self._approval_gate = gate
 
+    @property
+    def approval_gate(self) -> ApprovalGate | None:
+        """Return the attached approval gate, if any."""
+        return self._approval_gate
+
+    @property
+    def autonomy_policy(self) -> AutonomyPolicy | None:
+        """Return the attached autonomy policy, if any."""
+        return self._autonomy
+
     # --- Plan mode ---------------------------------------------------------
 
     @property
@@ -175,6 +185,13 @@ class ToolRegistry:
             tools = [t for t in tools if t.name in self.PLAN_MODE_TOOLS]
         return [tool.to_schema() for tool in tools]
 
+    @staticmethod
+    def _assess_risk(tool: Tool, params: dict[str, Any]) -> str:
+        """Return the dynamic risk level for a tool call."""
+        if hasattr(tool, "assess_risk"):
+            return tool.assess_risk(**params)
+        return tool.risk_level
+
     async def execute(self, name: str, params: dict[str, Any], context: Any = None) -> str:
         """Execute a tool by name with given parameters."""
         from src.security.autonomy import READONLY_SAFE_TOOLS
@@ -208,9 +225,10 @@ class ToolRegistry:
                     else:
                         return "⚠ This tool is restricted to the bot owner."
 
+            risk = self._assess_risk(tool, params)
+
             # --- Autonomy policy checks ---
             if self._autonomy:
-                risk = tool.risk_level
                 err = self._autonomy.check_tool_allowed(name, risk)
                 if err:
                     return f"⚠ {err}" + _hint
@@ -235,26 +253,9 @@ class ToolRegistry:
                     if err:
                         return f"⚠ {err}" + _hint
 
-                # Approval delegation
-                if self._approval_gate and self._autonomy.needs_approval(name, risk):
-                    from src.agent.approval import RiskLevel
-
-                    risk_enum = RiskLevel(risk)
-                    session_key = getattr(context, "session_key", None) if context else None
-                    response = await self._approval_gate.check(
-                        name, params, risk_enum, session_key=session_key
-                    )
-                    if not response.approved:
-                        return f"⚠ Operation blocked (risk: {risk}): {response.reason}"
-                    if response.modified_args is not None:
-                        params = response.modified_args
-
-            # Approval gate check (standalone, when no autonomy policy)
-            if self._approval_gate and not self._autonomy:
-                if hasattr(tool, "assess_risk"):
-                    risk = tool.assess_risk(**params)
-                else:
-                    risk = tool.risk_level
+            # Approval gate check. The gate owns auto-approval levels; autonomy
+            # should not bypass it when both are configured.
+            if self._approval_gate:
                 from src.agent.approval import RiskLevel
 
                 risk_enum = RiskLevel(risk)

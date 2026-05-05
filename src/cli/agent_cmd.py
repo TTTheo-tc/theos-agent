@@ -27,15 +27,9 @@ from src.utils.usage import merge_usage
 
 
 def _profile_allows_tool(profile: str | None, tool_name: str) -> bool:
-    if profile is None:
-        return True
-    try:
-        from src.agent.tools.tool_profiles import resolve_profile
+    from src.agent.tools.tool_profiles import profile_allows_tool
 
-        profile_set = resolve_profile(profile)
-    except ValueError:
-        return True
-    return profile_set is None or tool_name in profile_set
+    return profile_allows_tool(profile, tool_name)
 
 
 def agent(

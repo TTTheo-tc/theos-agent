@@ -276,3 +276,23 @@ def resolve_profile(
         result = result - expanded_deny
 
     return result
+
+
+def profile_allows_any(profile: str | None, names: set[str]) -> bool:
+    """Return whether *profile* allows at least one tool in *names*.
+
+    ``None`` and unknown profiles are treated as permissive for compatibility
+    with existing callers that use profile checks as optional hints.
+    """
+    if profile is None:
+        return True
+    try:
+        profile_set = resolve_profile(profile)
+    except ValueError:
+        return True
+    return profile_set is None or any(name in profile_set for name in names)
+
+
+def profile_allows_tool(profile: str | None, tool_name: str) -> bool:
+    """Return whether *profile* allows a single tool name."""
+    return profile_allows_any(profile, {tool_name})

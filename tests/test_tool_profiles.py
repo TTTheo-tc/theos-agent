@@ -10,6 +10,8 @@ from src.agent.tools.tool_profiles import (
     PROFILES,
     TOOL_GROUPS,
     expand_groups,
+    profile_allows_any,
+    profile_allows_tool,
     resolve_profile,
 )
 
@@ -150,6 +152,15 @@ def test_resolve_profile_extra_deny_group():
     assert "web_search" not in result
     assert "web_fetch" not in result
     assert "read_file" in result
+
+
+def test_profile_allows_helpers():
+    assert profile_allows_tool(None, "bash") is True
+    assert profile_allows_tool("minimal", "read_file") is True
+    assert profile_allows_tool("minimal", "bash") is False
+    assert profile_allows_any("minimal", {"agent", "grep"}) is True
+    assert profile_allows_any("minimal", {"agent", "bash"}) is False
+    assert profile_allows_tool("unknown-profile", "bash") is True
 
 
 def test_all_profiles_have_valid_tool_names():

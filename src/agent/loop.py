@@ -31,10 +31,12 @@ from src.utils.text import strip_think as _strip_think_fn
 from src.utils.text import tool_hint as _tool_hint_fn
 
 if TYPE_CHECKING:
+    from src.agent.approval import ApprovalGate
     from src.agent.mcp_manager import MCPManager
     from src.agent.subagent import SubagentManager
     from src.config.schema import (
         AgentRoleConfig,
+        AutonomyConfig,
         ChannelsConfig,
         Config,
         GenVerConfig,
@@ -42,6 +44,7 @@ if TYPE_CHECKING:
     )
     from src.cron.service import CronService
     from src.safety.layer import SafetyLayer
+    from src.security.autonomy import AutonomyPolicy
     from src.store.dashboard_writer import DashboardWriter
 
 
@@ -185,7 +188,9 @@ class AgentLoop:
                 auto_approve_levels=auto_levels,
                 timeout=float(orchestrator_config.approval_gate.timeout_seconds),
             )
-        self.tools = ToolRegistry(approval_gate=_gate)
+        self._approval_gate = _gate
+        self._autonomy_policy = self._build_autonomy_policy(config.security.autonomy, workspace)
+        self.tools = self._new_tool_registry()
 
         hooks_dir = Path(config.hooks).expanduser() if self.learning_enabled and config.hooks else None
         if hooks_dir:
@@ -281,18 +286,35 @@ class AgentLoop:
             self._mcp = MCPManager(self._mcp_server_configs)
         return self._mcp
 
-    def _profile_allows_any(self, names: set[str]) -> bool:
-        if self._tool_profile is None:
-            return True
-        try:
-            from src.agent.tools.tool_profiles import resolve_profile
+    @staticmethod
+    def _build_autonomy_policy(
+        autonomy_config: "AutonomyConfig",
+        workspace: Path,
+    ) -> "AutonomyPolicy | None":
+        """Attach autonomy only when the config differs from conservative defaults."""
+        from src.config.schema import AutonomyConfig
+        from src.security.autonomy import AutonomyPolicy
 
-            profile_set = resolve_profile(self._tool_profile)
-        except ValueError:
-            return True
-        if profile_set is None:
-            return True
-        return any(name in profile_set for name in names)
+        if autonomy_config.model_dump(mode="json", by_alias=True) == AutonomyConfig().model_dump(
+            mode="json", by_alias=True
+        ):
+            return None
+        return AutonomyPolicy(autonomy_config, workspace)
+
+    def _new_tool_registry(
+        self,
+        approval_gate: "ApprovalGate | None" = None,
+    ) -> ToolRegistry:
+        """Create a root tool registry with shared runtime policies attached."""
+        registry = ToolRegistry(approval_gate=approval_gate or self._approval_gate)
+        if self._autonomy_policy is not None:
+            registry.set_autonomy(self._autonomy_policy)
+        return registry
+
+    def _profile_allows_any(self, names: set[str]) -> bool:
+        from src.agent.tools.tool_profiles import profile_allows_any
+
+        return profile_allows_any(self._tool_profile, names)
 
     def _needs_subagents_for_registration(self) -> bool:
         if self._root_agent_mode == "team" or self.is_genver:
@@ -397,6 +419,7 @@ class AgentLoop:
             provider_keys=self._provider_keys,
             channel_env=self._channel_env,
             provider=self.provider,
+            autonomy_level=self._autonomy_policy.level if self._autonomy_policy else None,
             browser_config=self._browser_config,
             mcp_manager=mcp_manager,
         )
@@ -409,7 +432,7 @@ class AgentLoop:
         ``/agent``, ``/model`` etc. don't silently exit plan mode.
         """
         was_plan_mode = self.tools.plan_mode
-        self.tools = ToolRegistry(approval_gate=self.tools._approval_gate)
+        self.tools = self._new_tool_registry(approval_gate=self.tools.approval_gate)
         self._register_default_tools()
         if was_plan_mode:
             self.tools.enter_plan_mode()
