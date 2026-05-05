@@ -31,6 +31,15 @@ from src.feishu.api import info_user as get_user  # noqa: F401 — re-export
 # ---------------------------------------------------------------------------
 
 
+def _call_with_option(fn, request, option):
+    return fn(request, option) if option is not None else fn(request)
+
+
+def _extend_items(target: list[dict], items) -> None:
+    if items:
+        target.extend(_unmarshal(items))
+
+
 def list_departments(
     client: lark.Client,
     parent_id: str = "0",
@@ -59,16 +68,11 @@ def list_departments(
             builder = builder.page_token(page_token)
         request = builder.build()
 
-        response = (
-            client.contact.v3.department.children(request, option)
-            if option
-            else client.contact.v3.department.children(request)
-        )
+        response = _call_with_option(client.contact.v3.department.children, request, option)
         _check(response, "list_departments")
 
         data = response.data
-        if data.items:
-            departments.extend(_unmarshal(data.items))
+        _extend_items(departments, data.items)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -94,11 +98,7 @@ def get_department(client: lark.Client, department_id: str) -> dict:
     option = _request_option()
     request = GetDepartmentRequest.builder().department_id(department_id).build()
 
-    response = (
-        client.contact.v3.department.get(request, option)
-        if option
-        else client.contact.v3.department.get(request)
-    )
+    response = _call_with_option(client.contact.v3.department.get, request, option)
     _check(response, "get_department")
     return _unmarshal(response.data.department)
 
@@ -131,16 +131,11 @@ def list_department_users(
             builder = builder.page_token(page_token)
         request = builder.build()
 
-        response = (
-            client.contact.v3.user.list(request, option)
-            if option
-            else client.contact.v3.user.list(request)
-        )
+        response = _call_with_option(client.contact.v3.user.list, request, option)
         _check(response, "list_department_users")
 
         data = response.data
-        if data.items:
-            users.extend(_unmarshal(data.items))
+        _extend_items(users, data.items)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -153,6 +148,29 @@ def list_department_users(
 # ---------------------------------------------------------------------------
 # User lookup by email / phone
 # ---------------------------------------------------------------------------
+
+
+def _first_user_id_item(user_list) -> dict | None:
+    if not user_list:
+        return None
+
+    items = _unmarshal(user_list) if not isinstance(user_list, list) else user_list
+    for item in items:
+        if isinstance(item, dict) and item.get("user_id"):
+            return item
+    return None
+
+
+def _batch_get_first_user(client: lark.Client, body, action: str) -> dict | None:
+    option = _request_option()
+    request = BatchGetIdUserRequest.builder().request_body(body).build()
+
+    response = _call_with_option(client.contact.v3.user.batch_get_id, request, option)
+    _check(response, action)
+
+    data = response.data
+    user_list = data.user_list if hasattr(data, "user_list") else None
+    return _first_user_id_item(user_list)
 
 
 def get_user_by_email(client: lark.Client, email: str) -> dict | None:
@@ -168,28 +186,8 @@ def get_user_by_email(client: lark.Client, email: str) -> dict | None:
     Returns:
         Dict with ``user_id`` and ``email``, or ``None`` if not found.
     """
-    option = _request_option()
     body = BatchGetIdUserRequestBody.builder().emails([email]).build()
-    request = BatchGetIdUserRequest.builder().request_body(body).build()
-
-    response = (
-        client.contact.v3.user.batch_get_id(request, option)
-        if option
-        else client.contact.v3.user.batch_get_id(request)
-    )
-    _check(response, "get_user_by_email")
-
-    data = response.data
-    user_list = data.user_list if hasattr(data, "user_list") else None
-    if not user_list:
-        return None
-
-    items = _unmarshal(user_list) if not isinstance(user_list, list) else user_list
-    # batch_get_id returns list of {user_id, ...} dicts; find the one matching email
-    for item in items:
-        if isinstance(item, dict) and item.get("user_id"):
-            return item
-    return None
+    return _batch_get_first_user(client, body, "get_user_by_email")
 
 
 def get_user_by_phone(client: lark.Client, phone: str) -> dict | None:
@@ -205,24 +203,5 @@ def get_user_by_phone(client: lark.Client, phone: str) -> dict | None:
     Returns:
         Dict with ``user_id`` and ``mobile``, or ``None`` if not found.
     """
-    option = _request_option()
     body = BatchGetIdUserRequestBody.builder().mobiles([phone]).build()
-    request = BatchGetIdUserRequest.builder().request_body(body).build()
-
-    response = (
-        client.contact.v3.user.batch_get_id(request, option)
-        if option
-        else client.contact.v3.user.batch_get_id(request)
-    )
-    _check(response, "get_user_by_phone")
-
-    data = response.data
-    user_list = data.user_list if hasattr(data, "user_list") else None
-    if not user_list:
-        return None
-
-    items = _unmarshal(user_list) if not isinstance(user_list, list) else user_list
-    for item in items:
-        if isinstance(item, dict) and item.get("user_id"):
-            return item
-    return None
+    return _batch_get_first_user(client, body, "get_user_by_phone")

@@ -59,6 +59,17 @@ class TestListDepartments:
         assert len(result) == 2
         assert result[0]["department_id"] == "d1"
 
+    def test_list_departments_passes_request_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(items=[], has_more=False, page_token=None)
+        client.contact.v3.department.children.return_value = _ok_response(data)
+        option = object()
+
+        with patch("src.feishu.api_contacts._request_option", return_value=option):
+            api_contacts.list_departments(client, "0")
+
+        assert client.contact.v3.department.children.call_args.args[1] is option
+
     def test_list_departments_paginated(self):
         client = _mock_lark_client()
         page1 = SimpleNamespace(
@@ -126,6 +137,36 @@ class TestGetUserByEmail:
 
         assert result is not None
         assert result["user_id"] == "ou_abc"
+
+    def test_found_from_sdk_collection(self):
+        client = _mock_lark_client()
+        raw_user_list = object()
+        data = SimpleNamespace(user_list=raw_user_list)
+        client.contact.v3.user.batch_get_id.return_value = _ok_response(data)
+
+        with (
+            patch("src.feishu.api_contacts._request_option", return_value=None),
+            patch(
+                "src.feishu.api_contacts._unmarshal",
+                return_value=[{"user_id": "ou_abc", "email": "alice@example.com"}],
+            ) as unmarshal,
+        ):
+            result = api_contacts.get_user_by_email(client, "alice@example.com")
+
+        assert result is not None
+        assert result["user_id"] == "ou_abc"
+        unmarshal.assert_called_once_with(raw_user_list)
+
+    def test_find_by_email_passes_request_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(user_list=[{"user_id": "ou_abc"}])
+        client.contact.v3.user.batch_get_id.return_value = _ok_response(data)
+        option = object()
+
+        with patch("src.feishu.api_contacts._request_option", return_value=option):
+            api_contacts.get_user_by_email(client, "alice@example.com")
+
+        assert client.contact.v3.user.batch_get_id.call_args.args[1] is option
 
     def test_not_found(self):
         client = _mock_lark_client()
