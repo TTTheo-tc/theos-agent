@@ -364,7 +364,7 @@ async def test_process_direct_sets_sender_is_owner(loop_for_direct: AgentLoop):
 
 def test_basechannel_composite_owner_ids():
     """'id|username' sender format resolves ownership correctly."""
-    from src.channels.base import BaseChannel
+    from src.channels.base import BaseChannel, identity_matches
 
     class _Stub(BaseChannel):
         async def start(self) -> None: ...
@@ -373,6 +373,7 @@ def test_basechannel_composite_owner_ids():
 
     channel = _Stub(config=MagicMock(), bus=MagicMock(), owner_ids=["12345"])
 
+    assert identity_matches("12345|alice", {"12345"}) is True
     assert channel._is_owner_sender("12345") is True
     assert channel._is_owner_sender("12345|alice") is True
     assert channel._is_owner_sender("99999|bob") is False

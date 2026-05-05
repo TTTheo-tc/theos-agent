@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from loguru import logger
 
+from src.bus.events import OutboundMessage
 from src.bus.queue import MessageBus
 from src.channels.base import BaseChannel
 from src.config.schema import Config
@@ -38,9 +39,7 @@ class ChannelManager:
 
     def _init_channels(self) -> None:
         """Initialize channels based on config."""
-        import importlib
-
-        from src.channels.registry import CHANNELS, _resolve_dotpath
+        from src.channels.registry import CHANNELS
         from src.security.secret_refs import resolve_data_secret_refs
 
         for spec in CHANNELS:
@@ -48,17 +47,24 @@ class ChannelManager:
             if not ch_config.enabled:
                 continue
             try:
-                mod = importlib.import_module(spec.module)
-                cls = getattr(mod, spec.class_name)
-                kwargs: dict[str, Any] = {}
-                for kwarg_name, dotpath in spec.extra_kwargs:
-                    kwargs[kwarg_name] = _resolve_dotpath(self.config, dotpath)
-                self.channels[spec.name] = cls(
-                    ch_config, self.bus, **kwargs, owner_ids=self.config.channels.owner_ids
-                )
+                self.channels[spec.name] = self._build_channel(spec, ch_config)
                 logger.info("{} channel enabled", spec.name.capitalize())
             except ImportError as e:
                 logger.warning("{} channel not available: {}", spec.name.capitalize(), e)
+
+    def _build_channel(self, spec: Any, ch_config: Any) -> BaseChannel:
+        """Instantiate a configured channel from registry metadata."""
+        import importlib
+
+        from src.channels.registry import _resolve_dotpath
+
+        mod = importlib.import_module(spec.module)
+        cls = getattr(mod, spec.class_name)
+        kwargs = {
+            kwarg_name: _resolve_dotpath(self.config, dotpath)
+            for kwarg_name, dotpath in spec.extra_kwargs
+        }
+        return cls(ch_config, self.bus, **kwargs, owner_ids=self.config.channels.owner_ids)
 
     async def _start_channel(self, name: str, channel: BaseChannel) -> None:
         """Start a channel and log any exceptions."""
@@ -153,50 +159,60 @@ class ChannelManager:
                     logger.warning("Unknown channel: {}", msg.channel)
                     continue
 
-                if msg.metadata.get("_progress"):
-                    # Always skip streaming deltas — channels get the final response
-                    if msg.metadata.get("_progress_kind") == "stream":
-                        continue
-                    if msg.metadata.get("_tool_hint") and not self.config.channels.send_tool_hints:
-                        continue
-                    if (
-                        not msg.metadata.get("_tool_hint")
-                        and not self.config.channels.send_progress
-                    ):
-                        continue
-                    if not channel.supports_internal_progress:
-                        msg = channel.transform_progress_message(msg)
-                        if msg is None:
-                            continue
-
-                try:
-                    self._inflight_sends += 1
-                    await channel.send(msg)
-                    if msg.metadata.get("_restart_after_send") and self._restart_cb is not None:
-                        logger.info(
-                            "Restart marker delivered on channel={} chat_id={}",
-                            msg.channel,
-                            msg.chat_id,
-                        )
-                        self._restart_cb()
-                except Exception:
-                    has_media = bool(msg.media)
-                    content_chars = len(msg.content or "")
-                    logger.opt(exception=True).warning(
-                        "Outbound send failed | channel={} chat_id={} has_media={} content_chars={}",
-                        msg.channel,
-                        msg.chat_id,
-                        has_media,
-                        content_chars,
-                    )
-                finally:
-                    if self._inflight_sends > 0:
-                        self._inflight_sends -= 1
+                msg = self._prepare_outbound_message(channel, msg)
+                if msg is not None:
+                    await self._send_outbound(channel, msg)
 
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break
+
+    def _prepare_outbound_message(
+        self,
+        channel: BaseChannel,
+        msg: OutboundMessage,
+    ) -> OutboundMessage | None:
+        """Apply global/channel progress policy before outbound send."""
+        if not msg.metadata.get("_progress"):
+            return msg
+
+        # Always skip streaming deltas — channels get the final response.
+        if msg.metadata.get("_progress_kind") == "stream":
+            return None
+        if msg.metadata.get("_tool_hint") and not self.config.channels.send_tool_hints:
+            return None
+        if not msg.metadata.get("_tool_hint") and not self.config.channels.send_progress:
+            return None
+        if not channel.supports_internal_progress:
+            return channel.transform_progress_message(msg)
+        return msg
+
+    async def _send_outbound(self, channel: BaseChannel, msg: OutboundMessage) -> None:
+        """Send one outbound message and handle restart/error accounting."""
+        try:
+            self._inflight_sends += 1
+            await channel.send(msg)
+            if msg.metadata.get("_restart_after_send") and self._restart_cb is not None:
+                logger.info(
+                    "Restart marker delivered on channel={} chat_id={}",
+                    msg.channel,
+                    msg.chat_id,
+                )
+                self._restart_cb()
+        except Exception:
+            has_media = bool(msg.media)
+            content_chars = len(msg.content or "")
+            logger.opt(exception=True).warning(
+                "Outbound send failed | channel={} chat_id={} has_media={} content_chars={}",
+                msg.channel,
+                msg.chat_id,
+                has_media,
+                content_chars,
+            )
+        finally:
+            if self._inflight_sends > 0:
+                self._inflight_sends -= 1
 
     def get_channel(self, name: str) -> BaseChannel | None:
         """Get a channel by name."""

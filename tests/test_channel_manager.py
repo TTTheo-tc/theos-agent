@@ -240,3 +240,31 @@ async def test_progress_delivered_when_channel_supports_internal_progress() -> N
         pass
 
     mock_channel.send.assert_awaited_once_with(msg)
+
+
+def test_prepare_outbound_message_skips_streaming_progress() -> None:
+    """Streaming deltas are always internal to the CLI/bus path."""
+    bus = MessageBus()
+    manager, mock_channel = _make_manager_with_channel(bus, supports_internal_progress=True)
+    msg = OutboundMessage(
+        channel="test_channel",
+        chat_id="chat_42",
+        content="partial",
+        metadata={"_progress": True, "_progress_kind": "stream"},
+    )
+
+    assert manager._prepare_outbound_message(mock_channel, msg) is None
+    mock_channel.transform_progress_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_outbound_decrements_inflight_after_failure() -> None:
+    """Send accounting is reset even when channel.send raises."""
+    bus = MessageBus()
+    manager, mock_channel = _make_manager_with_failing_channel(bus)
+    msg = OutboundMessage(channel="test_channel", chat_id="chat_42", content="test")
+
+    await manager._send_outbound(mock_channel, msg)
+
+    assert manager._inflight_sends == 0
+    mock_channel.send.assert_awaited_once_with(msg)

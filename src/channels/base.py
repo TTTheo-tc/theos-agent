@@ -9,6 +9,20 @@ from src.bus.events import InboundMessage, OutboundMessage
 from src.bus.queue import MessageBus
 
 
+def identity_matches(sender_id: str, allowed_ids: list[str] | set[str] | tuple[str, ...]) -> bool:
+    """Return true when sender_id or any composite part is in allowed_ids."""
+    allowed = {str(item) for item in allowed_ids if item}
+    if not allowed:
+        return False
+
+    sender_str = str(sender_id)
+    if sender_str in allowed:
+        return True
+    if "|" not in sender_str:
+        return False
+    return any(part and part in allowed for part in sender_str.split("|"))
+
+
 class BaseChannel(ABC):
     """
     Abstract base class for chat channel implementations.
@@ -77,23 +91,11 @@ class BaseChannel(ABC):
         if not allow_list:
             return True
 
-        sender_str = str(sender_id)
-        if sender_str in allow_list:
-            return True
-        if "|" in sender_str:
-            for part in sender_str.split("|"):
-                if part and part in allow_list:
-                    return True
-        return False
+        return identity_matches(sender_id, allow_list)
 
     def _is_owner_sender(self, sender_id: str) -> bool:
         """Check if sender is an owner (supports composite 'id|username' format)."""
-        sender_str = str(sender_id)
-        if sender_str in self._owner_ids:
-            return True
-        if "|" in sender_str:
-            return any(part and part in self._owner_ids for part in sender_str.split("|"))
-        return False
+        return identity_matches(sender_id, self._owner_ids)
 
     async def _handle_message(
         self,

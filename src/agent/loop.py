@@ -22,6 +22,7 @@ from src.agent.tools.message import MessageTool
 from src.agent.tools.registry import ToolRegistry
 from src.bus.events import InboundMessage, OutboundMessage
 from src.bus.queue import MessageBus
+from src.channels.base import identity_matches
 from src.providers.base import LLMProvider
 from src.session.group_dispatcher import PerGroupDispatcher
 from src.session.manager import Session, SessionManager
@@ -329,12 +330,7 @@ class AgentLoop:
             return True
         if not self._owner_ids:
             return False
-        sender_str = str(sender_id)
-        if sender_str in self._owner_ids:
-            return True
-        if "|" in sender_str:
-            return any(part and part in self._owner_ids for part in sender_str.split("|"))
-        return False
+        return identity_matches(sender_id, self._owner_ids)
 
     def _resolve_sender_is_owner(self, msg: InboundMessage, channel: str | None = None) -> bool:
         """Resolve ownership from explicit InboundMessage field, falling back to _is_owner."""
