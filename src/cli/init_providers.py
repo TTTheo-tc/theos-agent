@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import typer
@@ -123,49 +122,6 @@ def check_codex_token(creds_path: Path) -> str:
         return "ok"
     except Exception:
         return "ok"  # can't decode, assume valid
-
-
-def _normalize_pasted_secret(raw: str, *, env_var: str | None = None) -> str:
-    """Normalize pasted secret text into a single token string."""
-    value = raw.strip()
-    if not value:
-        return ""
-
-    if env_var:
-        for prefix in (f"export {env_var}=", f"{env_var}="):
-            if value.startswith(prefix):
-                value = value[len(prefix) :].strip()
-                break
-
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        value = value[1:-1]
-
-    return re.sub(r"\s+", "", value)
-
-
-def _prompt_multiline_secret(
-    prompt: str,
-    *,
-    env_var: str | None = None,
-    help_text: str | None = None,
-) -> str:
-    """Read a possibly multi-line pasted secret and normalize it."""
-    if help_text:
-        console.print(help_text)
-    console.print("  Paste and press Enter twice to finish. Empty first line skips.")
-
-    first = console.input(f"{prompt} ")
-    if not first.strip():
-        return ""
-
-    lines = [first]
-    while True:
-        line = console.input("  ... ")
-        if not line.strip():
-            break
-        lines.append(line)
-
-    return _normalize_pasted_secret("\n".join(lines), env_var=env_var)
 
 
 def prompt_anthropic_key() -> str:

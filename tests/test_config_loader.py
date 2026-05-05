@@ -55,6 +55,23 @@ def test_load_config_applies_saved_proxy_to_env(tmp_path, monkeypatch):
     assert os.environ["HTTPS_PROXY"] == "http://127.0.0.1:7890"
 
 
+def test_load_config_does_not_apply_socks_proxy_to_http_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("HTTPS_PROXY", raising=False)
+    monkeypatch.delenv("HTTP_PROXY", raising=False)
+    monkeypatch.delenv("https_proxy", raising=False)
+    monkeypatch.delenv("http_proxy", raising=False)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"proxy": "socks5h://127.0.0.1:7890"}), encoding="utf-8")
+
+    config = load_config(config_path)
+
+    assert config.proxy == "socks5h://127.0.0.1:7890"
+    assert "HTTPS_PROXY" not in os.environ
+    assert "HTTP_PROXY" not in os.environ
+    assert "https_proxy" not in os.environ
+    assert "http_proxy" not in os.environ
+
+
 def test_ui_dashboard_defaults_to_loopback():
     config = Config()
 

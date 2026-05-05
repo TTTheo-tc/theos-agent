@@ -391,16 +391,15 @@ class SessionManager:
                         if row.get("_type") == "metadata":
                             data = row
                     if data:
-                        if data.get("_type") == "metadata":
-                            key = data.get("key") or path.stem.replace("_", ":", 1)
-                            sessions.append(
-                                {
-                                    "key": key,
-                                    "created_at": data.get("created_at"),
-                                    "updated_at": data.get("updated_at"),
-                                    "path": str(path),
-                                }
-                            )
+                        key = data.get("key") or path.stem.replace("_", ":", 1)
+                        sessions.append(
+                            {
+                                "key": key,
+                                "created_at": data.get("created_at"),
+                                "updated_at": data.get("updated_at"),
+                                "path": str(path),
+                            }
+                        )
             except Exception:
                 continue
 

@@ -10,10 +10,7 @@ from rich.table import Table
 from src.cli.display import console, print_agent_response
 from src.memory.rule_cleanup import run_structured_rule_cleanup_event
 
-cron_app = typer.Typer(help="Manage scheduled tasks")
 
-
-@cron_app.command("list")
 def cron_list(
     all: bool = typer.Option(False, "--all", "-a", help="Include disabled jobs"),
 ):
@@ -71,7 +68,6 @@ def cron_list(
     console.print(table)
 
 
-@cron_app.command("add")
 def cron_add(
     name: str = typer.Option(..., "--name", "-n", help="Job name"),
     message: str = typer.Option(..., "--message", "-m", help="Message for agent"),
@@ -129,7 +125,6 @@ def cron_add(
     console.print(f"[green]\u2713[/green] Added job '{job.name}' ({job.id})")
 
 
-@cron_app.command("remove")
 def cron_remove(
     job_id: str = typer.Argument(..., help="Job ID to remove"),
 ):
@@ -146,7 +141,6 @@ def cron_remove(
         console.print(f"[red]Job {job_id} not found[/red]")
 
 
-@cron_app.command("enable")
 def cron_enable(
     job_id: str = typer.Argument(..., help="Job ID"),
     disable: bool = typer.Option(False, "--disable", help="Disable instead of enable"),
@@ -166,7 +160,6 @@ def cron_enable(
         console.print(f"[red]Job {job_id} not found[/red]")
 
 
-@cron_app.command("run")
 def cron_run(
     job_id: str = typer.Argument(..., help="Job ID to run"),
     force: bool = typer.Option(False, "--force", "-f", help="Run even if disabled"),

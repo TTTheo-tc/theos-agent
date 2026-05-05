@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from loguru import logger
@@ -142,9 +141,6 @@ def _migrate_config(data: dict) -> dict:
 
 def _apply_proxy_env(config: Config) -> None:
     """Expose the saved proxy through env vars for HTTP clients that honor them."""
-    if not config.proxy:
-        return
-    os.environ.setdefault("HTTPS_PROXY", config.proxy)
-    os.environ.setdefault("HTTP_PROXY", config.proxy)
-    os.environ.setdefault("https_proxy", config.proxy)
-    os.environ.setdefault("http_proxy", config.proxy)
+    from src.utils.proxy import apply_http_proxy_env
+
+    apply_http_proxy_env(config.proxy)

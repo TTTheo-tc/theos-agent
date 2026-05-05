@@ -16,12 +16,6 @@ from src.cli.display import console
 from src.memory.rule_cleanup import run_structured_rule_cleanup_event
 from src.utils.helpers import sync_workspace_templates
 
-gateway_app = typer.Typer(
-    name="gateway",
-    help="Gateway daemon management",
-    invoke_without_command=True,
-)
-
 
 def _print_log_line(line: str) -> None:
     """Parse a JSONL log line and print formatted output."""
@@ -52,7 +46,6 @@ def _resolve_service():
     return resolve_service()
 
 
-@gateway_app.command("stop")
 def gateway_stop():
     """Stop the gateway daemon."""
     svc = _resolve_service()
@@ -63,7 +56,6 @@ def gateway_stop():
     console.print("[green]\u2713[/green] Gateway daemon stopped.")
 
 
-@gateway_app.command("restart")
 def gateway_restart_cmd():
     """Restart the gateway daemon."""
     svc = _resolve_service()
@@ -78,7 +70,6 @@ def gateway_restart_cmd():
     console.print("[green]\u2713[/green] Gateway daemon restarting.")
 
 
-@gateway_app.command("uninstall")
 def gateway_uninstall():
     """Stop and remove the gateway daemon service."""
     svc = _resolve_service()
@@ -89,7 +80,6 @@ def gateway_uninstall():
     console.print("[green]\u2713[/green] Gateway daemon uninstalled.")
 
 
-@gateway_app.command("logs")
 def gateway_logs(
     source: str = typer.Option("app", help="Log source: app, supervisor-stdout, supervisor-stderr"),
     raw: bool = typer.Option(False, "--raw", help="Output raw JSONL"),
@@ -268,7 +258,6 @@ def _warn_missing_owner_ids(config) -> None:
         )
 
 
-@gateway_app.callback(invoke_without_command=True)
 def gateway(
     ctx: typer.Context,
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),

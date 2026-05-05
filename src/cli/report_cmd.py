@@ -6,11 +6,7 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 
-import typer
-
 from src.cli.display import console
-
-report_app = typer.Typer(help="Generate activity reports from EventStore")
 
 
 def _get_db_path() -> Path:
@@ -45,14 +41,12 @@ async def _generate(period: str) -> str:
         await db.close()
 
 
-@report_app.command("daily")
 def daily():
     """Generate a daily activity report."""
     report = asyncio.run(_generate("daily"))
     console.print(report)
 
 
-@report_app.command("weekly")
 def weekly():
     """Generate a weekly activity report."""
     report = asyncio.run(_generate("weekly"))

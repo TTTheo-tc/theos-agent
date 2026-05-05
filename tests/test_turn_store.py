@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from src.session.turn_store import TurnStore
@@ -33,3 +34,22 @@ def test_turn_store_marks_inflight_turns_interrupted(tmp_path: Path):
     assert latest.status == "interrupted"
     assert latest.metadata["interrupted_from"] == "waiting_user"
     assert latest.metadata["question"] == "Need more info"
+
+
+def test_turn_store_converts_metadata_to_json_safe_values(tmp_path: Path):
+    store = TurnStore(tmp_path)
+    when = datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+    checkpoint = store.record(
+        "cli:direct",
+        "turn-1",
+        "accepted",
+        path=tmp_path / "artifact.txt",
+        when=when,
+        skip=None,
+    )
+
+    assert checkpoint.metadata == {
+        "path": str(tmp_path / "artifact.txt"),
+        "when": when.isoformat(),
+    }

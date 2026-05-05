@@ -10,6 +10,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.session.checkpoint_utils import jsonable_metadata
 from src.utils.helpers import ensure_dir, safe_filename
 
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "timed_out", "cancelled", "interrupted"})
@@ -58,7 +59,7 @@ class SubagentStore:
             session_key=session_key,
             status=status,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            metadata=self._jsonable(metadata),
+            metadata=jsonable_metadata(metadata),
         )
         path = self._get_path(session_key)
         with open(path, "a", encoding="utf-8") as f:
@@ -120,23 +121,6 @@ class SubagentStore:
         except Exception:
             logger.opt(exception=True).warning("Failed to read subagent checkpoints from {}", path)
         return latest
-
-    @staticmethod
-    def _jsonable(metadata: dict[str, Any]) -> dict[str, Any]:
-        def _convert(value: Any) -> Any:
-            if isinstance(value, (str, int, float, bool)) or value is None:
-                return value
-            if isinstance(value, Path):
-                return str(value)
-            if isinstance(value, datetime):
-                return value.isoformat()
-            if isinstance(value, dict):
-                return {str(k): _convert(v) for k, v in value.items()}
-            if isinstance(value, (list, tuple, set)):
-                return [_convert(v) for v in value]
-            return str(value)
-
-        return {str(k): _convert(v) for k, v in metadata.items() if v is not None}
 
     @staticmethod
     def _from_row(row: dict[str, Any] | None) -> SubagentCheckpoint | None:

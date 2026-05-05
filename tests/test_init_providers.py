@@ -7,7 +7,6 @@ from src.cli.init_providers import (
     PROVIDER_MODEL_SOURCE,
     PROVIDER_TOP_MODELS,
     _api_keys_by_provider,
-    _normalize_pasted_secret,
     _resolve_model_fetch_credentials,
     build_model_choices,
     prompt_anthropic_key,
@@ -54,14 +53,6 @@ def test_api_keys_by_provider_recognizes_oauth_credential(monkeypatch) -> None:
 
     assert "anthropic" not in keys
     assert keys["openai"] == "ok-1"
-
-
-def test_normalize_pasted_secret_strips_export_prefix_and_newlines() -> None:
-    raw = "export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-oat01-abc\n 123 '"
-
-    token = _normalize_pasted_secret(raw, env_var="CLAUDE_CODE_OAUTH_TOKEN")
-
-    assert token == "sk-ant-oat01-abc123"
 
 
 def test_prompt_anthropic_key_rejects_oauth_token(monkeypatch) -> None:

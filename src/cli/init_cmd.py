@@ -21,11 +21,14 @@ from src import __logo__
 from src.cli.display import console
 from src.config.schema import Config
 from src.utils.helpers import sync_workspace_templates
-
-_HTTP_PROXY_ENV_KEYS = ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy")
-_ALL_PROXY_ENV_KEYS = ("ALL_PROXY", "all_proxy")
-_NO_PROXY_ENV_KEYS = ("NO_PROXY", "no_proxy")
-_PROXY_ENV_KEYS = _HTTP_PROXY_ENV_KEYS + _ALL_PROXY_ENV_KEYS + _NO_PROXY_ENV_KEYS
+from src.utils.proxy import (
+    ALL_PROXY_ENV_KEYS,
+    PROXY_ENV_KEYS,
+    apply_http_proxy_env,
+    first_supported_proxy_env,
+    has_supported_http_proxy_env,
+    is_socks_proxy,
+)
 
 
 def configure_channels(config: Config) -> None:
@@ -170,18 +173,6 @@ def _ensure_local_instruction_symlinks(repo_root: Path) -> list[str]:
     return created
 
 
-def _is_socks_proxy(value: str) -> bool:
-    return value.lower().startswith(("socks://", "socks4://", "socks4a://", "socks5://", "socks5h://"))
-
-
-def _has_supported_http_proxy_env() -> bool:
-    return any(
-        bool(value and not _is_socks_proxy(value))
-        for key in _HTTP_PROXY_ENV_KEYS
-        if (value := os.environ.get(key))
-    )
-
-
 def _compute_daemon_args() -> tuple[list[str], dict[str, str], str]:
     """Compute program args, env, and working dir for daemon install."""
     import sys
@@ -195,12 +186,12 @@ def _compute_daemon_args() -> tuple[list[str], dict[str, str], str]:
         if val:
             env[key] = val
     # Proxy
-    has_supported_http_proxy = _has_supported_http_proxy_env()
-    for key in _PROXY_ENV_KEYS:
+    has_http_proxy = has_supported_http_proxy_env()
+    for key in PROXY_ENV_KEYS:
         val = os.environ.get(key)
         if val:
-            if _is_socks_proxy(val):
-                if key in _ALL_PROXY_ENV_KEYS and has_supported_http_proxy:
+            if is_socks_proxy(val):
+                if key in ALL_PROXY_ENV_KEYS and has_http_proxy:
                     continue
                 console.print(
                     f"[yellow]⚠ {key}={val} uses SOCKS protocol which is not "
@@ -284,22 +275,16 @@ def init(
             console.print(f"[green]\u2713[/green] Hooks: {config.hooks} (existing)")
 
         # Proxy
-        _proxy_env = (
-            os.environ.get("https_proxy")
-            or os.environ.get("HTTPS_PROXY")
-            or os.environ.get("http_proxy")
-            or os.environ.get("HTTP_PROXY")
-            or os.environ.get("all_proxy")
-            or os.environ.get("ALL_PROXY")
-        )
+        _proxy_env = first_supported_proxy_env()
         if _proxy_env:
             config.proxy = _proxy_env
             save_config(config)
             console.print(f"[green]\u2713[/green] Proxy: {_proxy_env}")
         elif config.proxy:
-            os.environ.setdefault("HTTPS_PROXY", config.proxy)
-            os.environ.setdefault("HTTP_PROXY", config.proxy)
-            console.print(f"[green]\u2713[/green] Proxy: {config.proxy} (from config)")
+            if apply_http_proxy_env(config.proxy):
+                console.print(f"[green]\u2713[/green] Proxy: {config.proxy} (from config)")
+            else:
+                console.print(f"[yellow]⚠[/yellow] Proxy skipped: {config.proxy} is SOCKS")
 
         # -- Step 2: workspace + soul (interactive) ----------------------------
         workspace = get_workspace_path()

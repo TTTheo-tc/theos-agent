@@ -108,6 +108,8 @@ def gateway(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
     """Start the theos gateway (foreground)."""
+    if ctx.resilient_parsing or ctx.invoked_subcommand is not None:
+        return
     from src.cli.gateway_cmd import gateway as _gateway
 
     return _gateway(ctx=ctx, verbose=verbose)

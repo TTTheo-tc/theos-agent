@@ -10,6 +10,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.session.checkpoint_utils import jsonable_metadata
 from src.utils.helpers import ensure_dir, safe_filename
 
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "interrupted"})
@@ -63,7 +64,7 @@ class TurnStore:
             session_key=session_key,
             status=status,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            metadata=self._jsonable(metadata),
+            metadata=jsonable_metadata(metadata),
         )
         path = self._get_path(session_key)
         with open(path, "a", encoding="utf-8") as f:
@@ -72,25 +73,7 @@ class TurnStore:
 
     def latest(self, session_key: str) -> TurnCheckpoint | None:
         """Return the latest checkpoint for a session, if any."""
-        path = self._get_path(session_key)
-        if not path.exists():
-            return None
-        try:
-            latest_row: dict[str, Any] | None = None
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    row = json.loads(line)
-                    if row.get("_type") == "turn_checkpoint":
-                        latest_row = row
-            return self._from_row(latest_row) if latest_row else None
-        except Exception:
-            logger.opt(exception=True).warning(
-                "Failed to read latest turn checkpoint for {}", session_key
-            )
-            return None
+        return self._latest_from_path(self._get_path(session_key))
 
     def list_latest(self, limit: int = 20) -> list[TurnCheckpoint]:
         """Return latest checkpoint per session, newest first."""
@@ -119,23 +102,6 @@ class TurnStore:
             self.record(latest.session_key, latest.turn_id, "interrupted", **meta)
             marked += 1
         return marked
-
-    @staticmethod
-    def _jsonable(metadata: dict[str, Any]) -> dict[str, Any]:
-        def _convert(value: Any) -> Any:
-            if isinstance(value, (str, int, float, bool)) or value is None:
-                return value
-            if isinstance(value, Path):
-                return str(value)
-            if isinstance(value, datetime):
-                return value.isoformat()
-            if isinstance(value, dict):
-                return {str(k): _convert(v) for k, v in value.items()}
-            if isinstance(value, (list, tuple, set)):
-                return [_convert(v) for v in value]
-            return str(value)
-
-        return {str(k): _convert(v) for k, v in metadata.items() if v is not None}
 
     def _latest_from_path(self, path: Path) -> TurnCheckpoint | None:
         try:

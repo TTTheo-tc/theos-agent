@@ -9,6 +9,7 @@ from src.cli.init_cmd import (
     _resolve_workspace_for_reset,
 )
 from src.cli.init_soul import configure_soul, render_soul_markdown
+from src.utils.proxy import first_supported_proxy_env
 
 _PROXY_ENV_KEYS = (
     "HTTPS_PROXY",
@@ -269,6 +270,14 @@ def test_compute_daemon_args_silently_skips_socks_all_proxy_when_http_proxy_exis
     assert env["https_proxy"] == "http://127.0.0.1:7890"
     assert "all_proxy" not in env
     assert "SOCKS protocol" not in output
+
+
+def test_first_supported_proxy_env_ignores_socks_proxy(monkeypatch) -> None:
+    _clear_proxy_env(monkeypatch)
+    monkeypatch.setenv("all_proxy", "socks5h://127.0.0.1:7890")
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:7890")
+
+    assert first_supported_proxy_env() == "http://127.0.0.1:7890"
 
 
 def test_compute_daemon_args_warns_when_only_socks_all_proxy(monkeypatch, capsys) -> None:

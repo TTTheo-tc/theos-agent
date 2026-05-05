@@ -91,6 +91,12 @@ def test_optional_cli_help_keeps_implementations_lazy():
             ["feishu-auth", "--help"],
             ["auth", "login", "--help"],
             ["provider", "login", "--help"],
+            ["gateway", "--help"],
+            ["gateway", "logs", "--help"],
+            ["cron", "--help"],
+            ["cron", "add", "--help"],
+            ["report", "--help"],
+            ["report", "daily", "--help"],
             ["init", "--help"],
             ["agent", "--help"],
         ):
