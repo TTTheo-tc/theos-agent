@@ -62,6 +62,17 @@ class TestListTasks:
         assert len(result) == 2
         assert result[0]["guid"] == "t_1"
 
+    def test_list_tasks_passes_request_option(self):
+        client = _mock_lark_client()
+        data = SimpleNamespace(items=[], has_more=False, page_token=None)
+        client.task.v2.task.list.return_value = _ok_response(data)
+        option = object()
+
+        with patch("src.feishu.api_tasks._request_option", return_value=option):
+            api_tasks.list_tasks(client)
+
+        assert client.task.v2.task.list.call_args.args[1] is option
+
     def test_list_tasks_paginated(self):
         client = _mock_lark_client()
         page1 = SimpleNamespace(
@@ -108,6 +119,16 @@ class TestGetTask:
 
         assert result["guid"] == "t_1"
         assert result["summary"] == "Buy milk"
+
+    def test_get_task_uses_one_arg_when_no_option(self):
+        client = _mock_lark_client()
+        task_data = SimpleNamespace(task={"guid": "t_1"})
+        client.task.v2.task.get.return_value = _ok_response(task_data)
+
+        with patch("src.feishu.api_tasks._request_option", return_value=None):
+            api_tasks.get_task(client, "t_1")
+
+        assert len(client.task.v2.task.get.call_args.args) == 1
 
 
 class TestCreateTask:
@@ -175,6 +196,42 @@ class TestCreateSubtask:
 
         assert result["guid"] == "t_sub"
         assert result["summary"] == "Subtask 1"
+
+    def test_create_subtask_passes_request_option(self):
+        client = _mock_lark_client()
+        subtask_data = SimpleNamespace(task={"guid": "t_sub"})
+        client.task.v2.task_subtask.create.return_value = _ok_response(subtask_data)
+        option = object()
+
+        with patch("src.feishu.api_tasks._request_option", return_value=option):
+            api_tasks.create_subtask(client, "t_parent", "Subtask 1")
+
+        assert client.task.v2.task_subtask.create.call_args.args[1] is option
+
+
+class TestTaskMemberAndReminder:
+    def test_add_task_member(self):
+        client = _mock_lark_client()
+        task_data = SimpleNamespace(task={"guid": "t_1"})
+        client.task.v2.task.add_members.return_value = _ok_response(task_data)
+
+        with patch("src.feishu.api_tasks._request_option", return_value=None):
+            result = api_tasks.add_task_member(client, "t_1", "ou_member", role="follower")
+
+        assert result["guid"] == "t_1"
+        assert len(client.task.v2.task.add_members.call_args.args) == 1
+
+    def test_add_task_reminder_passes_request_option(self):
+        client = _mock_lark_client()
+        task_data = SimpleNamespace(task={"guid": "t_1"})
+        client.task.v2.task.add_reminders.return_value = _ok_response(task_data)
+        option = object()
+
+        with patch("src.feishu.api_tasks._request_option", return_value=option):
+            result = api_tasks.add_task_reminder(client, "t_1", 30)
+
+        assert result["guid"] == "t_1"
+        assert client.task.v2.task.add_reminders.call_args.args[1] is option
 
 
 # ---------------------------------------------------------------------------

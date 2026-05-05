@@ -34,6 +34,15 @@ from src.feishu.retry import with_retry
 # ---------------------------------------------------------------------------
 
 
+def _call_with_option(fn, request, option):
+    return fn(request, option) if option is not None else fn(request)
+
+
+def _extend_items(target: list[dict], items) -> None:
+    if items:
+        target.extend(_unmarshal(items))
+
+
 def list_tasks(
     client: lark.Client,
     page_size: int = 50,
@@ -59,16 +68,11 @@ def list_tasks(
             builder = builder.page_token(page_token)
         request = builder.build()
 
-        response = (
-            client.task.v2.task.list(request, option)
-            if option
-            else client.task.v2.task.list(request)
-        )
+        response = _call_with_option(client.task.v2.task.list, request, option)
         _check(response, "list_tasks")
 
         data = response.data
-        if data.items:
-            tasks.extend(_unmarshal(data.items))
+        _extend_items(tasks, data.items)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -85,9 +89,7 @@ def get_task(client: lark.Client, task_guid: str) -> dict:
     """
     option = _request_option()
     request = GetTaskRequest.builder().task_guid(task_guid).build()
-    response = (
-        client.task.v2.task.get(request, option) if option else client.task.v2.task.get(request)
-    )
+    response = _call_with_option(client.task.v2.task.get, request, option)
     _check(response, "get_task")
     return _unmarshal(response.data.task)
 
@@ -155,11 +157,7 @@ def create_task(
         task_builder = task_builder.origin(ob.build())
 
     request = CreateTaskRequest.builder().request_body(task_builder.build()).build()
-    response = (
-        client.task.v2.task.create(request, option)
-        if option
-        else client.task.v2.task.create(request)
-    )
+    response = _call_with_option(client.task.v2.task.create, request, option)
     _check(response, "create_task")
     return _unmarshal(response.data.task)
 
@@ -180,9 +178,7 @@ def complete_task(client: lark.Client, task_guid: str) -> bool:
     task_patch = InputTask.builder().completed_at(str(int(time.time()))).build()
     body = PatchTaskRequestBody.builder().task(task_patch).update_fields(["completed_at"]).build()
     request = PatchTaskRequest.builder().task_guid(task_guid).request_body(body).build()
-    response = (
-        client.task.v2.task.patch(request, option) if option else client.task.v2.task.patch(request)
-    )
+    response = _call_with_option(client.task.v2.task.patch, request, option)
     _check(response, "complete_task")
     return True
 
@@ -197,11 +193,7 @@ def delete_task(client: lark.Client, task_guid: str) -> bool:
     """
     option = _request_option()
     request = DeleteTaskRequest.builder().task_guid(task_guid).build()
-    response = (
-        client.task.v2.task.delete(request, option)
-        if option
-        else client.task.v2.task.delete(request)
-    )
+    response = _call_with_option(client.task.v2.task.delete, request, option)
     _check(response, "delete_task")
     return True
 
@@ -218,11 +210,7 @@ def create_subtask(client: lark.Client, task_guid: str, summary: str) -> dict:
     option = _request_option()
     subtask = InputTask.builder().summary(summary).build()
     request = CreateTaskSubtaskRequest.builder().task_guid(task_guid).request_body(subtask).build()
-    response = (
-        client.task.v2.task_subtask.create(request, option)
-        if option
-        else client.task.v2.task_subtask.create(request)
-    )
+    response = _call_with_option(client.task.v2.task_subtask.create, request, option)
     _check(response, "create_subtask")
     return _unmarshal(response.data.task)
 
@@ -246,11 +234,7 @@ def add_task_member(
     member = Member.builder().id(member_id).role(role).build()
     body = AddMembersTaskRequestBody.builder().members([member]).build()
     request = AddMembersTaskRequest.builder().task_guid(task_guid).request_body(body).build()
-    response = (
-        client.task.v2.task.add_members(request, option)
-        if option
-        else client.task.v2.task.add_members(request)
-    )
+    response = _call_with_option(client.task.v2.task.add_members, request, option)
     _check(response, "add_task_member")
     return _unmarshal(response.data.task)
 
@@ -272,11 +256,7 @@ def add_task_reminder(
     reminder = Reminder.builder().relative_fire_minute(relative_fire_minute).build()
     body = AddRemindersTaskRequestBody.builder().reminders([reminder]).build()
     request = AddRemindersTaskRequest.builder().task_guid(task_guid).request_body(body).build()
-    response = (
-        client.task.v2.task.add_reminders(request, option)
-        if option
-        else client.task.v2.task.add_reminders(request)
-    )
+    response = _call_with_option(client.task.v2.task.add_reminders, request, option)
     _check(response, "add_task_reminder")
     return _unmarshal(response.data.task)
 
