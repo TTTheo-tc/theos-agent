@@ -192,35 +192,46 @@ def create_oauth_app(
 
     _csp = "default-src 'none'; style-src 'unsafe-inline'"
 
+    def error_response(error: object, *, status: int = 400) -> web.Response:
+        return web.Response(
+            text=_ERROR_HTML.format(error=html.escape(str(error))),
+            content_type="text/html",
+            headers={"Content-Security-Policy": _csp},
+            status=status,
+        )
+
+    async def notify_success(at_ttl: int, rt_ttl: int) -> None:
+        if not bus or not notify_chat_id:
+            return
+
+        from src.bus.events import OutboundMessage
+
+        await bus.publish_outbound(
+            OutboundMessage(
+                channel="feishu",
+                chat_id=notify_chat_id,
+                content=(
+                    f"✅ 飞书授权成功！\n"
+                    f"- access_token TTL: {at_ttl}s ({at_ttl // 60}min)\n"
+                    f"- refresh_token TTL: {rt_ttl}s ({rt_ttl / 86400:.1f}d)"
+                ),
+            )
+        )
+
     async def handle_callback(request: web.Request) -> web.Response:
         code = request.query.get("code")
         if not code:
             error = request.query.get("error", "no code parameter")
             logger.warning("OAuth callback missing code: {}", error)
-            return web.Response(
-                text=_ERROR_HTML.format(error=html.escape(str(error))),
-                content_type="text/html",
-                headers={"Content-Security-Policy": _csp},
-                status=400,
-            )
+            return error_response(error)
 
         state = request.query.get("state", "")
         if not state:
             logger.warning("OAuth callback missing state parameter")
-            return web.Response(
-                text=_ERROR_HTML.format(error="缺少 state 参数，请重新生成授权链接。"),
-                content_type="text/html",
-                headers={"Content-Security-Policy": _csp},
-                status=400,
-            )
+            return error_response("缺少 state 参数，请重新生成授权链接。")
         if not consume_oauth_state(state, token_dir=token_dir, redirect_uri=redirect_uri):
             logger.warning("OAuth callback rejected invalid or expired state")
-            return web.Response(
-                text=_ERROR_HTML.format(error="state 无效或已过期，请重新生成授权链接。"),
-                content_type="text/html",
-                headers={"Content-Security-Policy": _csp},
-                status=400,
-            )
+            return error_response("state 无效或已过期，请重新生成授权链接。")
         logger.debug("OAuth callback: CSRF state verified")
 
         # Exchange code for tokens (sync, run in executor)
@@ -248,21 +259,7 @@ def create_oauth_app(
                 rt_ttl / 86400,
             )
 
-            # Notify user via Feishu if bus is available
-            if bus and notify_chat_id:
-                from src.bus.events import OutboundMessage
-
-                await bus.publish_outbound(
-                    OutboundMessage(
-                        channel="feishu",
-                        chat_id=notify_chat_id,
-                        content=(
-                            f"✅ 飞书授权成功！\n"
-                            f"- access_token TTL: {at_ttl}s ({at_ttl // 60}min)\n"
-                            f"- refresh_token TTL: {rt_ttl}s ({rt_ttl / 86400:.1f}d)"
-                        ),
-                    )
-                )
+            await notify_success(at_ttl, rt_ttl)
 
             return web.Response(
                 text=_SUCCESS_HTML,
@@ -272,12 +269,7 @@ def create_oauth_app(
         else:
             error = result["error"]
             logger.error("OAuth callback: exchange failed: {}", error)
-            return web.Response(
-                text=_ERROR_HTML.format(error=html.escape(str(error))),
-                content_type="text/html",
-                headers={"Content-Security-Policy": _csp},
-                status=400,
-            )
+            return error_response(error)
 
     # Health check
     async def handle_health(request: web.Request) -> web.Response:

@@ -14,6 +14,14 @@ from src.feishu.oauth_callback import (
 )
 
 
+class _Bus:
+    def __init__(self) -> None:
+        self.messages = []
+
+    async def publish_outbound(self, msg) -> None:
+        self.messages.append(msg)
+
+
 def test_build_callback_url_prefers_tailscale_for_bind_all():
     with patch("src.ui.tailscale.detect_tailscale_ip", return_value="100.68.1.2"):
         assert (
@@ -79,6 +87,47 @@ async def test_callback_rejects_missing_state(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_callback_rejects_missing_code(tmp_path: Path):
+    app = create_oauth_app(
+        app_id="app",
+        app_secret="secret",
+        token_dir=str(tmp_path),
+        redirect_uri="http://100.68.1.2:18790/feishu/oauth/callback",
+    )
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+    try:
+        resp = await client.get("/feishu/oauth/callback?state=abc")
+        body = await resp.text()
+        assert resp.status == 400
+        assert "no code parameter" in body
+        assert resp.headers["Content-Security-Policy"] == "default-src 'none'; style-src 'unsafe-inline'"
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_callback_rejects_invalid_state(tmp_path: Path):
+    app = create_oauth_app(
+        app_id="app",
+        app_secret="secret",
+        token_dir=str(tmp_path),
+        redirect_uri="http://100.68.1.2:18790/feishu/oauth/callback",
+    )
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+    try:
+        resp = await client.get("/feishu/oauth/callback?code=abc&state=bad-state")
+        body = await resp.text()
+        assert resp.status == 400
+        assert "state 无效或已过期" in body
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
 async def test_callback_accepts_registered_state(tmp_path: Path):
     redirect_uri = "http://100.68.1.2:18790/feishu/oauth/callback"
     register_oauth_state("good-state", token_dir=str(tmp_path), redirect_uri=redirect_uri)
@@ -100,5 +149,37 @@ async def test_callback_accepts_registered_state(tmp_path: Path):
         body = await resp.text()
         assert resp.status == 200
         assert "授权成功" in body
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_callback_notifies_success_when_bus_configured(tmp_path: Path):
+    redirect_uri = "http://100.68.1.2:18790/feishu/oauth/callback"
+    register_oauth_state("notify-state", token_dir=str(tmp_path), redirect_uri=redirect_uri)
+    bus = _Bus()
+    app = create_oauth_app(
+        app_id="app",
+        app_secret="secret",
+        token_dir=str(tmp_path),
+        redirect_uri=redirect_uri,
+        bus=bus,
+        notify_chat_id="ou_owner",
+    )
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+    try:
+        with patch(
+            "src.feishu.remote_auth.exchange_auth_code",
+            return_value={"ok": True, "access_token_ttl": 7200, "refresh_token_ttl": 2592000},
+        ):
+            resp = await client.get("/feishu/oauth/callback?code=abc&state=notify-state")
+        assert resp.status == 200
+        assert len(bus.messages) == 1
+        msg = bus.messages[0]
+        assert msg.channel == "feishu"
+        assert msg.chat_id == "ou_owner"
+        assert "飞书授权成功" in msg.content
     finally:
         await client.close()
