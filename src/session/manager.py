@@ -42,9 +42,10 @@ class Session:
 
     def add_message(self, role: str, content: str, **kwargs: Any) -> None:
         """Add a message to the session."""
-        msg = {"role": role, "content": content, "timestamp": datetime.now().isoformat(), **kwargs}
+        now = datetime.now()
+        msg = {"role": role, "content": content, "timestamp": now.isoformat(), **kwargs}
         self.messages.append(msg)
-        self.updated_at = datetime.now()
+        self.updated_at = now
 
     # Tool results are already fully processed by the LLM in prior turns;
     # keeping them verbose just adds noise and can push conversation out of
@@ -220,6 +221,7 @@ class SessionManager:
             messages = []
             metadata = {}
             created_at = None
+            updated_at = None
             last_consolidated = 0
 
             with open(path, encoding="utf-8") as f:
@@ -237,6 +239,11 @@ class SessionManager:
                             if data.get("created_at")
                             else None
                         )
+                        updated_at = (
+                            datetime.fromisoformat(data["updated_at"])
+                            if data.get("updated_at")
+                            else None
+                        )
                         last_consolidated = data.get("last_consolidated", 0)
                     else:
                         messages.append(data)
@@ -245,6 +252,7 @@ class SessionManager:
                 key=key,
                 messages=messages,
                 created_at=created_at or datetime.now(),
+                updated_at=updated_at or datetime.now(),
                 metadata=metadata,
                 last_consolidated=last_consolidated,
             )

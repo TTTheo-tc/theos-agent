@@ -10,8 +10,8 @@ from typing import Any
 
 from loguru import logger
 
-from src.session.checkpoint_utils import jsonable_metadata
-from src.utils.helpers import ensure_dir, safe_filename
+from src.session.checkpoint_utils import checkpoint_metadata, checkpoint_path, jsonable_metadata
+from src.utils.helpers import ensure_dir
 
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "timed_out", "cancelled", "interrupted"})
 
@@ -48,8 +48,7 @@ class SubagentStore:
         self.base_dir = ensure_dir(workspace / "subagents")
 
     def _get_path(self, session_key: str) -> Path:
-        safe_key = safe_filename(session_key.replace(":", "_"))
-        return self.base_dir / f"{safe_key}.jsonl"
+        return checkpoint_path(self.base_dir, session_key)
 
     def record(
         self, session_key: str, task_id: str, status: str, **metadata: Any
@@ -126,15 +125,10 @@ class SubagentStore:
     def _from_row(row: dict[str, Any] | None) -> SubagentCheckpoint | None:
         if not row:
             return None
-        metadata = {
-            k: v
-            for k, v in row.items()
-            if k not in {"_type", "task_id", "session_key", "status", "timestamp"}
-        }
         return SubagentCheckpoint(
             task_id=row.get("task_id", ""),
             session_key=row.get("session_key", ""),
             status=row.get("status", ""),
             timestamp=row.get("timestamp", ""),
-            metadata=metadata,
+            metadata=checkpoint_metadata(row, "task_id"),
         )

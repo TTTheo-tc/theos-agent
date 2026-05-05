@@ -1,7 +1,7 @@
 """Tests for SessionManager LRU cache and credential scrubbing."""
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -67,6 +67,18 @@ def test_list_sessions_uses_latest_metadata_snapshot(sm):
     listed = sm.list_sessions()
     assert listed[0]["key"] == "test:1"
     assert listed[0]["updated_at"] == session.updated_at.isoformat()
+
+
+def test_load_restores_updated_at_from_metadata(sm):
+    session = sm.get_or_create("test:1")
+    updated_at = datetime(2026, 1, 2, 3, 4, 5)
+    session.updated_at = updated_at
+    sm.save(session)
+
+    sm.invalidate("test:1")
+    reloaded = sm.get_or_create("test:1")
+
+    assert reloaded.updated_at == updated_at
 
 
 def test_persist_user_message_is_idempotent(sm):

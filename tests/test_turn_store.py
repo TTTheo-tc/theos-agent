@@ -20,6 +20,12 @@ def test_turn_store_records_and_reads_latest(tmp_path: Path):
     assert latest.status == "inferring"
 
 
+def test_turn_store_latest_missing_session_returns_none(tmp_path: Path):
+    store = TurnStore(tmp_path)
+
+    assert store.latest("cli:missing") is None
+
+
 def test_turn_store_marks_inflight_turns_interrupted(tmp_path: Path):
     store = TurnStore(tmp_path)
 
