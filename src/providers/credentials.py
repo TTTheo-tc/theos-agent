@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -47,15 +48,44 @@ def resolve_credentials(
         ValueError: If no API key can be resolved for a provider that requires one
                     (non-OAuth, non-Bedrock).
     """
-    from src.auth.store import get_credential_for_provider
+    from src.auth.store import get_oauth_credential_for_provider, get_static_credential_for_provider
+    from src.providers.registry import normalize_provider_name
     from src.security.secret_refs import resolve_mapping_refs, resolve_secret_ref
 
+    provider_name = normalize_provider_name(provider_name)
     p = getattr(config.providers, provider_name, None) if provider_name else None
+    extra_headers = resolve_mapping_refs(p.extra_headers) if p else None
 
-    # --- Tier 1: Auth profile store ---
+    # --- OAuth providers: resolve/refresh through their plugin so provider-specific
+    # headers (for example GitHub Copilot) stay attached to the runtime client.
+    if provider_name and spec and getattr(spec, "is_oauth", False):
+        oauth_result = get_oauth_credential_for_provider(provider_name)
+        if oauth_result:
+            _cred, profile_id = oauth_result
+            from src.auth.oauth_manager import OAuthManager
+            from src.auth.plugins import register_builtin_plugins
+
+            mgr = OAuthManager(
+                plugins=register_builtin_plugins(),
+                store_path=Path.home() / ".theos" / "auth-profiles.enc",
+            )
+            resolved = mgr.resolve(provider_name, profile_id)
+            if resolved:
+                api_key, oauth_headers = resolved
+                return ProviderCredentials(
+                    api_key=api_key,
+                    api_base=(
+                        resolve_secret_ref(p.api_base)
+                        if p and p.api_base
+                        else getattr(spec, "default_api_base", "")
+                    ),
+                    extra_headers={**oauth_headers, **(extra_headers or {})},
+                )
+
+    # --- Tier 1: Static auth profile store ---
     api_key: str | None = None
     if provider_name:
-        result = get_credential_for_provider(provider_name)
+        result = get_static_credential_for_provider(provider_name)
         if result:
             api_key = result[0]
 
@@ -82,9 +112,6 @@ def resolve_credentials(
         api_base = spec.default_api_base
     elif model:
         api_base = resolve_secret_ref(config.get_api_base(model))
-
-    # Resolve extra_headers
-    extra_headers = resolve_mapping_refs(p.extra_headers) if p else None
 
     return ProviderCredentials(
         api_key=api_key,

@@ -12,6 +12,10 @@ from src.auth.oauth_plugin import OAuthPlugin
 from src.auth.types import OAuthCredential
 
 
+def _normalize_provider(provider: str) -> str:
+    return provider.strip().replace("-", "_")
+
+
 class OAuthManager:
     """Manages OAuth credential lifecycle: resolve, refresh, background upkeep."""
 
@@ -33,6 +37,7 @@ class OAuthManager:
 
     def resolve(self, provider: str, profile_id: str) -> tuple[str, dict[str, str]] | None:
         """Return (api_key, headers) for *profile_id*, refreshing if needed."""
+        provider = _normalize_provider(provider)
         store = self._load_store()
         cred = store.profiles.get(profile_id)
         if cred is None or not isinstance(cred, OAuthCredential):
@@ -65,6 +70,7 @@ class OAuthManager:
         May still read/decrypt the auth store; the key property is that it does not
         perform token refresh, network I/O, or subprocess calls on the request hot path.
         """
+        provider = _normalize_provider(provider)
         store = self._load_store()
         cred = store.profiles.get(profile_id)
         if cred is None or not isinstance(cred, OAuthCredential):
@@ -169,7 +175,7 @@ class OAuthManager:
             if isinstance(cred, OAuthCredential):
                 remaining = (cred.expires / 1000) - time.time()
                 if remaining < horizon_s:
-                    self._refresh_with_lock(cred.provider, profile_id, cred)
+                    self._refresh_with_lock(_normalize_provider(cred.provider), profile_id, cred)
 
     def _load_store(self):  # noqa: ANN202
         from src.auth.store import load_auth_store

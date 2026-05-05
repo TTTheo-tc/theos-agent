@@ -15,7 +15,7 @@ def test_auth_profile_takes_priority_over_config_key():
     config.providers.anthropic.api_key = "sk-config-key"
 
     with patch(
-        "src.auth.store.get_credential_for_provider",
+        "src.auth.store.get_static_credential_for_provider",
         return_value=("sk-auth-profile", "anthropic:default"),
     ):
         creds = resolve_credentials("anthropic", config, model="claude-sonnet-4-5")
@@ -29,7 +29,7 @@ def test_config_key_used_when_no_auth_profile():
     config = Config()
     config.providers.anthropic.api_key = "sk-config-key"
 
-    with patch("src.auth.store.get_credential_for_provider", return_value=None):
+    with patch("src.auth.store.get_static_credential_for_provider", return_value=None):
         creds = resolve_credentials("anthropic", config, model="claude-sonnet-4-5")
 
     assert creds.api_key == "sk-config-key"
@@ -40,7 +40,7 @@ def test_no_key_returns_none_api_key():
     config = Config()
     config.providers.anthropic.api_key = ""
 
-    with patch("src.auth.store.get_credential_for_provider", return_value=None):
+    with patch("src.auth.store.get_static_credential_for_provider", return_value=None):
         creds = resolve_credentials("anthropic", config)
 
     assert creds.api_key is None
@@ -53,7 +53,8 @@ def test_extra_headers_resolved():
     config.providers.anthropic.extra_headers = {"X-Custom": "val"}
 
     with patch(
-        "src.auth.store.get_credential_for_provider", return_value=("sk-test", "anthropic:default")
+        "src.auth.store.get_static_credential_for_provider",
+        return_value=("sk-test", "anthropic:default"),
     ):
         creds = resolve_credentials("anthropic", config)
 
@@ -67,7 +68,8 @@ def test_api_base_from_config():
     config.providers.anthropic.api_base = "https://custom.api/v1"
 
     with patch(
-        "src.auth.store.get_credential_for_provider", return_value=("sk-test", "anthropic:default")
+        "src.auth.store.get_static_credential_for_provider",
+        return_value=("sk-test", "anthropic:default"),
     ):
         creds = resolve_credentials("anthropic", config)
 
@@ -84,7 +86,8 @@ def test_api_base_from_spec_default():
     spec = SimpleNamespace(default_api_base="https://api.moonshot.ai/v1")
 
     with patch(
-        "src.auth.store.get_credential_for_provider", return_value=("sk-test", "anthropic:default")
+        "src.auth.store.get_static_credential_for_provider",
+        return_value=("sk-test", "anthropic:default"),
     ):
         creds = resolve_credentials("moonshot", config, spec=spec)
 
@@ -95,7 +98,7 @@ def test_none_provider_name_returns_empty_credentials():
     """When provider_name is None, returns credentials with no key."""
     config = Config()
 
-    with patch("src.auth.store.get_credential_for_provider", return_value=None):
+    with patch("src.auth.store.get_static_credential_for_provider", return_value=None):
         creds = resolve_credentials(None, config)
 
     assert creds.api_key is None
@@ -118,7 +121,7 @@ class TestTier3EnvVar:
         config.get_api_base.return_value = ""
 
         with (
-            patch("src.auth.store.get_credential_for_provider", return_value=None),
+            patch("src.auth.store.get_static_credential_for_provider", return_value=None),
             patch(
                 "src.security.secret_refs.resolve_secret_ref", side_effect=lambda x, **kw: x or None
             ),
@@ -144,7 +147,7 @@ class TestTier3EnvVar:
         config.get_api_base.return_value = ""
 
         with (
-            patch("src.auth.store.get_credential_for_provider", return_value=None),
+            patch("src.auth.store.get_static_credential_for_provider", return_value=None),
             patch(
                 "src.security.secret_refs.resolve_secret_ref", side_effect=lambda x, **kw: x or None
             ),
@@ -171,7 +174,7 @@ class TestTier3EnvVar:
 
         with (
             patch(
-                "src.auth.store.get_credential_for_provider",
+                "src.auth.store.get_static_credential_for_provider",
                 return_value=("sk-from-store", "test:default"),
             ),
             patch(
@@ -182,3 +185,55 @@ class TestTier3EnvVar:
         ):
             creds = resolve_credentials("test_provider", config, spec=spec)
             assert creds.api_key == "sk-from-store"  # Tier 1 wins
+
+
+def test_non_oauth_provider_ignores_oauth_profile_and_uses_config_key():
+    """Standard providers never consume OAuth access tokens as API keys."""
+    config = Config()
+    config.providers.anthropic.api_key = "sk-config-key"
+
+    with (
+        patch("src.auth.store.get_static_credential_for_provider", return_value=None),
+        patch(
+            "src.auth.store.get_oauth_credential_for_provider",
+            side_effect=AssertionError("non-oauth provider should not ask for OAuth"),
+        ),
+    ):
+        creds = resolve_credentials("anthropic", config)
+
+    assert creds.api_key == "sk-config-key"
+
+
+def test_oauth_provider_resolves_token_and_headers():
+    """OAuth-backed OpenAI-compatible providers use OAuthManager for headers."""
+    from types import SimpleNamespace
+
+    config = Config()
+    spec = SimpleNamespace(is_oauth=True, default_api_base="https://api.githubcopilot.com")
+    oauth_cred = object()
+
+    class _Manager:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def resolve(self, provider: str, profile_id: str):
+            assert provider == "github_copilot"
+            assert profile_id == "github_copilot:default"
+            return "copilot-token", {"Authorization": "Bearer copilot-token", "x-app": "theos"}
+
+    with (
+        patch(
+            "src.auth.store.get_oauth_credential_for_provider",
+            return_value=(oauth_cred, "github_copilot:default"),
+        ),
+        patch("src.auth.plugins.register_builtin_plugins", return_value={}),
+        patch("src.auth.oauth_manager.OAuthManager", _Manager),
+    ):
+        creds = resolve_credentials("github-copilot", config, spec=spec)
+
+    assert creds.api_key == "copilot-token"
+    assert creds.api_base == "https://api.githubcopilot.com"
+    assert creds.extra_headers == {
+        "Authorization": "Bearer copilot-token",
+        "x-app": "theos",
+    }

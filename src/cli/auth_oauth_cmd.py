@@ -11,6 +11,9 @@ from src.cli.display import console
 
 def detect_oauth_token(provider_name: str) -> str | None:
     """Return a display string if an OAuth token is detected, else None."""
+    from src.providers.registry import normalize_provider_name
+
+    provider_name = normalize_provider_name(provider_name) or ""
     if provider_name == "openai_codex":
         # Check oauth_cli_kit token store or legacy ~/.codex/auth.json
         try:
@@ -48,6 +51,10 @@ def detect_oauth_token(provider_name: str) -> str | None:
 
 def auth_refresh(provider: str):
     """Manually refresh OAuth token for a provider."""
+    from src.providers.registry import display_provider_name, normalize_provider_name
+
+    provider = normalize_provider_name(provider) or provider
+    display_name = display_provider_name(provider)
     if provider == "anthropic":
         console.print(
             "[red]Anthropic OAuth is disabled in TheOS.[/red] "
@@ -57,22 +64,25 @@ def auth_refresh(provider: str):
 
     from src.auth.oauth_manager import OAuthManager
     from src.auth.plugins import register_builtin_plugins
-    from src.auth.store import load_auth_store
+    from src.auth.store import get_oauth_credential_for_provider
 
-    store = load_auth_store()
-    profile_id = store.last_good.get(provider, f"{provider}:default")
+    oauth_result = get_oauth_credential_for_provider(provider)
+    profile_id = oauth_result[1] if oauth_result else f"{provider}:default"
 
     plugins = register_builtin_plugins()
     mgr = OAuthManager(plugins=plugins, store_path=Path.home() / ".theos" / "auth-profiles.enc")
     result = mgr.resolve(provider, profile_id)
     if result:
-        console.print(f"[green]\u2713[/green] Token refreshed for {provider}")
+        console.print(f"[green]\u2713[/green] Token refreshed for {display_name}")
     else:
-        console.print(f"[red]\u2717[/red] Refresh failed for {provider}")
+        console.print(f"[red]\u2717[/red] Refresh failed for {display_name}")
 
 
 def auth_login(provider: str):
     """Re-run OAuth authorization for a provider."""
+    from src.providers.registry import normalize_provider_name
+
+    provider = normalize_provider_name(provider) or provider
     if provider == "anthropic":
         console.print(
             "[red]Anthropic OAuth is disabled in TheOS.[/red] "
@@ -111,9 +121,14 @@ def auth_login(provider: str):
 def auth_revoke(provider: str):
     """Remove credentials for a provider."""
     from src.auth.store import load_auth_store, remove_profile
+    from src.providers.registry import normalize_provider_name
 
+    provider = normalize_provider_name(provider) or provider
     store = load_auth_store()
-    profile_id = store.last_good.get(provider, f"{provider}:default")
+    profile_id = store.last_good.get(provider) or store.last_good.get(
+        provider.replace("_", "-"),
+        f"{provider}:default",
+    )
     if remove_profile(profile_id):
         console.print(f"[green]\u2713[/green] Removed {profile_id}")
     else:
@@ -127,12 +142,16 @@ def provider_login(
 ):
     """Authenticate with an OAuth provider."""
     from src import __logo__
-    from src.providers.registry import oauth_providers
+    from src.providers.registry import (
+        display_provider_name,
+        normalize_provider_name,
+        oauth_providers,
+    )
 
-    key = provider.replace("-", "_")
+    key = normalize_provider_name(provider) or provider
     spec = next((s for s in oauth_providers() if s.name == key), None)
     if not spec:
-        names = ", ".join(s.name.replace("_", "-") for s in oauth_providers())
+        names = ", ".join(display_provider_name(s.name) for s in oauth_providers())
         console.print(f"[red]Unknown OAuth provider: {provider}[/red]  Supported: {names}")
         raise typer.Exit(1)
 

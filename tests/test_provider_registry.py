@@ -34,6 +34,11 @@ class TestProviderBackend:
         assert spec.backend == "openai_compat"
         assert spec.default_api_base == "https://api.githubcopilot.com"
 
+    def test_find_by_name_accepts_hyphenated_provider_names(self):
+        spec = find_by_name("github-copilot")
+        assert spec is not None
+        assert spec.name == "github_copilot"
+
     def test_all_providers_have_backend(self):
         for spec in PROVIDERS:
             assert spec.backend in (

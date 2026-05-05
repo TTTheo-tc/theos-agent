@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from src.auth.store import _coerce_store, add_oauth_profile, get_api_key_for_provider
+from src.auth.store import (
+    _coerce_store,
+    add_oauth_profile,
+    get_api_key_for_provider,
+    get_oauth_credential_for_provider,
+    get_static_credential_for_provider,
+)
 from src.auth.types import (
     ApiKeyCredential,
     AuthProfileStore,
@@ -126,6 +132,58 @@ def test_get_api_key_for_provider_oauth_fallback():
     with patch("src.auth.store.load_auth_store", return_value=fake_store):
         result = get_api_key_for_provider("google")
     assert result == "ya29.fallback"
+
+
+def test_static_credential_lookup_excludes_oauth_profiles():
+    fake_store = AuthProfileStore(
+        profiles={
+            "google:oauth": OAuthCredential(
+                provider="google",
+                access="ya29.oauth",
+                refresh="1//ref",
+                expires=9999999999999,
+            ),
+            "google:key": ApiKeyCredential(provider="google", key="sk-static"),
+        },
+        last_good={"google": "google:oauth"},
+    )
+    with patch("src.auth.store.load_auth_store", return_value=fake_store):
+        result = get_static_credential_for_provider("google")
+
+    assert result == ("sk-static", "google:key")
+
+
+def test_oauth_credential_lookup_normalizes_hyphen_provider_name():
+    cred = OAuthCredential(
+        provider="github_copilot",
+        access="copilot-token",
+        refresh="github-token",
+        expires=9999999999999,
+    )
+    fake_store = AuthProfileStore(
+        profiles={"github_copilot:default": cred},
+        last_good={"github_copilot": "github_copilot:default"},
+    )
+    with patch("src.auth.store.load_auth_store", return_value=fake_store):
+        result = get_oauth_credential_for_provider("github-copilot")
+
+    assert result == (cred, "github_copilot:default")
+
+
+def test_static_lookup_reads_legacy_hyphenated_profiles():
+    fake_store = AuthProfileStore(
+        profiles={
+            "github-copilot:manual": ApiKeyCredential(
+                provider="github-copilot",
+                key="legacy-key",
+            ),
+        },
+        last_good={"github-copilot": "github-copilot:manual"},
+    )
+    with patch("src.auth.store.load_auth_store", return_value=fake_store):
+        result = get_static_credential_for_provider("github_copilot")
+
+    assert result == ("legacy-key", "github-copilot:manual")
 
 
 def test_add_oauth_profile():

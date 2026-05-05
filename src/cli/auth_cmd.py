@@ -75,7 +75,9 @@ def auth_add(
 ):
     """Save an API key as a named auth profile."""
     from src.auth.store import add_api_key_profile
+    from src.providers.registry import normalize_provider_name
 
+    provider = normalize_provider_name(provider) or provider
     profile_id = add_api_key_profile(provider, key, name=name, email=email or None)
     console.print(f"[green]\u2713[/green] Saved profile [cyan]{profile_id}[/cyan]")
 

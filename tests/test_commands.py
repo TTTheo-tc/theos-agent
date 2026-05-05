@@ -235,7 +235,7 @@ def test_make_provider_uses_auth_profile_key_when_config_key_missing():
 
     with (
         patch(
-            "src.auth.store.get_credential_for_provider",
+            "src.auth.store.get_static_credential_for_provider",
             return_value=("sk-auth-profile", "anthropic:default"),
         ),
         patch(

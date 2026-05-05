@@ -484,9 +484,9 @@ class Config(BaseSettings):
         self, model: str | None = None
     ) -> tuple["ProviderConfig | None", str | None]:
         """Match provider config and its registry name. Returns (config, spec_name)."""
-        from src.providers.registry import PROVIDERS
+        from src.providers.registry import PROVIDERS, normalize_provider_name
 
-        forced = self.agents.defaults.provider
+        forced = normalize_provider_name(self.agents.defaults.provider)
         if forced != "auto":
             p = getattr(self.providers, forced, None)
             return (p, forced) if p else (None, None)

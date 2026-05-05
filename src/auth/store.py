@@ -22,6 +22,25 @@ from src.auth.types import (
 )
 
 
+def _normalize_provider(provider: str) -> str:
+    """Normalize provider IDs used in auth profile keys."""
+    return provider.strip().replace("-", "_")
+
+
+def _normalize_profile_id(profile_id: str) -> str:
+    """Normalize only the provider side of ``provider:name`` profile IDs."""
+    if ":" not in profile_id:
+        return profile_id
+    provider, name = profile_id.split(":", 1)
+    return f"{_normalize_provider(provider)}:{name}"
+
+
+def _preferred_profile_id(store: AuthProfileStore, provider: str) -> str | None:
+    """Return last_good for normalized or legacy hyphenated provider keys."""
+    legacy_provider = provider.replace("_", "-")
+    return store.last_good.get(provider) or store.last_good.get(legacy_provider)
+
+
 def _auth_store_path() -> Path:
     return Path.home() / ".theos" / "auth-profiles.enc"
 
@@ -170,20 +189,63 @@ def get_credential_for_provider(provider: str) -> tuple[str, str | None] | None:
 
     Prefer ``last_good`` profile, fall back to any matching profile.
     """
+    provider = _normalize_provider(provider)
     store = load_auth_store()
 
-    preferred_id = store.last_good.get(provider)
+    preferred_id = _preferred_profile_id(store, provider)
     if preferred_id and preferred_id in store.profiles:
         key = _extract_key(store.profiles[preferred_id])
         if key:
             return key, preferred_id
 
     for pid, cred in store.profiles.items():
-        if cred.provider != provider:
+        if _normalize_provider(cred.provider) != provider:
             continue
         key = _extract_key(cred)
         if key:
             return key, pid
+
+    return None
+
+
+def get_static_credential_for_provider(provider: str) -> tuple[str, str | None] | None:
+    """Return an API-key/token credential for *provider*, excluding OAuth profiles."""
+    provider = _normalize_provider(provider)
+    store = load_auth_store()
+
+    preferred_id = _preferred_profile_id(store, provider)
+    if preferred_id and preferred_id in store.profiles:
+        cred = store.profiles[preferred_id]
+        if isinstance(cred, ApiKeyCredential) and cred.key:
+            return cred.key, preferred_id
+        if isinstance(cred, TokenCredential) and cred.token:
+            return cred.token, preferred_id
+
+    for pid, cred in store.profiles.items():
+        if _normalize_provider(cred.provider) != provider:
+            continue
+        if isinstance(cred, ApiKeyCredential) and cred.key:
+            return cred.key, pid
+        if isinstance(cred, TokenCredential) and cred.token:
+            return cred.token, pid
+
+    return None
+
+
+def get_oauth_credential_for_provider(provider: str) -> tuple[OAuthCredential, str] | None:
+    """Return an OAuth credential and profile ID for *provider*, if one exists."""
+    provider = _normalize_provider(provider)
+    store = load_auth_store()
+
+    preferred_id = _preferred_profile_id(store, provider)
+    if preferred_id and preferred_id in store.profiles:
+        cred = store.profiles[preferred_id]
+        if isinstance(cred, OAuthCredential):
+            return cred, preferred_id
+
+    for pid, cred in store.profiles.items():
+        if _normalize_provider(cred.provider) == provider and isinstance(cred, OAuthCredential):
+            return cred, pid
 
     return None
 
@@ -204,6 +266,7 @@ def add_api_key_profile(
 
     Returns the profile ID (e.g. "anthropic:default").
     """
+    provider = _normalize_provider(provider)
     store = load_auth_store()
     profile_id = f"{provider}:{name}"
 
@@ -235,6 +298,7 @@ def add_oauth_profile(
 
     Returns the profile ID (e.g. "google:default").
     """
+    provider = _normalize_provider(provider)
     store = load_auth_store()
     profile_id = f"{provider}:{name}"
 
@@ -258,6 +322,7 @@ def add_oauth_profile(
 
 def remove_profile(profile_id: str) -> bool:
     """Remove a profile by ID. Returns True if it existed."""
+    profile_id = _normalize_profile_id(profile_id)
     store = load_auth_store()
     if profile_id not in store.profiles:
         return False
@@ -283,6 +348,7 @@ def remove_profile(profile_id: str) -> bool:
 
 def set_default_profile(profile_id: str) -> bool:
     """Set *profile_id* as the default for its provider. Returns False if not found."""
+    profile_id = _normalize_profile_id(profile_id)
     store = load_auth_store()
     if profile_id not in store.profiles:
         return False

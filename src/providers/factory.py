@@ -34,12 +34,13 @@ def _resolve_spec_for_model(
     Returns:
         (spec, provider_name) tuple. Either or both may be None if unresolved.
     """
-    from src.providers.registry import find_by_model, find_by_name
+    from src.providers.registry import find_by_model, find_by_name, normalize_provider_name
 
     # Forced provider path (from config.agents.defaults.provider)
-    if force_provider and force_provider != "auto":
-        spec = find_by_name(force_provider)
-        return spec, force_provider
+    normalized_force = normalize_provider_name(force_provider)
+    if normalized_force and normalized_force != "auto":
+        spec = find_by_name(normalized_force)
+        return spec, normalized_force
 
     # Auto-detect from model name
     spec = find_by_model(model)
@@ -80,7 +81,7 @@ def _build_provider(
         from src.providers.anthropic_provider import AnthropicProvider
 
         creds = resolve_credentials(provider_name, config, model, spec=spec)
-        if not creds.api_key and not (spec and spec.is_oauth):
+        if not creds.api_key:
             raise ValueError(
                 "No API key configured for Anthropic. "
                 "Set one with: theos auth add --provider anthropic --key <key>"
@@ -114,6 +115,12 @@ def _build_provider(
             )
             extra_headers = creds.extra_headers
             if not api_key:
+                if spec and spec.is_oauth:
+                    provider_label = provider_name.replace("_", "-") if provider_name else "provider"
+                    raise ValueError(
+                        f"No OAuth credentials configured for {provider_label}. "
+                        f"Run: theos provider login {provider_label}"
+                    )
                 raise ValueError(
                     f"No API key configured for {provider_name}. "
                     f"Set one with: theos auth add --provider {provider_name} --key <key>"

@@ -65,6 +65,16 @@ class ProviderSpec:
         return self.display_name or self.name.title()
 
 
+def normalize_provider_name(name: str | None) -> str | None:
+    """Normalize user-facing provider names to registry/config field names."""
+    return name.strip().replace("-", "_") if name else name
+
+
+def display_provider_name(name: str) -> str:
+    """Return a user-facing provider name from a registry/config field name."""
+    return name.replace("_", "-")
+
+
 # ---------------------------------------------------------------------------
 # PROVIDERS — the registry. Order = priority. Copy any entry as template.
 # ---------------------------------------------------------------------------
@@ -468,6 +478,7 @@ def find_gateway(
 
 def find_by_name(name: str) -> ProviderSpec | None:
     """Find a provider spec by config field name, e.g. "dashscope"."""
+    name = normalize_provider_name(name) or ""
     for spec in PROVIDERS:
         if spec.name == name:
             return spec

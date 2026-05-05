@@ -18,7 +18,11 @@ def test_make_provider_resolves_secret_ref_config_and_headers():
         return (key, f"{name}:default") if key else None
 
     with (
-        patch("src.auth.store.get_credential_for_provider", side_effect=_resolve),
+        patch("src.auth.store.get_static_credential_for_provider", side_effect=_resolve),
+        patch(
+            "src.auth.store.get_api_key_for_provider",
+            side_effect=lambda name: (_resolve(name) or (None, None))[0],
+        ),
         patch(
             "src.providers.anthropic_provider.AnthropicProvider",
             return_value=SimpleNamespace(),
