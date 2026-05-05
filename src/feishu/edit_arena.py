@@ -756,14 +756,10 @@ def _apply_table_cell_patches(
         if block.get("block_type") != 31:
             continue
 
-        table_data = block.get("table", {})
-        prop = table_data.get("property", {})
-        col_size = prop.get("column_size", 0)
-        row_size = prop.get("row_size", 0)
-        cells = table_data.get("cells", [])
-
-        if not col_size or not row_size:
+        table_layout = _table_layout(block)
+        if table_layout is None:
             continue
+        row_size, col_size, cells = table_layout
 
         old_rows = len(old_grid)
         new_rows = len(new_grid)
@@ -775,53 +771,74 @@ def _apply_table_cell_patches(
                 f"Patching overlapping cells only."
             )
 
-        # Compare cell-by-cell in the overlapping region
-        patch_rows = min(old_rows, new_rows, row_size)
-        old_cols = len(old_grid[0]) if old_grid else 0
-        new_cols = len(new_grid[0]) if new_grid else 0
-        patch_cols = min(old_cols, new_cols, col_size)
+        for r, c, old_text, new_text in _iter_changed_table_cells(
+            old_grid,
+            new_grid,
+            row_size,
+            col_size,
+        ):
+            cell_idx = r * col_size + c
+            if cell_idx >= len(cells):
+                continue
 
-        for r in range(patch_rows):
-            for c in range(patch_cols):
-                old_text = old_grid[r][c] if c < len(old_grid[r]) else ""
-                new_text = new_grid[r][c] if c < len(new_grid[r]) else ""
+            child_id = _first_text_child_id(block_map, cells[cell_idx])
+            if child_id is None:
+                continue
 
-                if old_text == new_text:
-                    continue
+            new_elements = [{"text_run": {"content": new_text, "text_element_style": {}}}]
 
-                # Find the cell block and its text child
-                cell_idx = r * col_size + c
-                if cell_idx >= len(cells):
-                    continue
+            # Throttle: pause every 3 patches to avoid rate limits
+            if patched > 0 and patched % 3 == 0:
+                _time.sleep(0.5)
 
-                cell_id = cells[cell_idx]
-                if cell_id not in block_map:
-                    continue
-
-                cell_block = block_map[cell_id]
-                children = cell_block.get("children", [])
-                if not children:
-                    continue
-
-                # Patch the first text child
-                child_id = children[0]
-                if child_id not in block_map:
-                    continue
-
-                new_elements = [{"text_run": {"content": new_text, "text_element_style": {}}}]
-
-                # Throttle: pause every 3 patches to avoid rate limits
-                if patched > 0 and patched % 3 == 0:
-                    _time.sleep(0.5)
-
-                update_block_text(document_id, child_id, new_elements)
-                patched += 1
-                logger.info(
-                    f"patched table cell [{r},{c}] block {child_id}: "
-                    f"{old_text!r} → {new_text!r}"
-                )
+            update_block_text(document_id, child_id, new_elements)
+            patched += 1
+            logger.info(
+                f"patched table cell [{r},{c}] block {child_id}: "
+                f"{old_text!r} → {new_text!r}"
+            )
 
     return patched
+
+
+def _table_layout(block: dict) -> tuple[int, int, list] | None:
+    table_data = block.get("table", {})
+    prop = table_data.get("property", {})
+    row_size = prop.get("row_size", 0)
+    col_size = prop.get("column_size", 0)
+    if not row_size or not col_size:
+        return None
+    return row_size, col_size, table_data.get("cells", [])
+
+
+def _iter_changed_table_cells(
+    old_grid: list[list[str]],
+    new_grid: list[list[str]],
+    row_size: int,
+    col_size: int,
+):
+    patch_rows = min(len(old_grid), len(new_grid), row_size)
+    old_cols = len(old_grid[0]) if old_grid else 0
+    new_cols = len(new_grid[0]) if new_grid else 0
+    patch_cols = min(old_cols, new_cols, col_size)
+
+    for r in range(patch_rows):
+        for c in range(patch_cols):
+            old_text = old_grid[r][c] if c < len(old_grid[r]) else ""
+            new_text = new_grid[r][c] if c < len(new_grid[r]) else ""
+            if old_text != new_text:
+                yield r, c, old_text, new_text
+
+
+def _first_text_child_id(block_map: dict[str, dict], cell_id: str) -> str | None:
+    cell_block = block_map.get(cell_id)
+    if not cell_block:
+        return None
+    children = cell_block.get("children", [])
+    if not children:
+        return None
+    child_id = children[0]
+    return child_id if child_id in block_map else None
 
 
 # ---------------------------------------------------------------------------
