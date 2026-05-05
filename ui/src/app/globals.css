@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
-
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -9,8 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Fira Sans', sans-serif;
-  --font-mono: 'Fira Code', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,77 +47,40 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-/* Dark-first design system: root is already dark */
 :root {
   --radius: 0.5rem;
-  --background: oklch(0.13 0.028 265);
-  --foreground: oklch(0.97 0.005 265);
-  --card: oklch(0.13 0.028 265);
-  --card-foreground: oklch(0.97 0.005 265);
-  --popover: oklch(0.13 0.028 265);
-  --popover-foreground: oklch(0.97 0.005 265);
-  --primary: oklch(0.62 0.194 145);
-  --primary-foreground: oklch(0.98 0.01 350);
-  --secondary: oklch(0.25 0.02 260);
-  --secondary-foreground: oklch(0.97 0.005 265);
-  --muted: oklch(0.25 0.02 260);
-  --muted-foreground: oklch(0.7 0.01 260);
-  --accent: oklch(0.25 0.02 260);
-  --accent-foreground: oklch(0.97 0.005 265);
-  --destructive: oklch(0.5 0.15 25);
-  --destructive-foreground: oklch(0.97 0.005 265);
-  --border: oklch(0.25 0.02 260);
-  --input: oklch(0.25 0.02 260);
-  --ring: oklch(0.62 0.194 145);
-  --chart-1: oklch(0.62 0.194 145);
-  --chart-2: oklch(0.65 0.18 250);
-  --chart-3: oklch(0.75 0.15 55);
-  --chart-4: oklch(0.6 0.22 300);
-  --chart-5: oklch(0.65 0.2 20);
-  --sidebar: oklch(0.15 0.025 265);
-  --sidebar-foreground: oklch(0.97 0.005 265);
-  --sidebar-primary: oklch(0.62 0.194 145);
-  --sidebar-primary-foreground: oklch(0.98 0.01 350);
-  --sidebar-accent: oklch(0.25 0.02 260);
-  --sidebar-accent-foreground: oklch(0.97 0.005 265);
-  --sidebar-border: oklch(0.25 0.02 260);
-  --sidebar-ring: oklch(0.62 0.194 145);
-}
-
-/* Dark class mirrors root (already dark-first) */
-.dark {
-  --background: oklch(0.13 0.028 265);
-  --foreground: oklch(0.97 0.005 265);
-  --card: oklch(0.13 0.028 265);
-  --card-foreground: oklch(0.97 0.005 265);
-  --popover: oklch(0.13 0.028 265);
-  --popover-foreground: oklch(0.97 0.005 265);
-  --primary: oklch(0.62 0.194 145);
-  --primary-foreground: oklch(0.98 0.01 350);
-  --secondary: oklch(0.25 0.02 260);
-  --secondary-foreground: oklch(0.97 0.005 265);
-  --muted: oklch(0.25 0.02 260);
-  --muted-foreground: oklch(0.7 0.01 260);
-  --accent: oklch(0.25 0.02 260);
-  --accent-foreground: oklch(0.97 0.005 265);
-  --destructive: oklch(0.5 0.15 25);
-  --destructive-foreground: oklch(0.97 0.005 265);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.62 0.194 145);
-  --chart-1: oklch(0.62 0.194 145);
-  --chart-2: oklch(0.65 0.18 250);
-  --chart-3: oklch(0.75 0.15 55);
-  --chart-4: oklch(0.6 0.22 300);
-  --chart-5: oklch(0.65 0.2 20);
-  --sidebar: oklch(0.15 0.025 265);
-  --sidebar-foreground: oklch(0.97 0.005 265);
-  --sidebar-primary: oklch(0.62 0.194 145);
-  --sidebar-primary-foreground: oklch(0.98 0.01 350);
-  --sidebar-accent: oklch(0.25 0.02 260);
-  --sidebar-accent-foreground: oklch(0.97 0.005 265);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.62 0.194 145);
+  --background: oklch(0.97 0.003 260);
+  --foreground: oklch(0.18 0.005 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.005 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.005 260);
+  --primary: oklch(0.55 0.17 255);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.94 0.004 260);
+  --secondary-foreground: oklch(0.28 0.006 260);
+  --muted: oklch(0.94 0.004 260);
+  --muted-foreground: oklch(0.48 0.008 260);
+  --accent: oklch(0.94 0.004 260);
+  --accent-foreground: oklch(0.2 0.006 260);
+  --destructive: oklch(0.55 0.18 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.88 0.004 260);
+  --input: oklch(0.88 0.004 260);
+  --ring: oklch(0.55 0.17 255);
+  --chart-1: oklch(0.55 0.17 255);
+  --chart-2: oklch(0.58 0.12 180);
+  --chart-3: oklch(0.65 0.14 70);
+  --chart-4: oklch(0.62 0.12 320);
+  --chart-5: oklch(0.58 0.15 25);
+  --sidebar: oklch(0.98 0.002 260);
+  --sidebar-foreground: oklch(0.18 0.005 260);
+  --sidebar-primary: oklch(0.18 0.005 260);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.94 0.004 260);
+  --sidebar-accent-foreground: oklch(0.18 0.005 260);
+  --sidebar-border: oklch(0.9 0.004 260);
+  --sidebar-ring: oklch(0.55 0.17 255);
 }
 
 @layer base {
@@ -128,9 +89,36 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Fira Sans', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: 0;
   }
   code, pre, .font-mono {
-    font-family: 'Fira Code', monospace;
+    font-family: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  }
+}
+
+@layer components {
+  .surface {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.76));
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    box-shadow:
+      0 18px 55px rgba(29, 29, 31, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.75) inset;
+    backdrop-filter: blur(18px);
+  }
+
+  .surface-soft {
+    background: rgba(255, 255, 255, 0.58);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: 0 10px 30px rgba(29, 29, 31, 0.035);
+    backdrop-filter: blur(14px);
+  }
+
+  .soft-input {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.82);
+    box-shadow:
+      0 8px 24px rgba(29, 29, 31, 0.035),
+      0 1px 2px rgba(29, 29, 31, 0.04) inset;
   }
 }

@@ -20,7 +20,7 @@ src/ui/
     __init__.py       # collect_routes() — central route registration
     health.py         # /api/health
     sessions.py       # /api/sessions, /api/agents, /api/metrics, /api/events, /api/search
-    memory.py         # /api/memory/nodes, /api/memory/search, /api/memory/markdown
+    memory.py         # /api/memory/nodes, /api/memory/search, /api/memory/markdown, /api/memory/instinct
     cron.py           # /api/cron/jobs (CRUD + run)
     logs.py           # /api/logs, /api/logs/stream
     config.py         # /api/config (GET/PUT)
@@ -36,7 +36,7 @@ ui/                   # React SPA (separate build artifact)
   vite.config.ts      # Vite config; /api proxy points at http://localhost:8080
   src/App.tsx         # BrowserRouter route table for the four active pages
   src/pages/
-    Memory.tsx        # memory nodes and search
+    Memory.tsx        # instinct, memory nodes, and search
     Wiki.tsx          # document-style learning notes
     Cron.tsx          # scheduled jobs
     Plans.tsx         # daily and long-term plans
@@ -54,7 +54,7 @@ The active UI is a four-page personal knowledge workspace:
 
 | Page | Route | Source | Current persistence |
 |---|---|---|---|
-| Memory | `/memory` | `ui/src/pages/Memory.tsx` | `/api/memory/nodes`, `/api/memory/search` |
+| Memory | `/memory` | `ui/src/pages/Memory.tsx` | `/api/memory/instinct`, `/api/memory/nodes`, `/api/memory/search` |
 | Wiki | `/wiki` | `ui/src/pages/Wiki.tsx` | `/api/memory/markdown` |
 | Cron | `/cron` | `ui/src/pages/Cron.tsx` | `/api/cron/jobs` |
 | Plans | `/plans` | `ui/src/pages/Plans.tsx` | browser `localStorage` key `theos.ui.plans` |
@@ -92,7 +92,7 @@ The Starlette server still exposes legacy observability endpoints. The active Re
 | Sessions | `/api/sessions`, `/api/sessions/{id}`, `/api/agents`, `/api/search` | GET |
 | Metrics | `/api/metrics`, `/api/metrics/cost` | GET |
 | Events | `/api/events` | GET (SSE) |
-| Memory | `/api/memory/nodes`, `/api/memory/search`, `/api/memory/nodes/{id}`, `/api/memory/markdown` | GET |
+| Memory | `/api/memory/nodes`, `/api/memory/search`, `/api/memory/nodes/{id}`, `/api/memory/markdown`, `/api/memory/instinct` | GET |
 | Cron | `/api/cron/jobs`, `/api/cron/jobs/{id}`, `/api/cron/jobs/{id}/run` | GET/POST/PUT/DELETE |
 | Logs | `/api/logs`, `/api/logs/stream` | GET (SSE) |
 | Config | `/api/config` | GET/PUT |
@@ -104,7 +104,7 @@ The Starlette server still exposes legacy observability endpoints. The active Re
 | SPA path | Page file | Primary data |
 |---|---|---|
 | `/` | redirect | `/memory` |
-| `/memory` | `ui/src/pages/Memory.tsx` | `/api/memory/nodes`, `/api/memory/search` |
+| `/memory` | `ui/src/pages/Memory.tsx` | `/api/memory/instinct`, `/api/memory/nodes`, `/api/memory/search` |
 | `/wiki` | `ui/src/pages/Wiki.tsx` | `/api/memory/markdown` |
 | `/cron` | `ui/src/pages/Cron.tsx` | `/api/cron/jobs` |
 | `/plans` | `ui/src/pages/Plans.tsx` | browser `localStorage` |
@@ -127,7 +127,7 @@ Both use the same pattern: subscribers get an `asyncio.Queue` (max 256 items), f
 ## Data Flow
 
 1. **Gateway boot**: `gateway_cmd.py` creates `DashboardWriter` (write-side), then `create_ui_app()` with `DashboardReader` (read-side). Both point to `<workspace>/data/dashboard.db`.
-2. **Memory and Wiki**: The frontend fetches `/api/memory/nodes`, `/api/memory/search`, and `/api/memory/markdown`. Memory route handlers read knowledge graph and memory store data from the configured workspace.
+2. **Memory and Wiki**: The frontend fetches `/api/memory/instinct`, `/api/memory/nodes`, `/api/memory/search`, and `/api/memory/markdown`. Memory route handlers read the Instinct framework, Instinct runtime files, knowledge graph, and memory store data from the configured workspace.
 3. **Cron**: The frontend fetches `/api/cron/jobs` and calls the job update/delete/run endpoints. Mutating operations require the live gateway cron service.
 4. **Plans**: `ui/src/pages/Plans.tsx` stores daily and long-term plans in browser `localStorage` only. A backend route should be added before plans are treated as cross-device or durable server state.
 5. **Reports**: `MetricsCollector` reads from a separate DB (`<workspace>/theos.db`, the orchestrator event store), not the dashboard DB.

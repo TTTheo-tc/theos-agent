@@ -15,6 +15,7 @@ from src.ui.routes.cron import (
 from src.ui.routes.health import health
 from src.ui.routes.logs import logs_list, logs_stream
 from src.ui.routes.memory import (
+    memory_instinct,
     memory_markdown,
     memory_node_detail,
     memory_nodes_list,
@@ -50,6 +51,7 @@ def collect_routes() -> list[Route]:
         Route("/api/memory/search", memory_search),
         Route("/api/memory/nodes/{node_id}", memory_node_detail),
         Route("/api/memory/markdown", memory_markdown),
+        Route("/api/memory/instinct", memory_instinct),
         Route("/api/cron/jobs", cron_jobs_list, methods=["GET"]),
         Route("/api/cron/jobs", cron_job_create, methods=["POST"]),
         Route("/api/cron/jobs/{job_id}", cron_job_update, methods=["PUT"]),

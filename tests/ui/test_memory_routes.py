@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,38 @@ async def workspace(tmp_path: Path):
 
     (kg_dir / "MEMORY.md").write_text(
         "## Section One\nContent here\n\n## Section Two\nMore content\n"
+    )
+
+    instinct = kg_dir / "instinct"
+    rules = instinct / "rules"
+    rules.mkdir(parents=True)
+    (rules / "ACTIVE.md").write_text(
+        "# Active Rules\n\n"
+        "- [rule-a] Always test memory UI changes.  <!-- scope:domain_boost domains:coding/general boost:1 class:adaptive conf:0.8 -->\n",
+        encoding="utf-8",
+    )
+    (rules / "CANDIDATES.md").write_text(
+        "# Candidate Rules\n\n### 2026-05-05 — session\nconfidence: 0.75 | demand: feature\n\n"
+        "- When surfacing memory, show recall signals next to rules.\n",
+        encoding="utf-8",
+    )
+    (instinct / "recall_targets.json").write_text(
+        json.dumps(
+            {
+                "rule-a": {
+                    "recall_count": 4,
+                    "distinct_query_hashes": ["q1", "q2"],
+                    "distinct_days": ["2026-05-04", "2026-05-05"],
+                    "last_recalled_at": "2026-05-05T00:00:00+00:00",
+                    "max_score": 0.9,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (instinct / "memory_events.jsonl").write_text(
+        json.dumps({"type": "memory.recall.folded", "timestamp": "2026-05-05T00:00:00"}) + "\n",
+        encoding="utf-8",
     )
     return tmp_path
 
@@ -90,3 +123,16 @@ def test_markdown_sections(client):
     assert len(data["sections"]) >= 2
     titles = [s["title"] for s in data["sections"]]
     assert "Section One" in titles
+
+
+def test_instinct_summary(client):
+    resp = client.get("/api/memory/instinct")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["framework"]["core"]["rules"]
+    assert any(d["id"] == "coding/general" for d in data["framework"]["domains"])
+    assert data["runtime"]["status"]["active_rules"] == 1
+    assert data["runtime"]["status"]["candidate_rules"] == 1
+    assert data["runtime"]["status"]["recall_targets"] == 1
+    assert data["runtime"]["rules"]["active"]["rules"][0]["id"] == "rule-a"
+    assert data["runtime"]["recall"]["targets"][0]["target_id"] == "rule-a"

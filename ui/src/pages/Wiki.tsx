@@ -45,11 +45,13 @@ export default function WikiPage() {
   return (
     <>
       <Header onRefresh={load} />
-      <main className="flex-1 p-6 min-h-0 flex flex-col gap-5">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-100">Wiki</h2>
-            <p className="text-xs text-slate-500 mt-1">Document-style learning notes from memory.</p>
+      <main className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto flex h-full w-full max-w-[1180px] flex-col gap-8 px-10 py-10">
+        <div className="flex items-start justify-between gap-6">
+          <div className="max-w-3xl">
+            <p className="text-sm font-medium text-[#86868b]">Wiki</p>
+            <h2 className="mt-2 text-[40px] font-semibold leading-[1.05] text-[#1d1d1f]">Learning notes.</h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#6e6e73]">Document-style knowledge, kept readable before it becomes searchable.</p>
           </div>
           <Badge variant="outline">{loading ? 'loading' : `${sections.length} docs`}</Badge>
         </div>
@@ -60,45 +62,46 @@ export default function WikiPage() {
               placeholder="Search wiki..."
               value={query}
               onChange={e => setQuery(e.target.value)}
-              className="px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200"
+              className="soft-input rounded-lg px-3 py-2 text-sm text-[#1d1d1f] outline-none transition-colors placeholder:text-[#86868b] focus:border-[#0071e3]"
             />
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
               {filtered.map((section, index) => (
                 <button
                   key={`${section.title}-${index}`}
                   onClick={() => setSelectedIndex(index)}
-                  className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${selected === section ? 'border-green-500/50 bg-slate-900' : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'}`}
+                  className={`w-full rounded-lg px-3 py-3 text-left transition-all duration-200 ${selected === section ? 'bg-[#1d1d1f] text-white shadow-[0_14px_34px_rgba(29,29,31,0.18)]' : 'bg-white/55 text-[#1d1d1f] hover:-translate-y-0.5 hover:bg-white/82 hover:shadow-[0_12px_30px_rgba(29,29,31,0.055)]'}`}
                 >
-                  <p className="text-sm text-slate-200 truncate">{section.title || 'Untitled'}</p>
-                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{section.body}</p>
+                  <p className="truncate text-sm font-medium">{section.title || 'Untitled'}</p>
+                  <p className={`mt-1 line-clamp-2 text-[11px] ${selected === section ? 'text-white/60' : 'text-[#86868b]'}`}>{section.body}</p>
                 </button>
               ))}
               {!loading && filtered.length === 0 && (
-                <p className="text-sm text-slate-500">No wiki documents found.</p>
+                <p className="text-sm text-[#86868b]">No wiki documents found.</p>
               )}
             </div>
           </section>
 
           <section className="col-span-9 min-h-0">
-            <Card className="h-full min-h-0 bg-slate-900/50 border-slate-800">
+            <Card className="surface h-full min-h-0">
               {selected ? (
                 <>
-                  <CardHeader className="py-5 px-6 border-b border-slate-800">
-                    <CardTitle className="text-base">{selected.title || 'Untitled'}</CardTitle>
+                  <CardHeader className="px-8 py-6 shadow-[inset_0_-1px_rgba(29,29,31,0.045)]">
+                    <CardTitle className="text-2xl text-[#1d1d1f]">{selected.title || 'Untitled'}</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6 overflow-y-auto h-[calc(100%-73px)]">
-                    <article className="max-w-4xl whitespace-pre-wrap text-sm leading-7 text-slate-300">
+                  <CardContent className="h-[calc(100%-89px)] overflow-y-auto p-8">
+                    <article className="max-w-3xl whitespace-pre-wrap text-[15px] leading-8 text-[#515154]">
                       {selected.body}
                     </article>
                   </CardContent>
                 </>
               ) : (
-                <CardContent className="p-6 text-sm text-slate-500">
+                <CardContent className="p-8 text-sm text-[#86868b]">
                   No document selected.
                 </CardContent>
               )}
             </Card>
           </section>
+        </div>
         </div>
       </main>
     </>

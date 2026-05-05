@@ -29,11 +29,11 @@ export function CommandPalette() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-500 text-xs transition-colors"
+        className="soft-input flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white text-[#86868b] text-xs transition-colors"
       >
         <Search size={12} />
         Search...
-        <kbd className="ml-2 text-[10px] text-slate-600 bg-slate-900 px-1.5 py-0.5 rounded">⌘K</kbd>
+        <kbd className="ml-2 text-[10px] text-[#86868b] bg-black/[0.04] px-1.5 py-0.5 rounded">⌘K</kbd>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput placeholder="Search pages..." />

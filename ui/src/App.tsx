@@ -8,7 +8,7 @@ import PlansPage from '@/pages/Plans'
 export function App() {
   return (
     <BrowserRouter>
-      <div className="h-screen flex overflow-hidden">
+      <div className="h-screen flex overflow-hidden bg-[linear-gradient(180deg,#fbfbfd_0%,#f5f5f7_48%,#efeff2_100%)] text-[#1d1d1f]">
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0">
           <Routes>

@@ -8,7 +8,7 @@ Only four frontend pages are in scope:
 
 | Path | Page | Purpose |
 |---|---|---|
-| `/memory` | Memory | Knowledge graph nodes and memory search |
+| `/memory` | Memory | Instinct framework, recall signals, knowledge graph nodes, and memory search |
 | `/wiki` | Wiki | Document-style learning notes from memory markdown |
 | `/cron` | Cron | Scheduled jobs and recurring prompts |
 | `/plans` | Plans | Daily focus and long-term plans |
@@ -72,7 +72,7 @@ src/
   main.tsx                   # React root entry
   app/globals.css            # Tailwind v4 and theme variables
   pages/
-    Memory.tsx               # memory nodes and search
+    Memory.tsx               # instinct, memory nodes, and search
     Wiki.tsx                 # markdown-backed learning notes
     Cron.tsx                 # cron job list/actions
     Plans.tsx                # local daily/long-term plans
@@ -89,6 +89,7 @@ Relevant endpoints currently used by the UI:
 |---|---|---|
 | `/api/memory/nodes` | GET | Memory node list |
 | `/api/memory/search` | GET | Memory search |
+| `/api/memory/instinct` | GET | Instinct framework and runtime summary |
 | `/api/memory/markdown` | GET | Wiki document sections |
 | `/api/cron/jobs` | GET | Cron job list |
 | `/api/cron/jobs/{job_id}` | PUT, DELETE | Cron enable/disable and delete |
