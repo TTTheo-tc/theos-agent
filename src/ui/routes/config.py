@@ -9,7 +9,7 @@ import shutil
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from src.security.config_secrets import SENSITIVE_PATHS, _normalize_key
+from src.security.config_secrets import is_sensitive_config_path
 
 _REDACTED = "***"
 
@@ -19,8 +19,7 @@ def _redact(data: dict, path: str = "") -> dict:
     result = {}
     for key, value in data.items():
         current = f"{path}.{key}" if path else key
-        normalized = _normalize_key(current)
-        if normalized in SENSITIVE_PATHS:
+        if is_sensitive_config_path(current):
             result[key] = _REDACTED
         elif isinstance(value, dict):
             result[key] = _redact(value, current)
@@ -34,8 +33,7 @@ def _deep_merge(base: dict, patch: dict, path: str = "") -> dict:
     result = copy.deepcopy(base)
     for key, value in patch.items():
         current = f"{path}.{key}" if path else key
-        normalized = _normalize_key(current)
-        if value == _REDACTED and normalized in SENSITIVE_PATHS:
+        if value == _REDACTED and is_sensitive_config_path(current):
             continue  # Keep original
         elif isinstance(value, dict) and isinstance(result.get(key), dict):
             result[key] = _deep_merge(result[key], value, current)

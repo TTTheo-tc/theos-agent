@@ -23,6 +23,11 @@ def _normalize_key(key: str) -> str:
     return _CAMEL_RE.sub(r"\1_\2", key).lower()
 
 
+def normalize_config_path(path: str) -> str:
+    """Normalize a dot-separated config path for sensitive-field matching."""
+    return ".".join(_normalize_key(seg) for seg in path.split("."))
+
+
 SENSITIVE_PATHS: frozenset[str] = frozenset(
     {
         "channels.whatsapp.bridge_token",
@@ -69,6 +74,11 @@ SENSITIVE_PATHS: frozenset[str] = frozenset(
 )
 
 
+def is_sensitive_config_path(path: str) -> bool:
+    """Return whether a dot-separated config path is a known sensitive field."""
+    return normalize_config_path(path) in SENSITIVE_PATHS
+
+
 class ConfigSecretsManager:
     """Encrypt/decrypt sensitive config values using AES-256-GCM."""
 
@@ -108,8 +118,7 @@ class ConfigSecretsManager:
     @staticmethod
     def is_sensitive_path(path: str) -> bool:
         """Check if a dot-separated config path is a known sensitive field."""
-        normalized = ".".join(_normalize_key(seg) for seg in path.split("."))
-        return normalized in SENSITIVE_PATHS
+        return is_sensitive_config_path(path)
 
     @staticmethod
     def has_sensitive_values(data: Any) -> bool:
@@ -124,8 +133,7 @@ class ConfigSecretsManager:
             elif isinstance(node, str) and node:
                 if node.startswith(_ENCRYPTED_PREFIX) or node.startswith(_SECRET_REF_PREFIX):
                     return False
-                normalized = ".".join(_normalize_key(s) for s in prefix.split("."))
-                if normalized in SENSITIVE_PATHS:
+                if is_sensitive_config_path(prefix):
                     return True
             return False
 

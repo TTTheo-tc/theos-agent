@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.security.config_secrets import ConfigSecretsManager
+from src.security.config_secrets import ConfigSecretsManager, is_sensitive_config_path
 
 _TEST_KEY = b"\x01" * 32
 
@@ -65,6 +65,18 @@ def test_is_sensitive_path_camel_and_snake_equivalent():
     assert ConfigSecretsManager.is_sensitive_path("channels.feishu.tokenDir") is False
     assert ConfigSecretsManager.is_sensitive_path("channels.feishu.appId") is False
     assert ConfigSecretsManager.is_sensitive_path("agents.defaults.model") is False
+
+
+def test_is_sensitive_config_path_matches_manager_helper():
+    assert is_sensitive_config_path("providers.openaiCodex.apiKey") is True
+    assert is_sensitive_config_path("providers.openai_codex.api_key") is True
+    assert is_sensitive_config_path("providers.openaiCodex.models") is False
+
+
+def test_has_sensitive_values_uses_normalized_paths():
+    data = {"providers": {"openaiCodex": {"apiKey": "sk-test"}}}
+
+    assert ConfigSecretsManager.has_sensitive_values(data) is True
 
 
 def test_encrypt_config_data_encrypts_sensitive_fields():
