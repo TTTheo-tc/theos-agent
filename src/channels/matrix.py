@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import mimetypes
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, TypeAlias
 
@@ -249,10 +250,8 @@ class MatrixChannel(BaseChannel):
                 )
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 self._sync_task.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await self._sync_task
-                except asyncio.CancelledError:
-                    pass
         if self.client:
             await self.client.close()
 
@@ -428,11 +427,13 @@ class MatrixChannel(BaseChannel):
             failures: list[str] = []
             if candidates:
                 limit_bytes = await self._effective_media_limit_bytes()
-                for path in candidates:
-                    if fail := await self._upload_and_send_attachment(
+                failures = [
+                    fail
+                    for path in candidates
+                    if (fail := await self._upload_and_send_attachment(
                         msg.chat_id, path, limit_bytes, relates_to
-                    ):
-                        failures.append(fail)
+                    ))
+                ]
             if failures:
                 text = (
                     f"{text.rstrip()}\n{chr(10).join(failures)}"
@@ -507,10 +508,8 @@ class MatrixChannel(BaseChannel):
     async def _stop_typing_keepalive(self, room_id: str, *, clear_typing: bool) -> None:
         if task := self._typing_tasks.pop(room_id, None):
             task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
         if clear_typing:
             await self._set_typing(room_id, False)
 
@@ -631,9 +630,8 @@ class MatrixChannel(BaseChannel):
 
     def _event_filename(self, event: MatrixMediaEvent, attachment_type: str) -> str:
         body = getattr(event, "body", None)
-        if isinstance(body, str) and body.strip():
-            if candidate := safe_filename(Path(body).name):
-                return candidate
+        if isinstance(body, str) and body.strip() and (candidate := safe_filename(Path(body).name)):
+            return candidate
         return _DEFAULT_ATTACH_NAME if attachment_type == "file" else attachment_type
 
     def _build_attachment_path(
@@ -641,9 +639,8 @@ class MatrixChannel(BaseChannel):
     ) -> Path:
         safe_name = safe_filename(Path(filename).name) or _DEFAULT_ATTACH_NAME
         suffix = Path(safe_name).suffix
-        if not suffix and mime:
-            if guessed := mimetypes.guess_extension(mime, strict=False):
-                safe_name, suffix = f"{safe_name}{guessed}", guessed
+        if not suffix and mime and (guessed := mimetypes.guess_extension(mime, strict=False)):
+            safe_name, suffix = f"{safe_name}{guessed}", guessed
         stem = (Path(safe_name).stem or attachment_type)[:72]
         suffix = suffix[:16]
         event_id = safe_filename(str(getattr(event, "event_id", "") or "evt").lstrip("$"))
@@ -713,9 +710,8 @@ class MatrixChannel(BaseChannel):
 
         encrypted = self._is_encrypted_media_event(event)
         data = downloaded
-        if encrypted:
-            if (data := self._decrypt_media_bytes(event, downloaded)) is None:
-                return None, fail
+        if encrypted and (data := self._decrypt_media_bytes(event, downloaded)) is None:
+            return None, fail
 
         if len(data) > limit_bytes:
             return None, _ATTACH_TOO_LARGE.format(filename)
