@@ -102,7 +102,7 @@ class XPoller(BasePoller):
             else:
                 logger.warning(
                     "XPoller: no cookies provided, twscrape may not work. "
-                    "Set gateway.pollers.x.cookies in config."
+                    "Set gateway.pollers.x.authToken and gateway.pollers.x.ct0 in config."
                 )
 
             # Pre-resolve username -> user ID to avoid per-poll API calls
@@ -123,7 +123,7 @@ class XPoller(BasePoller):
                 ", ".join(self._user_ids.keys()),
             )
         except ImportError:
-            logger.error("XPoller: twscrape not installed. Run: uv add twscrape")
+            logger.error("XPoller: twscrape not installed. Install with: uv sync --extra pollers")
             raise
         except Exception:
             logger.opt(exception=True).error("XPoller: setup failed unexpectedly")

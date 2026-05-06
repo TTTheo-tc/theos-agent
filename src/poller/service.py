@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from src.poller.base import BasePoller, PollerEvent
+from src.bus.events import InboundMessage
+from src.poller.base import BasePoller, PollerEvent, PollerEventHandler
 
 if TYPE_CHECKING:
     from src.bus.queue import MessageBus
@@ -24,7 +25,7 @@ class PollerService:
     def __init__(
         self,
         bus: MessageBus,
-        on_event: Callable[[PollerEvent], Coroutine[Any, Any, None]] | None = None,
+        on_event: PollerEventHandler | None = None,
     ) -> None:
         self.bus = bus
         self._on_event = on_event or self._default_on_event
@@ -69,9 +70,7 @@ class PollerService:
         logger.info("Poller [{}] → bus: {}", event.poller_name, event.message[:120])
 
     @staticmethod
-    def _message_from_event(event: PollerEvent):
-        from src.bus.events import InboundMessage
-
+    def _message_from_event(event: PollerEvent) -> InboundMessage:
         return InboundMessage(
             channel="poller",
             sender_id=f"poller:{event.poller_name}",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import abc
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from loguru import logger
 
@@ -21,6 +21,9 @@ class PollerEvent:
     poller_name: str
     message: str
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+PollerEventHandler = Callable[[PollerEvent], Awaitable[None]]
 
 
 class BasePoller(abc.ABC):
@@ -48,7 +51,7 @@ class BasePoller(abc.ABC):
     async def teardown(self) -> None:
         """Cleanup on shutdown."""
 
-    async def run_loop(self, on_event: Any) -> None:
+    async def run_loop(self, on_event: PollerEventHandler) -> None:
         """Main polling loop. Called by PollerService."""
         logger.info("Poller [{}] starting (interval={}s)", self.name, self.interval_s)
         logger.info("Poller [{}] calling setup()...", self.name)
