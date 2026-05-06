@@ -278,20 +278,18 @@ class KnowledgeGraph:
         exclude_superseded: bool = True,
     ) -> list[dict[str, Any]]:
         """List nodes of a given type, newest first."""
+        clauses = ["node_type = ?"]
+        params: list[Any] = [node_type]
         if exclude_superseded:
-            rows = await self._db.fetchall(
-                """SELECT * FROM kg_nodes
-                   WHERE node_type = ? AND superseded_by IS NULL
-                   ORDER BY created_at DESC LIMIT ?""",
-                (node_type, limit),
-            )
-        else:
-            rows = await self._db.fetchall(
-                """SELECT * FROM kg_nodes
-                   WHERE node_type = ?
-                   ORDER BY created_at DESC LIMIT ?""",
-                (node_type, limit),
-            )
+            clauses.append("superseded_by IS NULL")
+        params.append(limit)
+        where = " AND ".join(clauses)
+        rows = await self._db.fetchall(
+            f"""SELECT * FROM kg_nodes
+                WHERE {where}
+                ORDER BY created_at DESC LIMIT ?""",
+            tuple(params),
+        )
         return [dict(r) for r in rows]
 
     async def count(self) -> int:
