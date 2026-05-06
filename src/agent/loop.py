@@ -54,10 +54,14 @@ class _NoopHookRunner:
 
     hooks_dir = None
 
-    async def run_pre_chat(self, user_message: str, workspace: Path | None = None) -> str | None:
+    async def run_pre_chat(
+        self, user_message: str, workspace: Path | None = None
+    ) -> str | None:
+        del user_message, workspace
         return None
 
     async def run_post_chat(self, *args: Any, **kwargs: Any) -> None:
+        del args, kwargs
         return None
 
 
@@ -74,11 +78,11 @@ class AgentLoop:
     """
 
     # Lazy-initialized safety layer (shared across all sessions)
-    _safety: "SafetyLayer | None" = None
+    _safety: SafetyLayer | None = None
     _entropy_sensitivity: float = 0.0
 
     @classmethod
-    def _get_safety(cls) -> "SafetyLayer":
+    def _get_safety(cls) -> SafetyLayer:
         if cls._safety is None:
             from src.safety.layer import SafetyLayer
 
@@ -93,12 +97,12 @@ class AgentLoop:
         self,
         bus: MessageBus,
         provider: LLMProvider,
-        config: "Config",
+        config: Config,
         *,
-        cron_service: "CronService | None" = None,
+        cron_service: CronService | None = None,
         session_manager: SessionManager | None = None,
-        dashboard: "DashboardWriter | None" = None,
-        channels_config_override: "ChannelsConfig | None" = None,
+        dashboard: DashboardWriter | None = None,
+        channels_config_override: ChannelsConfig | None = None,
         channel_env: dict[str, str] | None = None,
     ):
         from src.config.schema import ExecToolConfig
@@ -146,8 +150,8 @@ class AgentLoop:
         self.learning_enabled = config.learning.enabled
         self._mcp_server_configs = resolve_data_secret_refs(config.tools.mcp_servers)
         self._mcp_server_count = len(self._mcp_server_configs)
-        self._mcp: "MCPManager | None" = None
-        self._subagents: "SubagentManager | None" = None
+        self._mcp: MCPManager | None = None
+        self._subagents: SubagentManager | None = None
         self._subagent_policy = getattr(config.agents, "subagents", None)
         self._genver_handler: GenVerHandler | None = None
 
@@ -253,7 +257,7 @@ class AgentLoop:
         self._register_default_tools()
 
     @property
-    def subagents(self) -> "SubagentManager":
+    def subagents(self) -> SubagentManager:
         """Lazily create the subagent manager when a subagent feature is used."""
         if self._subagents is None:
             from src.agent.subagent import SubagentManager
@@ -280,7 +284,7 @@ class AgentLoop:
             )
         return self._genver_handler
 
-    def _get_mcp_manager(self) -> "MCPManager":
+    def _get_mcp_manager(self) -> MCPManager:
         if self._mcp is None:
             from src.agent.mcp_manager import MCPManager
 
@@ -289,9 +293,9 @@ class AgentLoop:
 
     @staticmethod
     def _build_autonomy_policy(
-        autonomy_config: "AutonomyConfig",
+        autonomy_config: AutonomyConfig,
         workspace: Path,
-    ) -> "AutonomyPolicy | None":
+    ) -> AutonomyPolicy | None:
         """Attach autonomy only when the config differs from conservative defaults."""
         from src.config.schema import AutonomyConfig
         from src.security.autonomy import AutonomyPolicy
@@ -304,7 +308,7 @@ class AgentLoop:
 
     def _new_tool_registry(
         self,
-        approval_gate: "ApprovalGate | None" = None,
+        approval_gate: ApprovalGate | None = None,
     ) -> ToolRegistry:
         """Create a root tool registry with shared runtime policies attached."""
         registry = ToolRegistry(approval_gate=approval_gate or self._approval_gate)
@@ -535,7 +539,7 @@ class AgentLoop:
     _AGENT_TEAM_NEEDS_SETUP = "__AGENT_TEAM_NEEDS_SETUP__"
     _AGENT_GENVER_NEEDS_SETUP = "__AGENT_GENVER_NEEDS_SETUP__"
 
-    def apply_genver_config(self, genver_config: "GenVerConfig") -> None:
+    def apply_genver_config(self, genver_config: GenVerConfig) -> None:
         """Apply a GenVerConfig and switch to genver mode."""
         from src.agent.slash_commands import apply_genver_config
 
@@ -1051,7 +1055,7 @@ class AgentLoop:
         tool_ctx: ToolContext,
         run_genver: bool,
         key: str,
-        ctx: "ContextBuilder",
+        ctx: ContextBuilder,
         active_workspace: Path | None = None,
         on_content_delta: Callable[[str], Awaitable[None]] | None = None,
         turn_id: str | None = None,
@@ -1099,7 +1103,7 @@ class AgentLoop:
         tool_ctx: ToolContext,
         run_genver: bool,
         key: str,
-        ctx: "ContextBuilder",
+        ctx: ContextBuilder,
         active_workspace: Path | None = None,
         on_content_delta: Callable[[str], Awaitable[None]] | None = None,
         initial_count: int = 0,
@@ -1272,9 +1276,10 @@ class AgentLoop:
             sender_id=msg.sender_id,
             sender_is_owner=self._resolve_sender_is_owner(msg),
         )
-        if message_tool := self.tools.get("message"):
-            if isinstance(message_tool, MessageTool):
-                message_tool.start_turn()
+        if (message_tool := self.tools.get("message")) and isinstance(
+            message_tool, MessageTool
+        ):
+            message_tool.start_turn()
 
         # 6. GenVer routing decision
         detected_genver = self.is_genver and GenVerHandler.should_run_for_request(msg.content)
@@ -1488,7 +1493,7 @@ class AgentLoop:
         key: str,
         run_genver: bool,
         task_workspace: Path,
-        ctx: "ContextBuilder",
+        ctx: ContextBuilder,
         history: list[dict],
     ) -> tuple[list[dict], int, list[str], str | None, list[str]]:
         """Build initial LLM messages from pre-chat hooks and context.
