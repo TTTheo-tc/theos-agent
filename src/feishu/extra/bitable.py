@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from typing import ClassVar
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -56,8 +57,6 @@ def parse_bitable_url(url: str) -> dict:
             "view_id": str | None,
         }
     """
-    from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
-
     parsed = urlparse(url)
     path_parts = parsed.path.split("/")
     query_params = parse_qs(parsed.query)
@@ -352,7 +351,7 @@ class BitableToMarkdown:
         if field_type in {18, 21}:  # SingleLink, DuplexLink
             return self._format_link(value)
         if field_type in {19, 20}:  # Lookup, Formula
-            return self._format_lookup_formula(value, field_info)
+            return self._format_lookup_formula(value)
         if field_type == 22:  # Location
             return self._format_location(value)
         if field_type == 23:  # GroupChat
@@ -532,7 +531,7 @@ class BitableToMarkdown:
             return ", ".join(record_ids)
         return str(value)
 
-    def _format_lookup_formula(self, value, field_info: dict) -> str:  # noqa: ARG002
+    def _format_lookup_formula(self, value) -> str:
         """格式化查找引用和公式字段。
 
         这些字段的值类型取决于目标字段类型。
@@ -540,9 +539,7 @@ class BitableToMarkdown:
         # 尝试根据值类型推断格式化方式
         if isinstance(value, list):
             # 可能是数组结果
-            formatted = []
-            for item in value:
-                formatted.append(self._format_unknown(item))
+            formatted = [self._format_unknown(item) for item in value]
             return ", ".join(formatted)
         if isinstance(value, bool):
             return self._format_checkbox(value)
