@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class MCPToolSearch(Tool):
     """Search discovered MCP tools by query, server, and instinct domain."""
 
-    def __init__(self, workspace: Path, manager: "MCPManager") -> None:
+    def __init__(self, workspace: Path, manager: MCPManager) -> None:
         self._skills = SkillsLoader(workspace)
         self._manager = manager
 
@@ -82,6 +82,7 @@ class MCPToolSearch(Tool):
         limit: int = 5,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         result = self.search_tools(
             query=query,
             domain=domain,

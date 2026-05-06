@@ -33,7 +33,7 @@ class ToolSearchTool(Tool):
       changing the active tool surface.
     """
 
-    def __init__(self, registry: "ToolRegistry") -> None:
+    def __init__(self, registry: ToolRegistry) -> None:
         self._registry = registry
 
     @property
@@ -71,6 +71,7 @@ class ToolSearchTool(Tool):
         }
 
     async def execute(self, query: str = "", max_results: int = 10, **kwargs: Any) -> str:
+        del kwargs
         # Mode 1: empty query -> list all deferred tools
         if not query.strip():
             return self._format_summary()
@@ -92,8 +93,7 @@ class ToolSearchTool(Tool):
         if not summary:
             return "No deferred tools available."
         lines = [f"**{len(summary)} deferred tool(s) available:**\n"]
-        for item in summary:
-            lines.append(f"- **{item['name']}**: {item['description']}")
+        lines.extend(f"- **{item['name']}**: {item['description']}" for item in summary)
         return "\n".join(lines)
 
     @staticmethod
@@ -128,8 +128,7 @@ class ToolSearchTool(Tool):
         not_found: list[str],
     ) -> str:
         lines = [f"**Activated {len(activated)} new tool(s):**\n"]
-        for item in activated:
-            lines.append(f"- **{item['name']}**: {item['description']}")
+        lines.extend(f"- **{item['name']}**: {item['description']}" for item in activated)
         memory_hint = _memory_recall_hint([*(item["name"] for item in activated), *already_active])
         if memory_hint:
             lines.append(memory_hint)
@@ -143,7 +142,6 @@ class ToolSearchTool(Tool):
         """Format search matches as markdown candidates."""
         names = ",".join(m["name"] for m in matches)
         lines = [f"**Found {len(matches)} deferred tool candidate(s):**\n"]
-        for m in matches:
-            lines.append(f"- **{m['name']}**: {m['description']}")
+        lines.extend(f"- **{m['name']}**: {m['description']}" for m in matches)
         lines.append("\nActivate one or more with " f"`select:{names}`.")
         return "\n".join(lines)

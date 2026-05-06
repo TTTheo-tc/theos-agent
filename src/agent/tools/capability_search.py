@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class CapabilitySearchTool(Tool):
     """Search across native skills and discovered MCP capabilities."""
 
-    def __init__(self, workspace: Path, manager: "MCPManager | None" = None) -> None:
+    def __init__(self, workspace: Path, manager: MCPManager | None = None) -> None:
         self._skills = SkillsLoader(workspace)
         self._mcp = (
             MCPToolSearch(workspace=workspace, manager=manager) if manager is not None else None
@@ -96,6 +96,7 @@ class CapabilitySearchTool(Tool):
         include_unavailable: bool = False,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         result = self.search_capabilities(
             query=query,
             domain=domain,

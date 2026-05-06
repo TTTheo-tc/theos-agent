@@ -77,6 +77,7 @@ class SkillSearchTool(Tool):
         include_unavailable: bool = False,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         if error := _validate_search_request(query=query, domain=domain):
             return _json_response({"error": error})
 
