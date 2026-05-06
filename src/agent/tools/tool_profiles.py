@@ -84,6 +84,17 @@ _FEISHU_READONLY_TOOLS = frozenset(
         "feishu_comments",
     }
 )
+_BASIC_WEB_TOOLS = frozenset({"web_search", "web_fetch"})
+_PROFILE_DISCOVERY_TOOLS = _DISCOVERY_TOOLS | _PLAN_MODE_TOOLS | {"tool_search"}
+_FEISHU_KNOWLEDGE_TOOLS = frozenset(
+    {
+        "feishu_read",
+        "feishu_search",
+        "feishu_list",
+        "feishu_spaces",
+        "feishu_calendar",
+    }
+)
 
 TOOL_GROUPS: dict[str, set[str]] = {
     "group:fs": set(_FS_TOOLS),
@@ -142,40 +153,28 @@ PROFILES: dict[str, set[str] | None] = {
         | _SHELL_TOOLS
         | _WEB_TOOLS
         | _MEMORY_TOOLS
-        | _DISCOVERY_TOOLS
-        | _PLAN_MODE_TOOLS
+        | _PROFILE_DISCOVERY_TOOLS
         | _TASK_TOOLS
         | _FEISHU_READONLY_TOOLS
-        | {"tool_search", "agent", "cron", "image_analyze", "pdf"}
+        | {"agent", "cron", "image_analyze", "pdf"}
     ),
     "messaging": set(
         _MEMORY_TOOLS
-        | _DISCOVERY_TOOLS
-        | _PLAN_MODE_TOOLS
+        | _PROFILE_DISCOVERY_TOOLS
+        | _BASIC_WEB_TOOLS
+        | _FEISHU_KNOWLEDGE_TOOLS
         | {
             "message",
-            "web_search",
-            "web_fetch",
-            "tool_search",
-            # Feishu knowledge retrieval + messaging.
-            "feishu_read",
-            "feishu_search",
-            "feishu_list",
-            "feishu_spaces",
-            "feishu_calendar",
             "feishu_send",
         }
     ),
     "readonly": set(
         _CORE_READ_TOOLS
-        | _DISCOVERY_TOOLS
-        | _PLAN_MODE_TOOLS
+        | _PROFILE_DISCOVERY_TOOLS
+        | _BASIC_WEB_TOOLS
         | {
             "notebook_read",
-            "web_search",
-            "web_fetch",
             "browser",
-            "tool_search",
         }
     ),
 }
