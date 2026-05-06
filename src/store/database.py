@@ -51,9 +51,17 @@ class Database:
     async def connect(self) -> None:
         """Open the database and ensure the schema exists."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = await aiosqlite.connect(str(self.db_path))
-        await self._conn.execute("PRAGMA journal_mode=WAL")
-        await self._ensure_schema()
+        conn = await aiosqlite.connect(str(self.db_path))
+        self._conn = conn
+        try:
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await self._ensure_schema()
+        except Exception:
+            try:
+                await conn.close()
+            finally:
+                self._conn = None
+            raise
         logger.debug("Database connected: {}", self.db_path)
 
     async def close(self) -> None:
