@@ -94,35 +94,8 @@ def list_bitable_tables(app_token: str) -> list[dict]:
     Returns:
         数据表列表，每个数据表包含 table_id, name, revision 等信息
     """
-    header = feishu_auth_header()
     url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables"
-    page_token = None
-    tables = []
-    while True:
-        params = {"page_size": 100}
-        if page_token:
-            params["page_token"] = page_token
-
-        resp = httpx.get(
-            url,
-            headers=header,
-            params=params,
-            follow_redirects=True,
-            timeout=DEFAULT_TIMEOUT,
-        )
-        assert resp.status_code == 200, f"error: {resp.status_code}, {resp.text}"
-        data = resp.json()
-        assert data["code"] == 0, f"code != 0, text: {resp.text}"
-
-        data = data.get("data", {})
-        tables.extend(data.get("items", []))
-
-        if not data.get("has_more", False):
-            break
-        page_token = data.get("page_token")
-        if not page_token:
-            break
-    return tables
+    return _list_bitable_items(url, page_size=100)
 
 
 def list_bitable_fields(app_token: str, table_id: str) -> list[dict]:
@@ -139,35 +112,8 @@ def list_bitable_fields(app_token: str, table_id: str) -> list[dict]:
     Returns:
         字段列表，每个字段包含 field_id, field_name, type, property 等信息
     """
-    header = feishu_auth_header()
     url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/fields"
-    page_token = None
-    fields = []
-    while True:
-        params = {"page_size": 100}
-        if page_token:
-            params["page_token"] = page_token
-
-        resp = httpx.get(
-            url,
-            headers=header,
-            params=params,
-            follow_redirects=True,
-            timeout=DEFAULT_TIMEOUT,
-        )
-        assert resp.status_code == 200, f"error: {resp.status_code}, {resp.text}"
-        data = resp.json()
-        assert data["code"] == 0, f"code != 0, text: {resp.text}"
-
-        data = data.get("data", {})
-        fields.extend(data.get("items", []))
-
-        if not data.get("has_more", False):
-            break
-        page_token = data.get("page_token")
-        if not page_token:
-            break
-    return fields
+    return _list_bitable_items(url, page_size=100)
 
 
 def list_bitable_records(
@@ -189,16 +135,25 @@ def list_bitable_records(
     Returns:
         记录列表，每条记录包含 record_id, fields 等信息
     """
-    header = feishu_auth_header()
     url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records"
+    params = {"view_id": view_id} if view_id else None
+    return _list_bitable_items(url, page_size=500, base_params=params)
+
+
+def _list_bitable_items(
+    url: str,
+    *,
+    page_size: int,
+    base_params: dict[str, str] | None = None,
+) -> list[dict]:
+    """Fetch all items from a paginated Bitable list endpoint."""
+    header = feishu_auth_header()
     page_token = None
-    records = []
+    items = []
     while True:
-        params = {"page_size": 500}  # Max page size for records is 500
+        params = {"page_size": page_size, **(base_params or {})}
         if page_token:
             params["page_token"] = page_token
-        if view_id:
-            params["view_id"] = view_id
 
         resp = httpx.get(
             url,
@@ -212,14 +167,14 @@ def list_bitable_records(
         assert data["code"] == 0, f"code != 0, text: {resp.text}"
 
         data = data.get("data", {})
-        records.extend(data.get("items", []))
+        items.extend(data.get("items", []))
 
         if not data.get("has_more", False):
             break
         page_token = data.get("page_token")
         if not page_token:
             break
-    return records
+    return items
 
 
 def info_bitable(app_token: str) -> dict:

@@ -591,11 +591,11 @@ class EditArena:
 
 def _build_table_anno_map(annotations: dict) -> dict[str, dict]:
     """Build a mapping from table block_id to its annotation dict."""
-    result = {}
-    for b in annotations.get("blocks", []):
-        if b.get("block_type") == 31:
-            result[b["block_id"]] = b
-    return result
+    return {
+        block["block_id"]: block
+        for block in annotations.get("blocks", [])
+        if block.get("block_type") == 31
+    }
 
 
 def _build_table_patch_ops(

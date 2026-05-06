@@ -1116,16 +1116,7 @@ class FeishuParser:
 
     def parse_children(self, children: list[str], indent_level: int) -> str:
         """解析子块列表"""
-        result = []
-        for child_id in children:
-            if child_id not in self.block_map:
-                continue
-            child_block = self.block_map[child_id]
-            child_content = self.parse_block(child_block, indent_level)
-            if child_content.strip():
-                result.append(child_content)
-
-        return "\n".join(result)
+        return "\n".join(self._parse_child_parts(children, indent_level))
 
 
 def feishu2md(
