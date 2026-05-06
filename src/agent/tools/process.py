@@ -378,13 +378,10 @@ class ProcessTool(Tool):
         return f"Tracked processes ({len(sessions)}):\n" + "\n".join(lines)
 
     async def _poll(self, registry: ProcessRegistry, kwargs: dict[str, Any]) -> str:
-        session_id = kwargs.get("session_id", "")
-        if not session_id:
-            return "Error: 'session_id' is required for 'poll'."
-
-        session = registry.get_session(session_id)
-        if session is None:
-            return f"Error: No session found for '{session_id}'."
+        session, error = _require_session(registry, kwargs, action="poll")
+        if error:
+            return error
+        assert session is not None
 
         # Optional wait
         timeout_ms = kwargs.get("timeout", 0)
@@ -398,13 +395,11 @@ class ProcessTool(Tool):
         return _format_poll_result(session, output)
 
     async def _send_input(self, registry: ProcessRegistry, kwargs: dict[str, Any]) -> str:
-        session_id = kwargs.get("session_id", "")
-        if not session_id:
-            return "Error: 'session_id' is required for 'send_input'."
-
-        session = registry.get_session(session_id)
-        if session is None:
-            return f"Error: No session found for '{session_id}'."
+        session, error = _require_session(registry, kwargs, action="send_input")
+        if error:
+            return error
+        assert session is not None
+        session_id = session.session_id
 
         if not session.running:
             return f"Error: Process '{session_id}' has already exited."
@@ -423,13 +418,11 @@ class ProcessTool(Tool):
         return f"Sent {len(data)} bytes to '{session_id}'."
 
     async def _terminate(self, registry: ProcessRegistry, kwargs: dict[str, Any]) -> str:
-        session_id = kwargs.get("session_id", "")
-        if not session_id:
-            return "Error: 'session_id' is required for 'terminate'."
-
-        session = registry.get_session(session_id)
-        if session is None:
-            return f"Error: No session found for '{session_id}'."
+        session, error = _require_session(registry, kwargs, action="terminate")
+        if error:
+            return error
+        assert session is not None
+        session_id = session.session_id
 
         if not session.running:
             registry.remove(session_id)
@@ -451,6 +444,21 @@ class ProcessTool(Tool):
 
         registry.remove(session_id)
         return f"Terminated process '{session_id}' (pid {pid})."
+
+
+def _require_session(
+    registry: ProcessRegistry,
+    kwargs: dict[str, Any],
+    *,
+    action: str,
+) -> tuple[ProcessSession | None, str | None]:
+    session_id = kwargs.get("session_id", "")
+    if not session_id:
+        return None, f"Error: 'session_id' is required for '{action}'."
+    session = registry.get_session(session_id)
+    if session is None:
+        return None, f"Error: No session found for '{session_id}'."
+    return session, None
 
 
 def _format_poll_result(session: ProcessSession, output: str) -> str:

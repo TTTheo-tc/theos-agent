@@ -306,7 +306,7 @@ class TestToolPoll:
     async def test_poll_no_session_id(self):
         tool = _tool()
         result = await tool.execute(action="poll")
-        assert "Error" in result
+        assert result == "Error: 'session_id' is required for 'poll'."
 
     @pytest.mark.asyncio
     async def test_poll_unknown_session(self):
@@ -343,6 +343,12 @@ class TestToolSendInput:
         tool = _tool()
         result = await tool.execute(action="send_input", session_id="nope", input="x")
         assert "Error" in result
+
+    @pytest.mark.asyncio
+    async def test_send_input_no_session_id(self):
+        tool = _tool()
+        result = await tool.execute(action="send_input", input="x")
+        assert result == "Error: 'session_id' is required for 'send_input'."
 
     @pytest.mark.asyncio
     async def test_send_input_exited_process(self):
@@ -386,6 +392,12 @@ class TestToolTerminate:
         tool = _tool()
         result = await tool.execute(action="terminate", session_id="nope")
         assert "Error" in result
+
+    @pytest.mark.asyncio
+    async def test_terminate_no_session_id(self):
+        tool = _tool()
+        result = await tool.execute(action="terminate")
+        assert result == "Error: 'session_id' is required for 'terminate'."
 
 
 # ---------------------------------------------------------------------------
