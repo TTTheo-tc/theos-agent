@@ -25,19 +25,16 @@ class Tool(ABC):
     @abstractmethod
     def name(self) -> str:
         """Tool name used in function calls."""
-        pass
 
     @property
     @abstractmethod
     def description(self) -> str:
         """Description of what the tool does."""
-        pass
 
     @property
     @abstractmethod
     def parameters(self) -> dict[str, Any]:
         """JSON Schema for tool parameters."""
-        pass
 
     @abstractmethod
     async def execute(self, **kwargs: Any) -> str:
@@ -50,7 +47,6 @@ class Tool(ABC):
         Returns:
             String result of the tool execution.
         """
-        pass
 
     @property
     def risk_level(self) -> str:
@@ -133,11 +129,12 @@ class Tool(ABC):
         return errors
 
     def _validate_object(self, val: Any, schema: dict[str, Any], path: str) -> list[str]:
-        errors = []
+        errors = [
+            f"missing required {self._child_path(path, k)}"
+            for k in schema.get("required", [])
+            if k not in val
+        ]
         props = schema.get("properties", {})
-        for k in schema.get("required", []):
-            if k not in val:
-                errors.append(f"missing required {self._child_path(path, k)}")
         for k, v in val.items():
             if k in props:
                 errors.extend(self._validate(v, props[k], self._child_path(path, k)))
