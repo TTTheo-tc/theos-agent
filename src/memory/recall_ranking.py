@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -44,15 +44,15 @@ def _parse_datetime(value: str | datetime | None) -> datetime | None:
         except (ValueError, TypeError):
             return None
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
-def _days_since(ts: str, reference: datetime | None = None) -> float:
+def _days_since(ts: str, reference: str | datetime | None = None) -> float:
     dt = _parse_datetime(ts)
     if dt is None:
         return 999.0
-    ref = _parse_datetime(reference) or datetime.now(timezone.utc)
+    ref = _parse_datetime(reference) or datetime.now(UTC)
     return max(0.0, (ref - dt).total_seconds() / 86400.0)
 
 
@@ -133,7 +133,9 @@ def rank_recall_candidates(
         if not isinstance(data, dict):
             continue
         recall_count = int(data.get("recall_count", 0))
-        distinct_queries = len(data.get("distinct_query_hashes", []))
+        distinct_query_hashes = data.get("distinct_query_hashes", [])
+        distinct_days = data.get("distinct_days", [])
+        distinct_queries = len(distinct_query_hashes)
         if recall_count < min_recall_count or distinct_queries < min_distinct_queries:
             continue
         scored = score_recall_target(data)
@@ -146,7 +148,7 @@ def rank_recall_candidates(
                 "components": scored["components"],
                 "recall_count": recall_count,
                 "distinct_queries": distinct_queries,
-                "distinct_days": len(data.get("distinct_days", [])),
+                "distinct_days": len(distinct_days),
             }
         )
 
