@@ -15,7 +15,11 @@ T = TypeVar("T")
 class MessageBus:
     """Async message bus with backpressure."""
 
-    def __init__(self, max_inbound: int = _MAX_QUEUE_SIZE, max_outbound: int = _MAX_QUEUE_SIZE):
+    def __init__(
+        self,
+        max_inbound: int = _MAX_QUEUE_SIZE,
+        max_outbound: int = _MAX_QUEUE_SIZE,
+    ) -> None:
         self.inbound: asyncio.Queue[InboundMessage] = asyncio.Queue(maxsize=max_inbound)
         self.outbound: asyncio.Queue[OutboundMessage] = asyncio.Queue(maxsize=max_outbound)
 
