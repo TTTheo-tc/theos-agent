@@ -33,18 +33,26 @@ _W_CONCEPTUAL = 0.06
 _RECENCY_HALF_LIFE_DAYS = 14.0
 
 
+def _parse_datetime(value: str | datetime | None) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        try:
+            dt = datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def _days_since(ts: str, reference: datetime | None = None) -> float:
-    if not ts:
+    dt = _parse_datetime(ts)
+    if dt is None:
         return 999.0
-    try:
-        dt = datetime.fromisoformat(ts)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-    except (ValueError, TypeError):
-        return 999.0
-    ref = reference or datetime.now(timezone.utc)
-    if ref.tzinfo is None:
-        ref = ref.replace(tzinfo=timezone.utc)
+    ref = _parse_datetime(reference) or datetime.now(timezone.utc)
     return max(0.0, (ref - dt).total_seconds() / 86400.0)
 
 
@@ -54,14 +62,7 @@ def score_recall_target(
     reference_date: str | None = None,
 ) -> dict[str, Any]:
     """Compute 6-component score. Returns dict with 'score' and 'components'."""
-    ref = None
-    if reference_date:
-        try:
-            ref = datetime.fromisoformat(reference_date)
-            if ref.tzinfo is None:
-                ref = ref.replace(tzinfo=timezone.utc)
-        except (ValueError, TypeError):
-            ref = None
+    ref = _parse_datetime(reference_date)
 
     recall_count = int(target.get("recall_count", 0))
     query_hashes = target.get("distinct_query_hashes", [])
@@ -124,9 +125,13 @@ def rank_recall_candidates(
         targets = json.loads(targets_path.read_text())
     except (json.JSONDecodeError, OSError):
         return []
+    if not isinstance(targets, dict):
+        return []
 
     candidates: list[dict[str, Any]] = []
     for target_id, data in targets.items():
+        if not isinstance(data, dict):
+            continue
         recall_count = int(data.get("recall_count", 0))
         distinct_queries = len(data.get("distinct_query_hashes", []))
         if recall_count < min_recall_count or distinct_queries < min_distinct_queries:

@@ -369,6 +369,37 @@ class TestRecallRanking:
 
         assert rank_recall_candidates(tmp_path) == []
 
+    def test_rank_empty_when_targets_json_is_not_object(self, tmp_path):
+        from src.memory.recall_ranking import rank_recall_candidates
+
+        targets_path = tmp_path / "memory" / "instinct" / "recall_targets.json"
+        targets_path.parent.mkdir(parents=True)
+        targets_path.write_text(json.dumps([]))
+
+        assert rank_recall_candidates(tmp_path) == []
+
+    def test_rank_skips_non_object_entries(self, tmp_path):
+        from src.memory.recall_ranking import rank_recall_candidates
+
+        targets = {
+            "rule-a": {
+                "recall_count": 5,
+                "distinct_query_hashes": ["h1", "h2", "h3"],
+                "distinct_days": ["d1", "d2"],
+                "last_recalled_at": "2026-04-14T00:00:00",
+                "max_score": 0.95,
+                "total_score": 4.5,
+                "daily_count": 2,
+            },
+            "corrupt": "not-a-target",
+        }
+        targets_path = tmp_path / "memory" / "instinct" / "recall_targets.json"
+        targets_path.parent.mkdir(parents=True)
+        targets_path.write_text(json.dumps(targets))
+
+        candidates = rank_recall_candidates(tmp_path, min_score=0.0)
+        assert [candidate["target_id"] for candidate in candidates] == ["rule-a"]
+
     def test_rank_is_rank_only_no_side_effects(self, tmp_path):
         """rank_recall_candidates must not modify KG, ACTIVE.md, or any state."""
         from src.memory.recall_ranking import rank_recall_candidates
