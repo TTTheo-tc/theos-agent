@@ -23,16 +23,12 @@ from lark_oapi.api.calendar.v4 import (
     TimeInfo,
 )
 
-from src.feishu.api import _check, _request_option, _unmarshal
+from src.feishu.api import _call_with_option, _check, _request_option, _unmarshal
 from src.feishu.retry import with_retry
 
 # ---------------------------------------------------------------------------
 # Read operations
 # ---------------------------------------------------------------------------
-
-
-def _call_with_option(fn, request, option):
-    return fn(request, option) if option is not None else fn(request)
 
 
 def _extend_items(target: list[dict], items) -> None:

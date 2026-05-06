@@ -44,7 +44,7 @@ from lark_oapi.api.wiki.v2 import (
     Node,
 )
 
-from src.feishu.api import _check, _request_option, _unmarshal, ctx_current_token
+from src.feishu.api import _call_with_option, _check, _request_option, _unmarshal, ctx_current_token
 from src.feishu.retry import with_retry
 
 # ---------------------------------------------------------------------------
@@ -77,10 +77,6 @@ class PreemptiveThrottle:
 RateLimiter = PreemptiveThrottle
 
 _rate_limiter = PreemptiveThrottle(max_per_second=3.0)
-
-
-def _call_with_option(fn, request, option):
-    return fn(request, option) if option is not None else fn(request)
 
 
 # ---------------------------------------------------------------------------

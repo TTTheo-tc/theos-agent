@@ -118,6 +118,11 @@ def _request_option() -> RequestOption | None:
     return None
 
 
+def _call_with_option(fn, request, option):
+    """Call an SDK method with RequestOption only when one is available."""
+    return fn(request, option) if option is not None else fn(request)
+
+
 def _check(response, action: str = "API call") -> None:
     """Raise on non-success SDK response."""
     if not response.success():
