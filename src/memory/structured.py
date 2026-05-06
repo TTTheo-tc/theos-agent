@@ -613,8 +613,9 @@ class StructuredMemoryStore:
                     node_type=node_type,
                     limit=max_results * 3,
                 )
-            for row in results:
-                all_results.append(_search_result_from_row(row, prefer_domain=prefer_domain))
+            all_results.extend(
+                _search_result_from_row(row, prefer_domain=prefer_domain) for row in results
+            )
 
         all_results.sort(key=lambda item: (item["score"], item.get("created_at", "")), reverse=True)
         if len(all_results) > 1:
