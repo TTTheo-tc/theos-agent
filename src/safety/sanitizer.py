@@ -97,7 +97,7 @@ class Sanitizer:
 
     def __init__(self, *, block: bool = False) -> None:
         self._block = block
-        self._automaton: "ahocorasick.Automaton | None" = None
+        self._automaton: ahocorasick.Automaton | None = None
 
         if _HAS_AHO:
             self._automaton = ahocorasick.Automaton()

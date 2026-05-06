@@ -64,7 +64,7 @@ class CredentialInjector:
     def __init__(
         self,
         registry: CredentialRegistry,
-        secret_resolver: "SecretResolver",
+        secret_resolver: SecretResolver,
     ) -> None:
         self._registry = registry
         self._resolver = secret_resolver

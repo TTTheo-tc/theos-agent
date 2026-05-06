@@ -131,7 +131,7 @@ class ConfigSecretsManager:
                     if _scan(v, child):
                         return True
             elif isinstance(node, str) and node:
-                if node.startswith(_ENCRYPTED_PREFIX) or node.startswith(_SECRET_REF_PREFIX):
+                if node.startswith((_ENCRYPTED_PREFIX, _SECRET_REF_PREFIX)):
                     return False
                 if is_sensitive_config_path(prefix):
                     return True

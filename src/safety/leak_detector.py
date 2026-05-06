@@ -105,7 +105,7 @@ class LeakDetector:
     """Scan text for credential leaks."""
 
     def __init__(self, *, entropy_sensitivity: float = 0.0) -> None:
-        self._automaton: "ahocorasick.Automaton | None" = None
+        self._automaton: ahocorasick.Automaton | None = None
         self._entropy_sensitivity = entropy_sensitivity
 
         if _HAS_AHO:
