@@ -135,13 +135,14 @@ async def _request_codex_with_retry(
     body: dict[str, Any],
     verify: bool,
 ) -> tuple[str, list[ToolCallRequest], str, dict[str, int]]:
-    last_exc: Exception | None = None
     for attempt in range(1, _MAX_CODEX_TRANSPORT_ATTEMPTS + 1):
         try:
             return await _request_codex(url, headers, body, verify)
         except Exception as exc:
-            last_exc = exc
-            if attempt >= _MAX_CODEX_TRANSPORT_ATTEMPTS or not _is_retryable_transport_error(exc):
+            should_retry = (
+                attempt < _MAX_CODEX_TRANSPORT_ATTEMPTS and _is_retryable_transport_error(exc)
+            )
+            if not should_retry:
                 raise
             logger.warning(
                 "Codex transport error on attempt {}/{}: {}. Retrying once.",
@@ -150,8 +151,6 @@ async def _request_codex_with_retry(
                 exc,
             )
             await asyncio.sleep(_CODEX_RETRY_DELAY_SECONDS)
-    assert last_exc is not None
-    raise last_exc
 
 
 def _is_retryable_transport_error(exc: Exception) -> bool:

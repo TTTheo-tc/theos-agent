@@ -212,6 +212,33 @@ async def test_chat_retries_once_on_transport_disconnect(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_chat_does_not_retry_non_transport_errors(monkeypatch):
+    provider = OpenAICodexProvider()
+    calls = {"count": 0}
+
+    class _Token:
+        account_id = "acct"
+        access = "token"
+
+    async def _fake_request(*args, **kwargs):
+        calls["count"] += 1
+        raise RuntimeError("bad request")
+
+    async def _fake_to_thread(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr("src.providers.openai_codex_provider.asyncio.to_thread", _fake_to_thread)
+    monkeypatch.setattr("src.providers.openai_codex_provider.get_codex_token", lambda: _Token())
+    monkeypatch.setattr("src.providers.openai_codex_provider._request_codex", _fake_request)
+
+    resp = await provider.chat([{"role": "user", "content": "hello"}])
+
+    assert resp.finish_reason == "error"
+    assert resp.content == "Error calling Codex: bad request"
+    assert calls["count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_chat_returns_friendly_message_after_transport_disconnect(monkeypatch):
     provider = OpenAICodexProvider()
 
