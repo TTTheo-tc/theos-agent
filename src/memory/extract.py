@@ -148,13 +148,11 @@ async def extract_durable_facts(
     if not isinstance(facts, list):
         return []
 
-    # Validate each fact has required keys
-    valid: list[dict[str, Any]] = []
-    for f in facts:
-        if isinstance(f, dict) and f.get("section") and f.get("content"):
-            valid.append({"section": str(f["section"]), "content": str(f["content"])})
-
-    return valid
+    return [
+        {"section": str(f["section"]), "content": str(f["content"])}
+        for f in facts
+        if isinstance(f, dict) and f.get("section") and f.get("content")
+    ]
 
 
 def merge_extracted_facts(store: "MemoryStore", facts: list[dict[str, Any]]) -> int:
