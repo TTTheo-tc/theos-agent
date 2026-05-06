@@ -41,10 +41,10 @@ class TurnFinalizer:
 
     def __init__(
         self,
-        hooks: "HookRunner",
-        safety_fn: Callable[[], "SafetyLayer"],
-        sessions: "SessionManager",
-        provider: "LLMProvider | None" = None,
+        hooks: HookRunner,
+        safety_fn: Callable[[], SafetyLayer],
+        sessions: SessionManager,
+        provider: LLMProvider | None = None,
     ):
         self.hooks = hooks
         self._get_safety = safety_fn
@@ -59,7 +59,7 @@ class TurnFinalizer:
         text = (response or "").strip()
         if not text:
             return "failed", "Empty response"
-        if text.startswith("Error") or text.startswith("\u26a0"):
+        if text.startswith(("Error", "\u26a0")):
             return "failed", text
         if any(marker in text for marker in TurnFinalizer._TASK_FAILURE_MARKERS):
             return "failed", text
@@ -136,7 +136,7 @@ class TurnFinalizer:
 
     async def finalize_turn(
         self,
-        msg: "InboundMessage",
+        msg: InboundMessage,
         *,
         key: str,
         session: Session,
@@ -159,12 +159,14 @@ class TurnFinalizer:
         genver_last_handoff: Any | None,
         tools: Any,
         workspace: Path,
-        memory_tiers: "MemoryTierManager | None",
+        memory_tiers: MemoryTierManager | None,
         turn_id: str | None = None,
         persisted_user_message: bool = False,
     ) -> OutboundMessage | None:
         """Post-LLM processing: safety scan, save, hooks, and response."""
         import time as _time
+
+        del bus  # Retained for finalize_turn caller/API compatibility.
 
         if final_content is None:
             final_content = "I've completed processing but have no response to give."
@@ -364,7 +366,7 @@ class TurnFinalizer:
 
     def _outbound_metadata(
         self,
-        msg: "InboundMessage",
+        msg: InboundMessage,
         *,
         usage: dict[str, int] | None,
         genver_handoff: Any | None,
@@ -452,7 +454,7 @@ class TurnFinalizer:
         skip: int,
         usage: dict[str, int] | None = None,
         user_message: str | None = None,
-        memory_tiers: "MemoryTierManager | None" = None,
+        memory_tiers: MemoryTierManager | None = None,
         turn_id: str | None = None,
         persisted_user_message: bool = False,
     ) -> None:
@@ -520,7 +522,7 @@ class TurnFinalizer:
         self,
         session: Session,
         entry: dict[str, Any],
-        memory_tiers: "MemoryTierManager | None",
+        memory_tiers: MemoryTierManager | None,
     ) -> None:
         session.messages.append(entry)
         if memory_tiers is not None:
@@ -528,8 +530,7 @@ class TurnFinalizer:
 
     def _skip_persisted_user_content(self, content: Any) -> bool:
         return isinstance(content, str) and (
-            content.startswith(ContextBuilder._RUNTIME_CONTEXT_TAG)
-            or content.startswith(_EPHEMERAL_CONTEXT_TAG)
+            content.startswith((ContextBuilder._RUNTIME_CONTEXT_TAG, _EPHEMERAL_CONTEXT_TAG))
         )
 
     def _sanitize_multimodal_content(self, content: list[Any]) -> list[Any]:
