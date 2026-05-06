@@ -7,23 +7,24 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 from pydantic_settings import BaseSettings
 
-from src.config.schema_channels import (  # noqa: F401 — re-exported for backward compat
-    ChannelsConfig,
-    DingTalkConfig,
-    DiscordConfig,
-    EmailConfig,
-    FeishuConfig,
-    MatrixConfig,
-    MochatConfig,
-    MochatGroupRule,
-    MochatMentionConfig,
-    QQConfig,
-    SlackConfig,
-    SlackDMConfig,
-    TelegramConfig,
-    WhatsAppConfig,
-)
+import src.config.schema_channels as _channel_schema
 from src.security.autonomy import AutonomyLevel
+
+# Re-export channel config classes for backward compatibility.
+ChannelsConfig = _channel_schema.ChannelsConfig
+DingTalkConfig = _channel_schema.DingTalkConfig
+DiscordConfig = _channel_schema.DiscordConfig
+EmailConfig = _channel_schema.EmailConfig
+FeishuConfig = _channel_schema.FeishuConfig
+MatrixConfig = _channel_schema.MatrixConfig
+MochatConfig = _channel_schema.MochatConfig
+MochatGroupRule = _channel_schema.MochatGroupRule
+MochatMentionConfig = _channel_schema.MochatMentionConfig
+QQConfig = _channel_schema.QQConfig
+SlackConfig = _channel_schema.SlackConfig
+SlackDMConfig = _channel_schema.SlackDMConfig
+TelegramConfig = _channel_schema.TelegramConfig
+WhatsAppConfig = _channel_schema.WhatsAppConfig
 
 DEFAULT_GENVER_VERIFIER_COMMANDS = [
     "python3 -m compileall src",
