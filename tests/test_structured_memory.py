@@ -389,9 +389,9 @@ async def test_structured_memory_store_cleans_artifact_and_test_metadata(tmp_pat
             session_key="cli:test",
             user_message="帮我更新 src/app.py",
             response="已更新 src/app.py，并通过 tests/test_app.py。",
-            tools_used=["write_file", "write_file"],
-            routed_skills=["coding", "coding"],
-            routing_domains=["coding/general"],
+            tools_used=[" write_file ", "write_file", " "],
+            routed_skills=[" coding ", "coding", ""],
+            routing_domains=[" coding/general ", "coding/general", ""],
             selected_primary="coding/general",
             artifacts=[" src/app.py ", "src/app.py", "   ", "tests/test_app.py"],
             tests=[" tests/test_app.py ", "tests/test_app.py", " "],
@@ -407,6 +407,8 @@ async def test_structured_memory_store_cleans_artifact_and_test_metadata(tmp_pat
         assert "src/app.py" in meta["source_refs"]
         assert meta["tools_used"] == ["write_file"]
         assert meta["routed_skills"] == ["coding"]
+        assert "coding/general" in task_node["domains"]
+        assert task_node["tags"] == "write_file,coding"
     finally:
         await store.close()
 

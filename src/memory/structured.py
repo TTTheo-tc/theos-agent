@@ -123,10 +123,6 @@ def _coerce_metadata(value: Any) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _dedupe(items: list[str]) -> list[str]:
-    return list(dict.fromkeys(items))
-
-
 def _clean_deduped_strings(items: list[Any] | None) -> list[str]:
     values: list[str] = []
     seen: set[str] = set()
@@ -457,9 +453,9 @@ class StructuredMemoryStore:
         tests: list[str] | None,
         status: str,
     ) -> _TaskWrite:
-        deduped_tools = _dedupe(tools_used)
-        deduped_skills = _dedupe(routed_skills)
-        deduped_domains = _dedupe(routing_domains)
+        deduped_tools = _clean_deduped_strings(tools_used)
+        deduped_skills = _clean_deduped_strings(routed_skills)
+        deduped_domains = _clean_deduped_strings(routing_domains)
         normalized_artifacts = _clean_deduped_strings(artifacts)
         normalized_tests = _clean_deduped_strings(tests)
         source_refs = extract_source_refs(user_message, response, *normalized_artifacts)
