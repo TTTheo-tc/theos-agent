@@ -36,9 +36,69 @@ class TestAgentFS:
         assert path.exists()
         assert fs.read("report") == data
 
+    def test_nested_artifact_names_stay_inside_root(self, tmp_path: Path):
+        fs = AgentFS(tmp_path, subdir=".test")
+        path = fs.write("runtime/report", {"ok": True})
+
+        assert path == fs.root / "runtime" / "report.json"
+        assert fs.read("runtime/report") == {"ok": True}
+
+    def test_artifact_names_keep_existing_suffix_text(self, tmp_path: Path):
+        fs = AgentFS(tmp_path, subdir=".test")
+        path = fs.write("runtime/report.v1", {"ok": True})
+
+        assert path == fs.root / "runtime" / "report.v1.json"
+
     def test_read_missing(self, tmp_path: Path):
         fs = AgentFS(tmp_path, subdir=".test")
         assert fs.read("nonexistent") is None
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",
+            ".",
+            "../outside",
+            "runtime/../../outside",
+            "/tmp/x",
+            r"..\outside",
+            "C:/tmp/x",
+            " runtime/report",
+            "runtime/report ",
+            "runtime/./report",
+            "runtime//report",
+            "runtime/",
+        ],
+    )
+    def test_rejects_unsafe_artifact_names(self, tmp_path: Path, name: str):
+        fs = AgentFS(tmp_path, subdir=".test")
+
+        with pytest.raises(ValueError):
+            fs.write(name, {"bad": True})
+        with pytest.raises(ValueError):
+            fs.read(name)
+
+    def test_rejects_symlink_artifact(self, tmp_path: Path):
+        fs = AgentFS(tmp_path, subdir=".test")
+        outside = tmp_path / "outside.json"
+        outside.write_text("{}", encoding="utf-8")
+        runtime = fs.root / "runtime"
+        runtime.mkdir()
+        (runtime / "report.json").symlink_to(outside)
+
+        with pytest.raises(ValueError):
+            fs.write("runtime/report", {"bad": True})
+        with pytest.raises(ValueError):
+            fs.read("runtime/report")
+        assert json.loads(outside.read_text(encoding="utf-8")) == {}
+
+    def test_rejects_symlink_root(self, tmp_path: Path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (tmp_path / ".test").symlink_to(outside, target_is_directory=True)
+
+        with pytest.raises(ValueError):
+            AgentFS(tmp_path, subdir=".test")
 
     def test_clear(self, tmp_path: Path):
         fs = AgentFS(tmp_path, subdir=".test")
