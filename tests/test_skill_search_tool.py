@@ -109,6 +109,44 @@ def test_workspace_skill_overrides_builtin(tmp_path: Path) -> None:
     assert "Workspace GitHub helper" in (loader.load_skill("github") or "")
 
 
+def test_skill_frontmatter_parser_handles_crlf(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace_skills = workspace / "skills"
+    skill_dir = workspace_skills / "paper-helper"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\r\nname: paper-helper\r\ndescription: Paper helper\r\n---\r\nUse for papers.\r\n",
+        encoding="utf-8",
+    )
+
+    loader = SkillsLoader(workspace)
+
+    assert loader.get_skill_metadata("paper-helper") == {
+        "name": "paper-helper",
+        "description": "Paper helper",
+    }
+    context = loader.load_skills_for_context(["paper-helper"])
+    assert "### Skill: paper-helper" in context
+    assert "Use for papers." in context
+    assert "description: Paper helper" not in context
+
+
+def test_skill_context_preserves_no_frontmatter_whitespace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    skill_dir = workspace / "skills" / "plain-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "\n    indented opening\n\n",
+        encoding="utf-8",
+    )
+
+    loader = SkillsLoader(workspace)
+
+    assert loader.load_skills_for_context(["plain-skill"]) == (
+        "### Skill: plain-skill\n\n\n    indented opening\n\n"
+    )
+
+
 def test_domain_catalog_dedupes_tools_and_keywords(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     builtin = tmp_path / "builtin_skills"
@@ -143,6 +181,70 @@ def test_domain_catalog_dedupes_tools_and_keywords(tmp_path: Path) -> None:
 
     assert catalog["coding/github"]["keywords"] == ["pr", "ci"]
     assert catalog["coding/github"]["tools"] == ["read_file", "grep"]
+
+
+def test_domain_catalog_accepts_heading_whitespace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    builtin = tmp_path / "builtin_skills"
+    instinct = tmp_path / "instinct" / "domains"
+    domain_dir = instinct / "coding"
+    workspace.mkdir(parents=True)
+    builtin.mkdir(parents=True)
+    domain_dir.mkdir(parents=True)
+    (domain_dir / "github.md").write_text(
+        "\n".join(
+            [
+                "# GitHub",
+                "",
+                "##   Keywords  ",
+                "PR, ci",
+                "",
+                "## Skills",
+                "- github: helper",
+                "- github: duplicate",
+                "",
+                "## Tools",
+                "read_file, READ_FILE",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    loader = SkillsLoader(workspace, builtin_skills_dir=builtin, instinct_domains_dir=instinct)
+
+    catalog = loader.get_domain_catalog()
+
+    assert catalog["coding/github"]["keywords"] == ["pr", "ci"]
+    assert catalog["coding/github"]["skills"] == ["github"]
+    assert catalog["coding/github"]["tools"] == ["read_file"]
+
+
+def test_domain_catalog_keeps_first_duplicate_heading(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    builtin = tmp_path / "builtin_skills"
+    instinct = tmp_path / "instinct" / "domains"
+    domain_dir = instinct / "coding"
+    workspace.mkdir(parents=True)
+    builtin.mkdir(parents=True)
+    domain_dir.mkdir(parents=True)
+    (domain_dir / "github.md").write_text(
+        "\n".join(
+            [
+                "# GitHub",
+                "",
+                "## Skills",
+                "- github: helper",
+                "",
+                "## Skills",
+                "- later: should not replace first section",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    loader = SkillsLoader(workspace, builtin_skills_dir=builtin, instinct_domains_dir=instinct)
+
+    assert loader.get_domain_catalog()["coding/github"]["skills"] == ["github"]
 
 
 @pytest.mark.asyncio

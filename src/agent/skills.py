@@ -10,6 +10,12 @@ from typing import Any
 
 import yaml
 
+_FRONTMATTER_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
+_DOMAIN_SECTION_RE = re.compile(
+    r"^##\s+(.+?)\s*\n(.*?)(?=^##\s+|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+
 
 # Default builtin skills directory (project root / skills)
 def _resolve_builtin_skills_dir() -> Path:
@@ -127,7 +133,9 @@ class SkillsLoader:
         for name in skill_names:
             content = self.load_skill(name)
             if content:
-                content = self._strip_frontmatter(content)
+                _, content, had_frontmatter = self._split_frontmatter(content)
+                if had_frontmatter:
+                    content = content.strip()
                 parts.append(f"### Skill: {name}\n\n{content}")
 
         return "\n\n---\n\n".join(parts) if parts else ""
@@ -211,13 +219,14 @@ class SkillsLoader:
             for domain_file in sorted(category_dir.glob("*.md")):
                 if domain_file.name == "_meta.md":
                     continue
+                sections = self._extract_domain_sections(domain_file)
                 label = f"{category_dir.name}/{domain_file.stem}"
                 catalog[label] = {
                     "category": category_dir.name,
                     "domain": domain_file.stem,
-                    "keywords": self._extract_domain_keywords(domain_file),
-                    "skills": self._extract_domain_skills(domain_file),
-                    "tools": self._extract_domain_tools(domain_file),
+                    "keywords": self._split_unique_csv(sections.get("keywords", "")),
+                    "skills": self._extract_domain_skills(sections.get("skills", "")),
+                    "tools": self._split_unique_csv(sections.get("tools", "")),
                 }
         return catalog
 
@@ -409,14 +418,6 @@ class SkillsLoader:
                 missing.append(f"ENV: {env}")
         return ", ".join(missing)
 
-    def _strip_frontmatter(self, content: str) -> str:
-        """Remove YAML frontmatter from markdown content."""
-        if content.startswith("---"):
-            match = re.match(r"^---\n.*?\n---\n", content, re.DOTALL)
-            if match:
-                return content[match.end() :].strip()
-        return content
-
     def _parse_skill_metadata(self, raw: Any) -> dict:
         """Parse skill metadata JSON from frontmatter (supports TheOS and openclaw keys)."""
         if isinstance(raw, dict):
@@ -459,29 +460,24 @@ class SkillsLoader:
         if not skill_file:
             return None
         content = skill_file.read_text(encoding="utf-8")
+        return self._split_frontmatter(content)[0]
 
-        if content.startswith("---"):
-            match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-            if match:
-                try:
-                    metadata = yaml.safe_load(match.group(1))
-                    if isinstance(metadata, dict):
-                        return metadata
-                except yaml.YAMLError:
-                    pass
+    def _split_frontmatter(self, content: str) -> tuple[dict | None, str, bool]:
+        """Return YAML frontmatter metadata and markdown body."""
+        match = _FRONTMATTER_RE.match(content)
+        if not match:
+            return None, content, False
+        try:
+            metadata = yaml.safe_load(match.group(1))
+        except yaml.YAMLError:
+            metadata = None
+        return (metadata if isinstance(metadata, dict) else None), content[match.end() :], True
 
-        return None
-
-    def _extract_domain_tools(self, path: Path) -> list[str]:
-        """Extract deferred tool names from an instinct domain ``## Tools`` section."""
-        raw = self._extract_domain_section(path, "Tools")
-        return self._split_unique_csv(raw)
-
-    def _extract_domain_skills(self, path: Path) -> list[str]:
-        """Extract skill names from an instinct domain markdown file."""
+    def _extract_domain_skills(self, raw: str) -> list[str]:
+        """Extract skill names from an instinct domain ``## Skills`` section."""
         skills: list[str] = []
         seen: set[str] = set()
-        for raw_line in self._extract_domain_section(path, "Skills").splitlines():
+        for raw_line in raw.splitlines():
             line = raw_line.strip()
             if not line.startswith("- "):
                 continue
@@ -490,11 +486,6 @@ class SkillsLoader:
                 seen.add(name)
                 skills.append(name)
         return skills
-
-    def _extract_domain_keywords(self, path: Path) -> list[str]:
-        """Extract normalized keywords from an instinct domain markdown file."""
-        raw = self._extract_domain_section(path, "Keywords")
-        return self._split_unique_csv(raw)
 
     def _split_unique_csv(self, raw: str) -> list[str]:
         values: list[str] = []
@@ -506,17 +497,13 @@ class SkillsLoader:
                 values.append(value)
         return values
 
-    def _extract_domain_section(self, path: Path, heading: str) -> str:
-        """Extract the body of a ``## <heading>`` section from a domain file."""
+    def _extract_domain_sections(self, path: Path) -> dict[str, str]:
+        """Extract ``##`` sections from a domain file keyed by lowercase heading."""
         content = path.read_text(encoding="utf-8")
-        match = re.search(
-            rf"^## {re.escape(heading)}\s*(.*?)(?=^## |\Z)",
-            content,
-            re.MULTILINE | re.DOTALL,
-        )
-        if not match:
-            return ""
-        return match.group(1)
+        sections: dict[str, str] = {}
+        for heading, body in _DOMAIN_SECTION_RE.findall(content):
+            sections.setdefault(heading.strip().lower(), body)
+        return sections
 
     def _invert_domain_skill_map(self, domain_map: dict[str, list[str]]) -> dict[str, list[str]]:
         """Invert domain->skills into skill->domains for result annotation."""
