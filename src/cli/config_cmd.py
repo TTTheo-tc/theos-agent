@@ -115,32 +115,12 @@ def apply_safe_defaults(config: Config) -> None:
     config.tools.browser.enabled = default.tools.browser.enabled
 
     config.security.network_isolated = default.security.network_isolated
-    config.security.autonomy.level = default.security.autonomy.level
-    config.security.autonomy.workspace_only = default.security.autonomy.workspace_only
-    config.security.autonomy.forbidden_paths = list(default.security.autonomy.forbidden_paths)
-    config.security.autonomy.allowed_commands = list(default.security.autonomy.allowed_commands)
-    config.security.autonomy.max_actions_per_hour = default.security.autonomy.max_actions_per_hour
-    config.security.autonomy.max_cost_per_day = default.security.autonomy.max_cost_per_day
-    config.security.autonomy.auto_approve = list(default.security.autonomy.auto_approve)
-    config.security.autonomy.always_ask = list(default.security.autonomy.always_ask)
-
-    config.agents.orchestrator.approval_gate.enabled = (
-        default.agents.orchestrator.approval_gate.enabled
+    config.security.autonomy = default.security.autonomy.model_copy(deep=True)
+    config.agents.orchestrator.approval_gate = (
+        default.agents.orchestrator.approval_gate.model_copy(deep=True)
     )
-    config.agents.orchestrator.approval_gate.auto_approve = list(
-        default.agents.orchestrator.approval_gate.auto_approve
-    )
-    config.agents.orchestrator.approval_gate.timeout_seconds = (
-        default.agents.orchestrator.approval_gate.timeout_seconds
-    )
-    config.agents.orchestrator.neuro_symbolic.enabled = (
-        default.agents.orchestrator.neuro_symbolic.enabled
-    )
-    config.agents.orchestrator.neuro_symbolic.whitelist_patterns = list(
-        default.agents.orchestrator.neuro_symbolic.whitelist_patterns
-    )
-    config.agents.orchestrator.neuro_symbolic.blacklist_patterns = list(
-        default.agents.orchestrator.neuro_symbolic.blacklist_patterns
+    config.agents.orchestrator.neuro_symbolic = (
+        default.agents.orchestrator.neuro_symbolic.model_copy(deep=True)
     )
 
 
