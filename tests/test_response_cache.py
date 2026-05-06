@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.memory.response_cache import ResponseCache
+from src.memory.response_cache import ResponseCache, _utc_now_iso
 from src.store.database import Database
 
 
@@ -38,6 +38,15 @@ class TestMakeKey:
         k = ResponseCache.make_key("gpt-4", long_prompt, "msg")
         # Key should still be a 32-char hex string
         assert len(k) == 32
+
+
+def test_utc_now_iso_is_timezone_aware() -> None:
+    from datetime import datetime, timezone
+
+    ts = datetime.fromisoformat(_utc_now_iso())
+
+    assert ts.tzinfo is not None
+    assert ts.utcoffset() == timezone.utc.utcoffset(ts)
 
 
 # ---------------------------------------------------------------------------

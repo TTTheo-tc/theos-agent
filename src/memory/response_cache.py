@@ -24,6 +24,10 @@ CREATE INDEX IF NOT EXISTS idx_rc_accessed ON response_cache(accessed_at);
 """
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 class ResponseCache:
     def __init__(
         self,
@@ -107,7 +111,7 @@ class ResponseCache:
         await self._db.execute(
             "UPDATE response_cache SET hit_count = hit_count + 1, accessed_at = ?"
             " WHERE cache_key = ?",
-            (datetime.now(timezone.utc).isoformat(), key),
+            (_utc_now_iso(), key),
         )
 
     async def _delete_warm(self, key: str) -> None:
@@ -116,7 +120,7 @@ class ResponseCache:
     async def put(self, key: str, model: str, response: str, token_count: int = 0) -> None:
         await self.ensure_table()
         now = time.time()
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = _utc_now_iso()
         self._hot[key] = (response, now)
         self._evict_hot()
         await self._db.execute(
