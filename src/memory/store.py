@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from src.providers.base import LLMProvider
 
 _UPDATED_MARKER_RE = re.compile(r"<!-- updated: ([\d-]+) -->")
+_DEFAULT_PREAMBLE = "# Long-term Memory"
+_DEFAULT_DIRECTIVES_SECTION = "Remembered Directives"
 
 
 class MemoryStore:
@@ -49,50 +51,47 @@ class MemoryStore:
         with open(self.history_file, "a", encoding="utf-8") as f:
             f.write(entry.rstrip() + "\n\n")
 
-    def remember(self, note: str, *, section_title: str = "Remembered Directives") -> bool:
+    def remember(self, note: str, *, section_title: str = _DEFAULT_DIRECTIVES_SECTION) -> bool:
         """Persist a user-issued remember directive into long-term memory."""
         clean = re.sub(r"\s+", " ", note or "").strip(" -\n\t")
         if not clean:
             return False
 
-        long_term = self.read_long_term().strip()
-        sections = self.split_sections(long_term) if long_term else []
-        if not sections or sections[0][0] != "_preamble":
-            sections.insert(0, ("_preamble", "# Long-term Memory"))
-
-        updated_marker = f"<!-- updated: {datetime.now().strftime('%Y-%m-%d')} -->"
         bullet = f"- {clean}"
-        rebuilt: list[tuple[str, str]] = []
-        found = False
+        sections = self._read_sections_with_preamble()
+        self._merge_bullet(
+            sections,
+            section_title=section_title,
+            bullet=bullet,
+            duplicate_mode="promote",
+        )
 
-        for title, body in sections:
-            if title != section_title:
-                rebuilt.append((title, body))
-                continue
-
-            found = True
-            metadata: list[str] = []
-            entries: list[str] = []
-            for line in body.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                if stripped.startswith("<!--"):
-                    if not stripped.startswith("<!-- updated:"):
-                        metadata.append(stripped)
-                    continue
-                if stripped != bullet:
-                    entries.append(stripped)
-
-            rebuilt.append(
-                (section_title, "\n".join([updated_marker, *metadata, bullet, *entries]))
-            )
-
-        if not found:
-            rebuilt.append((section_title, f"{updated_marker}\n{bullet}"))
-
-        self.write_long_term(self._render_sections(rebuilt))
+        self.write_long_term(self._render_sections(sections))
         return True
+
+    def merge_bullets(self, items: list[tuple[str, str]]) -> int:
+        """Merge bullet entries into MEMORY.md sections.
+
+        Returns the number of new bullets added. Existing bullets are detected
+        case-insensitively and skipped.
+        """
+        if not items:
+            return 0
+
+        sections = self._read_sections_with_preamble()
+        merged = 0
+        for section_title, content in items:
+            if self._merge_bullet(
+                sections,
+                section_title=section_title,
+                bullet=f"- {content}",
+                duplicate_mode="skip",
+            ):
+                merged += 1
+
+        if merged:
+            self.write_long_term(self._render_sections(sections))
+        return merged
 
     def _build_fallback_history_entry(self, messages: list[dict[str, Any]]) -> str:
         """Build a deterministic archive entry when LLM consolidation is unavailable."""
@@ -180,12 +179,10 @@ class MemoryStore:
         removed = 0
 
         for title, body in sections:
-            # Check for pin
-            if "<!-- pinned -->" in body:
+            if self._is_pinned(body):
                 kept.append((title, body))
                 continue
 
-            # Check timestamp
             updated = self._extract_updated_at(body)
             if updated is not None and updated < cutoff:
                 removed += 1
@@ -198,11 +195,8 @@ class MemoryStore:
 
             kept.append((title, body))
 
-        # Enforce max_sections (keep most recent)
-        if len(kept) > max_sections:
-            overflow = len(kept) - max_sections
-            removed += overflow
-            kept = kept[:1] + kept[1 + overflow :]  # keep preamble + most recent
+        kept, overflow = self._trim_to_max_sections(kept, max_sections=max_sections)
+        removed += overflow
 
         if removed > 0:
             self.write_long_term(self._render_sections(kept))
@@ -232,6 +226,119 @@ class MemoryStore:
             return datetime.strptime(ts_match.group(1), "%Y-%m-%d")
         except ValueError:
             return None
+
+    def _read_sections_with_preamble(self) -> list[tuple[str, str]]:
+        long_term = self.read_long_term().strip()
+        sections = self.split_sections(long_term) if long_term else []
+        self._ensure_preamble(sections)
+        return sections
+
+    @staticmethod
+    def _ensure_preamble(sections: list[tuple[str, str]]) -> None:
+        if not sections or sections[0][0] != "_preamble":
+            sections.insert(0, ("_preamble", _DEFAULT_PREAMBLE))
+
+    @staticmethod
+    def _updated_marker() -> str:
+        return f"<!-- updated: {datetime.now().strftime('%Y-%m-%d')} -->"
+
+    @staticmethod
+    def _find_section_index(sections: list[tuple[str, str]], section_title: str) -> int | None:
+        for idx, (title, _body) in enumerate(sections):
+            if title == section_title:
+                return idx
+        return None
+
+    @staticmethod
+    def _split_section_body(body: str) -> tuple[list[str], list[str]]:
+        metadata: list[str] = []
+        entries: list[str] = []
+        for line in body.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("<!--"):
+                if not stripped.startswith("<!-- updated:"):
+                    metadata.append(stripped)
+                continue
+            entries.append(stripped)
+        return metadata, entries
+
+    def _merge_bullet(
+        self,
+        sections: list[tuple[str, str]],
+        *,
+        section_title: str,
+        bullet: str,
+        duplicate_mode: str,
+    ) -> bool:
+        idx = self._find_section_index(sections, section_title)
+        if idx is None:
+            sections.append((section_title, f"{self._updated_marker()}\n{bullet}"))
+            return True
+
+        title, body = sections[idx]
+        metadata, entries = self._split_section_body(body)
+        if duplicate_mode == "skip" and self._is_duplicate_entry(bullet, entries):
+            return False
+
+        if duplicate_mode == "promote":
+            entries = [bullet, *(entry for entry in entries if entry != bullet)]
+        else:
+            entries.append(bullet)
+        sections[idx] = (title, "\n".join([self._updated_marker(), *metadata, *entries]))
+        return True
+
+    @classmethod
+    def _is_duplicate_entry(cls, bullet: str, entries: list[str]) -> bool:
+        needle = cls._normalize_entry(bullet)
+        return any(cls._normalize_entry(entry) == needle for entry in entries)
+
+    @staticmethod
+    def _normalize_entry(entry: str) -> str:
+        return re.sub(r"\s+", " ", entry.strip()).lower()
+
+    @staticmethod
+    def _is_pinned(body: str) -> bool:
+        return "<!-- pinned -->" in body
+
+    @staticmethod
+    def _trim_to_max_sections(
+        sections: list[tuple[str, str]],
+        *,
+        max_sections: int,
+    ) -> tuple[list[tuple[str, str]], int]:
+        if len(sections) <= max_sections:
+            return sections, 0
+
+        preamble = sections[:1] if sections and sections[0][0] == "_preamble" else []
+        candidates = sections[1:] if preamble else sections
+        slots = max(max_sections - len(preamble), 0)
+        if slots <= 0:
+            return preamble, len(sections) - len(preamble)
+
+        pinned = [
+            (idx, section)
+            for idx, section in enumerate(candidates)
+            if MemoryStore._is_pinned(section[1])
+        ]
+        pinned_indexes = {idx for idx, _section in pinned}
+        remaining_slots = max(slots - len(pinned), 0)
+        unpinned = [
+            (idx, section) for idx, section in enumerate(candidates) if idx not in pinned_indexes
+        ]
+        ranked = sorted(
+            unpinned,
+            key=lambda item: (MemoryStore._section_recency(item[1][1]), item[0]),
+            reverse=True,
+        )
+        selected = pinned_indexes | {idx for idx, _section in ranked[:remaining_slots]}
+        kept = [section for idx, section in enumerate(candidates) if idx in selected]
+        return [*preamble, *kept], len(candidates) - len(kept)
+
+    @staticmethod
+    def _section_recency(body: str) -> datetime:
+        return MemoryStore._extract_updated_at(body) or datetime.min
 
     @staticmethod
     def split_sections(text: str) -> list[tuple[str, str]]:

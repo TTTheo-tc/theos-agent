@@ -23,7 +23,6 @@ write to the KG.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -169,59 +168,6 @@ def merge_extracted_facts(store: "MemoryStore", facts: list[dict[str, Any]]) -> 
     if not facts:
         return 0
 
-    long_term = store.read_long_term().strip()
-    sections = store.split_sections(long_term) if long_term else []
-
-    # Ensure preamble exists
-    if not sections or sections[0][0] != "_preamble":
-        sections.insert(0, ("_preamble", "# Long-term Memory"))
-
-    today = datetime.now().strftime("%Y-%m-%d")
-    updated_marker = f"<!-- updated: {today} -->"
-    merged = 0
-
-    for fact in facts:
-        section_title = fact["section"]
-        bullet = f"- {fact['content']}"
-
-        # Find existing section
-        found_idx = None
-        for idx, (title, _body) in enumerate(sections):
-            if title == section_title:
-                found_idx = idx
-                break
-
-        if found_idx is not None:
-            title, body = sections[found_idx]
-            # Check for duplicate (case-insensitive)
-            body_lower = body.lower()
-            if bullet.lower() in body_lower:
-                continue
-
-            # Parse existing body: separate metadata comments from entries
-            metadata: list[str] = []
-            entries: list[str] = []
-            for line in body.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                if stripped.startswith("<!--"):
-                    if not stripped.startswith("<!-- updated:"):
-                        metadata.append(stripped)
-                    continue
-                entries.append(stripped)
-
-            sections[found_idx] = (
-                section_title,
-                "\n".join([updated_marker, *metadata, *entries, bullet]),
-            )
-            merged += 1
-        else:
-            # Create new section
-            sections.append((section_title, f"{updated_marker}\n{bullet}"))
-            merged += 1
-
-    if merged > 0:
-        store.write_long_term(store._render_sections(sections))
-
-    return merged
+    return store.merge_bullets(
+        [(str(fact["section"]), str(fact["content"])) for fact in facts]
+    )

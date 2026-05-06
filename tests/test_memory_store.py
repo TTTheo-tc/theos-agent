@@ -38,6 +38,76 @@ def test_remember_creates_and_dedupes_directive_section(tmp_path: Path) -> None:
     assert text.count("以后涉及飞书权限时参考 scope.json") == 1
 
 
+def test_remember_preserves_section_metadata_and_promotes_directive(tmp_path: Path) -> None:
+    store = MemoryStore(tmp_path)
+    store.write_long_term(
+        """# Long-term Memory
+
+## Remembered Directives
+<!-- updated: 2020-01-01 -->
+<!-- pinned -->
+- older directive
+- newest directive
+"""
+    )
+
+    assert store.remember("newest directive")
+
+    section = store.read_long_term().split("## Remembered Directives", 1)[1]
+    assert "<!-- pinned -->" in section
+    assert section.count("- newest directive") == 1
+    assert section.index("- newest directive") < section.index("- older directive")
+
+
+def test_merge_bullets_creates_sections_preserves_metadata_and_skips_duplicates(
+    tmp_path: Path,
+) -> None:
+    store = MemoryStore(tmp_path)
+    store.write_long_term(
+        """# Long-term Memory
+
+## Decisions
+<!-- updated: 2020-01-01 -->
+<!-- pinned -->
+- Use Redis for caching
+"""
+    )
+
+    merged = store.merge_bullets(
+        [
+            ("Decisions", "Use PostgreSQL for persistence"),
+            ("Decisions", "use redis for caching"),
+            ("Policies", "Run tests before committing"),
+        ]
+    )
+
+    text = store.read_long_term()
+    assert merged == 2
+    assert "<!-- pinned -->" in text
+    assert text.lower().count("use redis for caching") == 1
+    assert "Use PostgreSQL for persistence" in text
+    assert "## Policies" in text
+
+
+def test_merge_bullets_uses_exact_normalized_duplicate_matching(tmp_path: Path) -> None:
+    store = MemoryStore(tmp_path)
+    store.write_long_term(
+        """# Long-term Memory
+
+## Decisions
+<!-- updated: 2020-01-01 -->
+- Use Redis for caching backups
+"""
+    )
+
+    merged = store.merge_bullets([("Decisions", "Use Redis for caching")])
+
+    text = store.read_long_term()
+    assert merged == 1
+    assert "- Use Redis for caching backups" in text
+    assert "- Use Redis for caching" in text
+
+
 def test_extract_section_age_days_ignores_invalid_timestamp() -> None:
     assert MemoryStore.extract_section_age_days("<!-- updated: 2026-99-99 -->") is None
 
@@ -105,3 +175,63 @@ def test_gc_max_sections_keeps_preamble_and_most_recent_sections(tmp_path: Path)
     assert "## Section 1" not in text
     assert "## Section 2" in text
     assert "## Section 3" in text
+
+
+def test_gc_max_sections_keeps_recent_sections_not_document_order(tmp_path: Path) -> None:
+    store = MemoryStore(tmp_path)
+    today = datetime.now()
+    recent = today.strftime("%Y-%m-%d")
+    older = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    oldest = (today - timedelta(days=60)).strftime("%Y-%m-%d")
+    store.write_long_term(
+        f"""# Long-term Memory
+
+## Recent At Top
+<!-- updated: {recent} -->
+- keep despite position
+
+## Old Middle
+<!-- updated: {oldest} -->
+- drop
+
+## Older At End
+<!-- updated: {older} -->
+- keep because it is newer than middle
+"""
+    )
+
+    removed = store.gc(max_age_days=365, max_sections=3)
+    text = store.read_long_term()
+
+    assert removed == 1
+    assert "## Recent At Top" in text
+    assert "## Older At End" in text
+    assert "## Old Middle" not in text
+
+
+def test_gc_max_sections_preserves_pinned_sections(tmp_path: Path) -> None:
+    store = MemoryStore(tmp_path)
+    today = datetime.now().strftime("%Y-%m-%d")
+    store.write_long_term(
+        f"""# Long-term Memory
+
+## Pinned Manual Note
+<!-- pinned -->
+- keep even without timestamp
+
+## Recent One
+<!-- updated: {today} -->
+- keep
+
+## Recent Two
+<!-- updated: {today} -->
+- drop because pinned has priority
+"""
+    )
+
+    removed = store.gc(max_age_days=365, max_sections=3)
+    text = store.read_long_term()
+
+    assert removed == 1
+    assert "## Pinned Manual Note" in text
+    assert ("## Recent One" in text) ^ ("## Recent Two" in text)
