@@ -119,14 +119,16 @@ async def _request_codex(
     body: dict[str, Any],
     verify: bool,
 ) -> tuple[str, list[ToolCallRequest], str, dict[str, int]]:
-    async with httpx.AsyncClient(timeout=60.0, verify=verify) as client:
-        async with client.stream("POST", url, headers=headers, json=body) as response:
-            if response.status_code != 200:
-                text = await response.aread()
-                raise RuntimeError(
-                    _friendly_error(response.status_code, text.decode("utf-8", "ignore"))
-                )
-            return await _consume_sse(response)
+    async with (
+        httpx.AsyncClient(timeout=60.0, verify=verify) as client,
+        client.stream("POST", url, headers=headers, json=body) as response,
+    ):
+        if response.status_code != 200:
+            text = await response.aread()
+            raise RuntimeError(
+                _friendly_error(response.status_code, text.decode("utf-8", "ignore"))
+            )
+        return await _consume_sse(response)
 
 
 async def _request_codex_with_retry(

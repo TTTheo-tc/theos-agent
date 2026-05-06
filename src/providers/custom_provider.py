@@ -297,15 +297,14 @@ class OpenAICompatProvider(LLMProvider):
         choice = response.choices[0]
         msg = choice.message
 
-        tool_calls: list[ToolCallRequest] = []
-        for tc in msg.tool_calls or []:
-            tool_calls.append(
-                ToolCallRequest(
-                    id=tc.id or _short_tool_id(),
-                    name=tc.function.name,
-                    arguments=_parse_tool_arguments(tc.function.arguments),
-                )
+        tool_calls = [
+            ToolCallRequest(
+                id=tc.id or _short_tool_id(),
+                name=tc.function.name,
+                arguments=_parse_tool_arguments(tc.function.arguments),
             )
+            for tc in msg.tool_calls or []
+        ]
 
         content = msg.content
 

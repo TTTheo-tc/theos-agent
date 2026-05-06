@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
 
 def _resolve_spec_for_model(
-    config: Config,
     model: str,
     *,
     force_provider: str | None = None,
@@ -24,7 +23,6 @@ def _resolve_spec_for_model(
     """Resolve a ProviderSpec for the given model.
 
     Args:
-        config: Application configuration.
         model: Model identifier (e.g. "claude-sonnet-4-5").
         force_provider: If set and not "auto", use this provider name directly
             instead of auto-detecting from the model name. Used by make_provider()
@@ -200,11 +198,7 @@ def make_provider(config: Config) -> LLMProvider:
         if inferred:
             provider_name = inferred.name
 
-    spec, resolved_name = _resolve_spec_for_model(
-        config,
-        model,
-        force_provider=force_provider,
-    )
+    spec, resolved_name = _resolve_spec_for_model(model, force_provider=force_provider)
     # Prefer the config-matched name over spec-resolved name
     final_name = provider_name or resolved_name
 
@@ -227,7 +221,7 @@ def make_provider_for_model(config: Config, model: str) -> LLMProvider:
     Always auto-detects provider from model name — never uses forced provider.
     Raises ValueError if no provider or API key is available.
     """
-    spec, provider_name = _resolve_spec_for_model(config, model)
+    spec, provider_name = _resolve_spec_for_model(model)
     if not spec:
         raise ValueError(f"No provider found for model '{model}'")
 

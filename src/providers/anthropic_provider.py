@@ -246,10 +246,10 @@ class AnthropicProvider(LLMProvider):
         if isinstance(content, str) and content:
             blocks.append({"type": "text", "text": content})
         elif isinstance(content, list):
-            for item in content:
-                blocks.append(
-                    item if isinstance(item, dict) else {"type": "text", "text": str(item)}
-                )
+            blocks.extend(
+                item if isinstance(item, dict) else {"type": "text", "text": str(item)}
+                for item in content
+            )
 
         for tc in msg.get("tool_calls") or []:
             if not isinstance(tc, dict):

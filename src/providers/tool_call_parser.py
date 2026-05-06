@@ -98,13 +98,10 @@ def parse_tool_calls_from_text(text: str | None) -> list[ToolCallRequest]:
         return []
 
     results: list[ToolCallRequest] = []
-    matches: list[tuple[int, str]] = []
-
-    for match in _XML_PATTERN.finditer(text):
-        matches.append((match.start(), match.group(2).strip()))
-
-    for match in _FENCED_PATTERN.finditer(text):
-        matches.append((match.start(), match.group(1).strip()))
+    matches = [(match.start(), match.group(2).strip()) for match in _XML_PATTERN.finditer(text)]
+    matches.extend(
+        (match.start(), match.group(1).strip()) for match in _FENCED_PATTERN.finditer(text)
+    )
 
     for _, payload in sorted(matches, key=lambda item: item[0]):
         tc = _validate_and_build(payload)
