@@ -321,21 +321,25 @@ class ProcessTool(Tool):
             return "Error: 'action' is required."
 
         registry = ProcessRegistry.get()
+        return await self._dispatch(action, registry, kwargs)
 
+    async def _dispatch(
+        self,
+        action: str,
+        registry: ProcessRegistry,
+        kwargs: dict[str, Any],
+    ) -> str:
         if action == "start":
             return await self._start(registry, kwargs)
-        elif action == "list":
+        if action == "list":
             return self._list(registry)
-        elif action == "poll":
+        if action == "poll":
             return await self._poll(registry, kwargs)
-        elif action == "send_input":
+        if action == "send_input":
             return await self._send_input(registry, kwargs)
-        elif action == "terminate":
+        if action == "terminate":
             return await self._terminate(registry, kwargs)
-        else:
-            return (
-                f"Error: Unknown action '{action}'. Use: start, list, poll, send_input, terminate."
-            )
+        return f"Error: Unknown action '{action}'. Use: start, list, poll, send_input, terminate."
 
     # --- action implementations ---
 
