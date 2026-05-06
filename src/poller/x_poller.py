@@ -32,7 +32,7 @@ class XPoller(BasePoller):
         cookies: dict[str, str] | None = None,
         notify_channel: str = "feishu",
         notify_chat_id: str = "",
-    ):
+    ) -> None:
         """
         Args:
             usernames: X usernames to monitor (without @).

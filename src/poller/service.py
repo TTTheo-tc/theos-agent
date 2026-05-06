@@ -25,7 +25,7 @@ class PollerService:
         self,
         bus: MessageBus,
         on_event: Callable[[PollerEvent], Coroutine[Any, Any, None]] | None = None,
-    ):
+    ) -> None:
         self.bus = bus
         self._on_event = on_event or self._default_on_event
         self._pollers: list[BasePoller] = []

@@ -37,7 +37,7 @@ class _RecordingPoller(BasePoller):
 
 
 @pytest.mark.asyncio
-async def test_default_event_handler_injects_owner_message():
+async def test_default_event_handler_injects_owner_message() -> None:
     bus = _Bus()
     service = PollerService(bus=bus)
     event = PollerEvent(
@@ -59,7 +59,7 @@ async def test_default_event_handler_injects_owner_message():
 
 
 @pytest.mark.asyncio
-async def test_service_start_stop_tracks_registered_pollers():
+async def test_service_start_stop_tracks_registered_pollers() -> None:
     bus = _Bus()
     service = PollerService(bus=bus)
     poller = _RecordingPoller()
@@ -77,7 +77,7 @@ async def test_service_start_stop_tracks_registered_pollers():
 async def test_x_poller_poll_once_includes_notification_metadata(
     tmp_path: Path,
     monkeypatch,
-):
+) -> None:
     poller = XPoller(
         ["Theo"],
         state_path=tmp_path / "state.json",
@@ -114,7 +114,7 @@ async def test_x_poller_poll_once_includes_notification_metadata(
     assert saved["called"] is True
 
 
-def test_x_poller_state_roundtrip(tmp_path: Path):
+def test_x_poller_state_roundtrip(tmp_path: Path) -> None:
     state_path = tmp_path / "state.json"
     poller = XPoller(["Theo"], state_path=state_path)
     poller._seen = {"theo": {"2", "1"}}
