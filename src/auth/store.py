@@ -12,7 +12,7 @@ import json
 from collections.abc import Callable, Iterator
 from contextlib import suppress
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from loguru import logger
 
@@ -167,7 +167,7 @@ def _decrypt_file(path: Path) -> str:
     return decrypt(blob, resolve_master_key()).decode("utf-8")
 
 
-def _coerce_store(data: dict) -> AuthProfileStore:
+def _coerce_store(data: dict[str, Any]) -> AuthProfileStore:
     """Parse raw JSON into AuthProfileStore, coercing credential discriminant."""
     return AuthProfileStore(
         version=data.get("version", 1),
@@ -177,7 +177,7 @@ def _coerce_store(data: dict) -> AuthProfileStore:
     )
 
 
-def _coerce_profiles(raw_profiles: dict) -> dict[str, Credential]:
+def _coerce_profiles(raw_profiles: dict[str, Any]) -> dict[str, Credential]:
     profiles: dict[str, Credential] = {}
     for pid, cred_data in raw_profiles.items():
         model = _CREDENTIAL_TYPES.get(cred_data.get("type", "api_key"))
@@ -188,7 +188,7 @@ def _coerce_profiles(raw_profiles: dict) -> dict[str, Credential]:
     return profiles
 
 
-def _coerce_usage_stats(raw_stats: dict) -> dict[str, ProfileUsageStats]:
+def _coerce_usage_stats(raw_stats: dict[str, Any]) -> dict[str, ProfileUsageStats]:
     usage_stats: dict[str, ProfileUsageStats] = {}
     for pid, stats in raw_stats.items():
         with suppress(Exception):

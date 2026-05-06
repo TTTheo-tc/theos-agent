@@ -6,6 +6,7 @@ import json
 import time
 from contextlib import suppress
 from pathlib import Path
+from typing import Any
 
 import httpx
 from loguru import logger
@@ -120,7 +121,7 @@ class GitHubCopilotPlugin:
 
     def _credential_from_api_key(
         self,
-        api_key_info: dict,
+        api_key_info: dict[str, Any],
         github_access_token: str,
     ) -> OAuthCredential:
         return OAuthCredential(
@@ -170,7 +171,7 @@ class GitHubCopilotPlugin:
 
         return None
 
-    def _exchange_for_api_key(self, access_token: str) -> dict | None:
+    def _exchange_for_api_key(self, access_token: str) -> dict[str, Any] | None:
         """Exchange a GitHub access token for a Copilot API key."""
         headers = {
             **_HEADERS,
