@@ -13,7 +13,7 @@ from src.memory.rule_cleanup import run_structured_rule_cleanup_event
 
 def cron_list(
     all: bool = typer.Option(False, "--all", "-a", help="Include disabled jobs"),
-):
+) -> None:
     """List scheduled jobs."""
     from src.config.loader import get_data_dir
     from src.cron.service import CronService
@@ -82,7 +82,7 @@ def cron_add(
     channel: str = typer.Option(
         None, "--channel", help="Channel for delivery (e.g. 'telegram', 'whatsapp')"
     ),
-):
+) -> None:
     """Add a scheduled job."""
     from src.config.loader import get_data_dir
     from src.cron.service import CronService, build_schedule
@@ -92,7 +92,7 @@ def cron_add(
         raise typer.Exit(1)
 
     try:
-        schedule, _delete_after = build_schedule(
+        schedule, delete_after = build_schedule(
             every_seconds=every,
             cron_expr=cron_expr,
             at=at,
@@ -114,6 +114,7 @@ def cron_add(
             deliver=deliver,
             to=to,
             channel=channel,
+            delete_after_run=delete_after,
         )
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -124,7 +125,7 @@ def cron_add(
 
 def cron_remove(
     job_id: str = typer.Argument(..., help="Job ID to remove"),
-):
+) -> None:
     """Remove a scheduled job."""
     from src.config.loader import get_data_dir
     from src.cron.service import CronService
@@ -141,7 +142,7 @@ def cron_remove(
 def cron_enable(
     job_id: str = typer.Argument(..., help="Job ID"),
     disable: bool = typer.Option(False, "--disable", help="Disable instead of enable"),
-):
+) -> None:
     """Enable or disable a job."""
     from src.config.loader import get_data_dir
     from src.cron.service import CronService
@@ -160,7 +161,7 @@ def cron_enable(
 def cron_run(
     job_id: str = typer.Argument(..., help="Job ID to run"),
     force: bool = typer.Option(False, "--force", "-f", help="Run even if disabled"),
-):
+) -> None:
     """Manually run a job."""
     from loguru import logger
 
