@@ -54,3 +54,23 @@ def test_mixed_tools_detect_only_repeated():
     d.record("read", {"path": "/other"})
     d.record("search", {"q": "hello"})
     assert d.check() == "search"
+
+
+def test_non_json_arguments_use_stable_string_fallback():
+    class NonJson:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def __str__(self) -> str:
+            return self.value
+
+    d = LoopDetector(window=10, threshold=2)
+    d.record("read", {"path": NonJson("a")})
+    d.record("read", {"path": NonJson("b")})
+
+    assert d.check() is None
+
+    marker = NonJson("same")
+    d.record("read", {"path": marker})
+    d.record("read", {"path": marker})
+    assert d.check() == "read"

@@ -70,4 +70,10 @@ class LoopDetector:
 
     @staticmethod
     def _signature(name: str, arguments: dict) -> str:
-        return f"{name}:{json.dumps(arguments, sort_keys=True, ensure_ascii=False)}"
+        encoded = json.dumps(
+            arguments,
+            sort_keys=True,
+            ensure_ascii=False,
+            default=str,
+        )
+        return f"{name}:{encoded}"
