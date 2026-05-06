@@ -102,7 +102,7 @@ class CronService:
 
     def _load_store(self) -> CronStore:
         """Load jobs from disk."""
-        if self._store:
+        if self._store is not None:
             return self._store
         if self.store_path.exists():
             try:
@@ -117,11 +117,19 @@ class CronService:
 
     def _save_store(self) -> None:
         """Save jobs to disk."""
-        if not self._store:
+        if self._store is None:
             return
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         data = self._store.model_dump(by_alias=True)
         self.store_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def _save_and_rearm(self) -> None:
+        self._save_store()
+        self._arm_timer()
+
+    def _find_job(self, job_id: str) -> CronJob | None:
+        store = self._load_store()
+        return next((job for job in store.jobs if job.id == job_id), None)
 
     async def start(self) -> None:
         """Start the cron service."""
@@ -308,8 +316,7 @@ class CronService:
         )
 
         store.jobs.append(job)
-        self._save_store()
-        self._arm_timer()
+        self._save_and_rearm()
 
         logger.info("Cron: added job '{}' ({})", name, job.id)
         return job
@@ -322,40 +329,31 @@ class CronService:
         removed = len(store.jobs) < before
 
         if removed:
-            self._save_store()
-            self._arm_timer()
+            self._save_and_rearm()
             logger.info("Cron: removed job {}", job_id)
 
         return removed
 
     def enable_job(self, job_id: str, enabled: bool = True) -> CronJob | None:
         """Enable or disable a job."""
-        store = self._load_store()
-        for job in store.jobs:
-            if job.id == job_id:
-                job.enabled = enabled
-                job.updated_at_ms = _now_ms()
-                if enabled:
-                    job.state.next_run_at_ms = _compute_next_run(job.schedule, _now_ms())
-                else:
-                    job.state.next_run_at_ms = None
-                self._save_store()
-                self._arm_timer()
-                return job
-        return None
+        job = self._find_job(job_id)
+        if job is None:
+            return None
+        job.enabled = enabled
+        now = _now_ms()
+        job.updated_at_ms = now
+        job.state.next_run_at_ms = _compute_next_run(job.schedule, now) if enabled else None
+        self._save_and_rearm()
+        return job
 
     async def run_job(self, job_id: str, force: bool = False) -> bool:
         """Manually run a job."""
-        store = self._load_store()
-        for job in store.jobs:
-            if job.id == job_id:
-                if not force and not job.enabled:
-                    return False
-                await self._execute_job(job)
-                self._save_store()
-                self._arm_timer()
-                return True
-        return False
+        job = self._find_job(job_id)
+        if job is None or (not force and not job.enabled):
+            return False
+        await self._execute_job(job)
+        self._save_and_rearm()
+        return True
 
     def status(self) -> dict:
         """Get service status."""

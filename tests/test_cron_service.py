@@ -30,6 +30,66 @@ def test_add_job_accepts_valid_timezone(tmp_path) -> None:
     assert job.state.next_run_at_ms is not None
 
 
+def test_remove_last_job_persists_empty_store(tmp_path) -> None:
+    store_path = tmp_path / "cron" / "jobs.json"
+    service = CronService(store_path)
+    job = service.add_job(
+        name="remove me",
+        schedule=CronSchedule(kind="every", every_ms=60_000),
+        message="hello",
+    )
+
+    assert service.remove_job(job.id) is True
+
+    restored = CronService(store_path)
+    assert restored.list_jobs(include_disabled=True) == []
+
+
+def test_enable_job_updates_persisted_schedule_state(tmp_path) -> None:
+    store_path = tmp_path / "cron" / "jobs.json"
+    service = CronService(store_path)
+    job = service.add_job(
+        name="toggle me",
+        schedule=CronSchedule(kind="every", every_ms=60_000),
+        message="hello",
+    )
+
+    disabled = service.enable_job(job.id, enabled=False)
+
+    assert disabled is not None
+    assert disabled.enabled is False
+    assert disabled.state.next_run_at_ms is None
+
+    restored = CronService(store_path)
+    restored_job = restored.list_jobs(include_disabled=True)[0]
+    assert restored_job.enabled is False
+    assert restored_job.state.next_run_at_ms is None
+
+
+async def test_run_job_updates_persisted_state(tmp_path) -> None:
+    store_path = tmp_path / "cron" / "jobs.json"
+    calls: list[str] = []
+
+    async def on_job(job):
+        calls.append(job.id)
+        return "ok"
+
+    service = CronService(store_path, on_job=on_job)
+    job = service.add_job(
+        name="run me",
+        schedule=CronSchedule(kind="every", every_ms=60_000),
+        message="hello",
+    )
+
+    assert await service.run_job(job.id) is True
+    assert calls == [job.id]
+
+    restored = CronService(store_path)
+    restored_job = restored.list_jobs(include_disabled=True)[0]
+    assert restored_job.state.last_status == "ok"
+    assert restored_job.state.last_run_at_ms is not None
+
+
 def test_build_schedule_one_shot_requests_delete_after_run() -> None:
     schedule, delete_after = build_schedule(at="2026-01-02T03:04:05")
 
