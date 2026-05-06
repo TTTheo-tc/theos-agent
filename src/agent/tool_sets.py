@@ -238,13 +238,13 @@ def _register_todo_tools(state: _RegistrationState) -> None:
     if state.mode == "subagent" or not state.should("todo"):
         return
 
-    from src.agent.tools.todo import (
+    from src.agent.tools.tasks import (
         TaskCreateTool,
         TaskGetTool,
         TaskListTool,
         TaskUpdateTool,
-        TodoTool,
     )
+    from src.agent.tools.todo import TodoTool
 
     workspace = state.config.workspace
     state.register(TodoTool(workspace=workspace))
