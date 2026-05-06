@@ -62,7 +62,7 @@ class DelayState:
 
     entries: list[MochatBufferedEntry] = field(default_factory=list)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    timer: asyncio.Task | None = None
+    timer: asyncio.Task[None] | None = None
 
 
 @dataclass
@@ -235,7 +235,9 @@ class MochatChannel(BaseChannel):
 
     name = "mochat"
 
-    def __init__(self, config: MochatConfig, bus: MessageBus, owner_ids: list[str] | None = None):
+    def __init__(
+        self, config: MochatConfig, bus: MessageBus, owner_ids: list[str] | None = None
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: MochatConfig = config
         self._http: httpx.AsyncClient | None = None
@@ -245,7 +247,7 @@ class MochatChannel(BaseChannel):
         self._state_dir = get_data_path() / "mochat"
         self._cursor_path = self._state_dir / "session_cursors.json"
         self._session_cursor: dict[str, int] = {}
-        self._cursor_save_task: asyncio.Task | None = None
+        self._cursor_save_task: asyncio.Task[None] | None = None
 
         self._session_set: set[str] = set()
         self._panel_set: set[str] = set()
@@ -259,9 +261,9 @@ class MochatChannel(BaseChannel):
         self._delay_states: dict[str, DelayState] = {}
 
         self._fallback_mode = False
-        self._session_fallback_tasks: dict[str, asyncio.Task] = {}
-        self._panel_fallback_tasks: dict[str, asyncio.Task] = {}
-        self._refresh_task: asyncio.Task | None = None
+        self._session_fallback_tasks: dict[str, asyncio.Task[None]] = {}
+        self._panel_fallback_tasks: dict[str, asyncio.Task[None]] = {}
+        self._refresh_task: asyncio.Task[None] | None = None
         self._target_locks: dict[str, asyncio.Lock] = {}
 
     # ---- lifecycle ---------------------------------------------------------

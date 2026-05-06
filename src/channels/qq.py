@@ -31,7 +31,7 @@ def _make_bot_class(channel: "QQChannel") -> "type[botpy.Client]":
     intents = botpy.Intents(public_messages=True, direct_message=True)
 
     class _Bot(botpy.Client):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__(intents=intents)
 
         async def on_ready(self):
@@ -51,7 +51,9 @@ class QQChannel(BaseChannel):
 
     name = "qq"
 
-    def __init__(self, config: QQConfig, bus: MessageBus, owner_ids: list[str] | None = None):
+    def __init__(
+        self, config: QQConfig, bus: MessageBus, owner_ids: list[str] | None = None
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: QQConfig = config
         self._client: botpy.Client | None = None

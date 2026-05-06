@@ -39,11 +39,11 @@ class TheOSDingTalkHandler(CallbackHandler):
     Parses incoming messages and forwards them to the TheOS channel.
     """
 
-    def __init__(self, channel: "DingTalkChannel"):
+    def __init__(self, channel: "DingTalkChannel") -> None:
         super().__init__()
         self.channel = channel
 
-    async def process(self, message: CallbackMessage):
+    async def process(self, message: CallbackMessage) -> tuple[Any, str]:
         """Process incoming stream message."""
         try:
             # Parse using SDK's ChatbotMessage for robust handling
@@ -97,7 +97,9 @@ class DingTalkChannel(BaseChannel):
 
     name = "dingtalk"
 
-    def __init__(self, config: DingTalkConfig, bus: MessageBus, owner_ids: list[str] | None = None):
+    def __init__(
+        self, config: DingTalkConfig, bus: MessageBus, owner_ids: list[str] | None = None
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: DingTalkConfig = config
         self._client: Any = None
@@ -108,7 +110,7 @@ class DingTalkChannel(BaseChannel):
         self._token_expiry: float = 0
 
         # Hold references to background tasks to prevent GC
-        self._background_tasks: set[asyncio.Task] = set()
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         """Start the DingTalk bot with Stream Mode."""

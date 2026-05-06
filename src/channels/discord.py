@@ -25,15 +25,17 @@ class DiscordChannel(BaseChannel):
 
     name = "discord"
 
-    def __init__(self, config: DiscordConfig, bus: MessageBus, owner_ids: list[str] | None = None):
+    def __init__(
+        self, config: DiscordConfig, bus: MessageBus, owner_ids: list[str] | None = None
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: DiscordConfig = config
         self._ws: websockets.WebSocketClientProtocol | None = None
         self._seq: int | None = None
         self._session_id: str | None = None
         self._resume_gateway_url: str | None = None
-        self._heartbeat_task: asyncio.Task | None = None
-        self._typing_tasks: dict[str, asyncio.Task] = {}
+        self._heartbeat_task: asyncio.Task[None] | None = None
+        self._typing_tasks: dict[str, asyncio.Task[None]] = {}
         self._http: httpx.AsyncClient | None = None
 
     async def start(self) -> None:

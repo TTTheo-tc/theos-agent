@@ -37,8 +37,8 @@ class ChannelManager:
         self.bus = bus
         self.dashboard = dashboard
         self.channels: dict[str, BaseChannel] = {}
-        self._dispatch_task: asyncio.Task | None = None
-        self._dashboard_tasks: set[asyncio.Task] = set()
+        self._dispatch_task: asyncio.Task[None] | None = None
+        self._dashboard_tasks: set[asyncio.Task[None]] = set()
         self._restart_cb: Callable[[], None] | None = None
         self._inflight_sends = 0
 

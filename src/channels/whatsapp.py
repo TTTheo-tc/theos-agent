@@ -21,7 +21,9 @@ class WhatsAppChannel(BaseChannel):
 
     name = "whatsapp"
 
-    def __init__(self, config: WhatsAppConfig, bus: MessageBus, owner_ids: list[str] | None = None):
+    def __init__(
+        self, config: WhatsAppConfig, bus: MessageBus, owner_ids: list[str] | None = None
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: WhatsAppConfig = config
         self._ws = None

@@ -108,15 +108,14 @@ class TelegramChannel(BaseChannel):
         bus: MessageBus,
         groq_api_key: str = "",
         owner_ids: list[str] | None = None,
-    ):
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: TelegramConfig = config
         self.groq_api_key = groq_api_key
         self._app: Application | None = None
-        self._chat_ids: dict[str, int] = {}  # Map sender_id to chat_id for replies
-        self._typing_tasks: dict[str, asyncio.Task] = {}  # chat_id -> typing loop task
+        self._typing_tasks: dict[str, asyncio.Task[None]] = {}  # chat_id -> typing loop task
         self._media_group_buffers: dict[str, dict] = {}
-        self._media_group_tasks: dict[str, asyncio.Task] = {}
+        self._media_group_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def start(self) -> None:
         """Start the Telegram bot with long polling."""
@@ -341,9 +340,6 @@ class TelegramChannel(BaseChannel):
         user = update.effective_user
         chat_id = message.chat_id
         sender_id = self._sender_id(user)
-
-        # Store chat_id for replies
-        self._chat_ids[sender_id] = chat_id
 
         # Build content from text and/or media
         content_parts = []

@@ -21,7 +21,9 @@ class SlackChannel(BaseChannel):
 
     name = "slack"
 
-    def __init__(self, config: SlackConfig, bus: MessageBus, owner_ids: list[str] | None = None):
+    def __init__(
+        self, config: SlackConfig, bus: MessageBus, owner_ids: list[str] | None = None
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: SlackConfig = config
         self._web_client: AsyncWebClient | None = None

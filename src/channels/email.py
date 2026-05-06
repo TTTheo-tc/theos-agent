@@ -51,7 +51,9 @@ class EmailChannel(BaseChannel):
         "Dec",
     )
 
-    def __init__(self, config: EmailConfig, bus: MessageBus, owner_ids: list[str] | None = None):
+    def __init__(
+        self, config: EmailConfig, bus: MessageBus, owner_ids: list[str] | None = None
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: EmailConfig = config
         self._last_subject_by_chat: dict[str, str] = {}

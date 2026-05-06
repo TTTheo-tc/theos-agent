@@ -188,11 +188,11 @@ class MatrixChannel(BaseChannel):
         restrict_to_workspace: bool = False,
         workspace: Path | None = None,
         owner_ids: list[str] | None = None,
-    ):
+    ) -> None:
         super().__init__(config, bus, owner_ids=owner_ids)
         self.client: AsyncClient | None = None
-        self._sync_task: asyncio.Task | None = None
-        self._typing_tasks: dict[str, asyncio.Task] = {}
+        self._sync_task: asyncio.Task[None] | None = None
+        self._typing_tasks: dict[str, asyncio.Task[None]] = {}
         self._restrict_to_workspace = restrict_to_workspace
         self._workspace = workspace.expanduser().resolve() if workspace else None
         self._server_upload_limit_bytes: int | None = None
