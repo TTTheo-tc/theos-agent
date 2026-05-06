@@ -174,6 +174,15 @@ def _dirty_rule_reason(rule_path: Path, task_statuses: dict[str, str]) -> str | 
         return "invalid-json"
 
     rule_text = payload.get("rule_text")
+    text_reason = _dirty_rule_text_reason(rule_text)
+    if text_reason is not None:
+        return text_reason
+
+    source_task_ids = _string_list(payload.get("source_task_ids", []))
+    return _source_task_reason(source_task_ids, task_statuses)
+
+
+def _dirty_rule_text_reason(rule_text: object) -> str | None:
     if not isinstance(rule_text, str) or not rule_text.strip():
         return "empty-rule"
     if is_noise_response(rule_text):
@@ -184,13 +193,15 @@ def _dirty_rule_reason(rule_path: Path, task_statuses: dict[str, str]) -> str | 
         return "prompt-noise"
     if "|------|" in rule_text and "http" in rule_text:
         return "table-blob"
+    return None
 
-    source_task_ids = _string_list(payload.get("source_task_ids", []))
-    if source_task_ids:
-        statuses = [task_statuses.get(task_id) for task_id in source_task_ids]
-        if statuses and all(status and status != "success" for status in statuses):
-            return "failed-source-task"
 
+def _source_task_reason(source_task_ids: list[str], task_statuses: dict[str, str]) -> str | None:
+    if not source_task_ids:
+        return None
+    statuses = [task_statuses.get(task_id) for task_id in source_task_ids]
+    if statuses and all(status and status != "success" for status in statuses):
+        return "failed-source-task"
     return None
 
 
