@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from contextlib import suppress
 from pathlib import Path
 
 import httpx
@@ -74,7 +75,7 @@ class GitHubCopilotPlugin:
             verification_uri = device_info["verification_uri"]
 
             # Step 2: Prompt user
-            print(  # noqa: T201
+            print(
                 f"\nPlease visit {verification_uri} and enter code: {user_code}\n",
                 flush=True,
             )
@@ -203,10 +204,8 @@ class GitHubCopilotPlugin:
 
         access_token = ""
         if access_token_file.exists():
-            try:
+            with suppress(Exception):
                 access_token = access_token_file.read_text(encoding="utf-8").strip()
-            except Exception:
-                pass
 
         if not access_token:
             return None

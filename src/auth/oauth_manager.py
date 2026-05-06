@@ -9,7 +9,7 @@ from pathlib import Path
 from loguru import logger
 
 from src.auth.oauth_plugin import OAuthPlugin
-from src.auth.types import OAuthCredential
+from src.auth.types import AuthProfileStore, OAuthCredential
 
 
 def _normalize_provider(provider: str) -> str:
@@ -177,7 +177,7 @@ class OAuthManager:
                 if remaining < horizon_s:
                     self._refresh_with_lock(_normalize_provider(cred.provider), profile_id, cred)
 
-    def _load_store(self):  # noqa: ANN202
+    def _load_store(self) -> AuthProfileStore:
         from src.auth.store import load_auth_store
 
         return load_auth_store()

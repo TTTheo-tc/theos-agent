@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterator
+from contextlib import suppress
 from pathlib import Path
 from typing import TypeVar
 
@@ -162,20 +163,16 @@ def _coerce_profiles(raw_profiles: dict) -> dict[str, Credential]:
         model = _CREDENTIAL_TYPES.get(cred_data.get("type", "api_key"))
         if model is None:
             continue
-        try:
+        with suppress(Exception):
             profiles[pid] = model.model_validate(cred_data)
-        except Exception:
-            pass
     return profiles
 
 
 def _coerce_usage_stats(raw_stats: dict) -> dict[str, ProfileUsageStats]:
     usage_stats: dict[str, ProfileUsageStats] = {}
     for pid, stats in raw_stats.items():
-        try:
+        with suppress(Exception):
             usage_stats[pid] = ProfileUsageStats.model_validate(stats)
-        except Exception:
-            pass
     return usage_stats
 
 
