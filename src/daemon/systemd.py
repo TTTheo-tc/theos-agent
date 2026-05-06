@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from contextlib import suppress
 from pathlib import Path
 
 from src.daemon.base import GatewayService
@@ -109,12 +110,10 @@ WantedBy=default.target
         state = "unknown"
         for line in result.stdout.splitlines():
             if line.startswith("MainPID="):
-                try:
+                with suppress(ValueError):
                     p = int(line.split("=", 1)[1])
                     if p > 0:
                         pid = p
-                except ValueError:
-                    pass
             elif line.startswith("ActiveState="):
                 state = line.split("=", 1)[1]
         return {"pid": pid, "state": state, "loaded": self.is_loaded()}

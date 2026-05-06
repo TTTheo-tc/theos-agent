@@ -83,7 +83,4 @@ def wait_for_gateway(
 
     # Final attempt: if service PID is alive, report as weak success only when
     # we are not requiring endpoint identity verification.
-    if not require_pid_match and _service_pid_alive(service):
-        return True
-
-    return False
+    return bool(not require_pid_match and _service_pid_alive(service))

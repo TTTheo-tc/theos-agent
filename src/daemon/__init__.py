@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from src.daemon.base import GatewayService  # noqa: F401
+from src.daemon.base import GatewayService
 
 
 def resolve_service() -> GatewayService:

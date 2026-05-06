@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import plistlib
 import subprocess
+from contextlib import suppress
 from pathlib import Path
 
 from src.daemon.base import GatewayService
@@ -112,10 +113,8 @@ class LaunchdService(GatewayService):
         for line in result.stdout.splitlines():
             line = line.strip()
             if line.startswith("pid ="):
-                try:
+                with suppress(ValueError):
                     pid = int(line.split("=", 1)[1].strip())
-                except ValueError:
-                    pass
             elif line.startswith("state ="):
                 state = line.split("=", 1)[1].strip()
         return {"pid": pid, "state": state, "loaded": True}

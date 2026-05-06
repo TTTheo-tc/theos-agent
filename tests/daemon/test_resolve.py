@@ -57,6 +57,5 @@ def test_resolve_service_linux():
 def test_resolve_service_unsupported():
     from src.daemon import resolve_service
 
-    with patch("sys.platform", "win32"):
-        with pytest.raises(NotImplementedError):
-            resolve_service()
+    with patch("sys.platform", "win32"), pytest.raises(NotImplementedError):
+        resolve_service()
