@@ -40,8 +40,7 @@ class HandoffPayload:
         commands = self.test_commands or verifier_commands or []
         if commands:
             lines.append("\nSuggested verification commands (advisory):")
-            for cmd in commands:
-                lines.append(f"  {cmd}")
+            lines.extend(f"  {cmd}" for cmd in commands)
         return "\n".join(lines)
 
 
@@ -131,4 +130,5 @@ class SubmitForReviewTool(Tool):
         return HANDOFF_TOOL["function"]["parameters"]
 
     async def execute(self, **kwargs: Any) -> str:
+        del kwargs
         return "Handoff submitted. The verifier will review your changes."

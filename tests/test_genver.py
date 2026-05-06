@@ -154,6 +154,7 @@ class MockToolRegistry:
         self._tools[tool.name] = tool
 
     async def execute(self, name, params, context=None):
+        del params, context
         return f"result of {name}"
 
 

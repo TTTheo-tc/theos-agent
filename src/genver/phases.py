@@ -34,6 +34,7 @@ async def run_clarify(
     ask_user: Any = None,
 ) -> dict[str, Any]:
     """Phase 0: Clarify requirements. Returns parsed JSON assessment."""
+    del ask_user
     prompt = prompts.clarify_prompt(user_request, str(workspace))
     messages = [
         {
@@ -157,6 +158,7 @@ async def run_execute(
 
     Returns (content, tools_used, messages, usage, handoff).
     """
+    del gen_model, ver_model
     from src.genver.loop import GenVerLoop
 
     spec_content = store.read_artifact("spec.md")

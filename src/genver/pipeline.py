@@ -268,10 +268,14 @@ class GenVerPipeline:
                 merge_usage(total_usage, artifact.tokens_used)
 
             # Abort-check: if REVIEW returned abort, stop before REPORT.
-            if phase == Phase.REVIEW and artifact and artifact.final_verdict:
-                if artifact.final_verdict.status == "abort":
-                    logger.warning("[GenVer Pipeline] REVIEW returned abort, stopping pipeline")
-                    break
+            if (
+                phase == Phase.REVIEW
+                and artifact
+                and artifact.final_verdict
+                and artifact.final_verdict.status == "abort"
+            ):
+                logger.warning("[GenVer Pipeline] REVIEW returned abort, stopping pipeline")
+                break
 
         elapsed = time.monotonic() - start_time
         total_usage["wall_time_seconds"] = int(elapsed)

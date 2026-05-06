@@ -50,7 +50,7 @@ class TestGenVerPipeline:
         assert Phase.PLAN not in phases
         assert Phase.EXECUTE in phases
 
-    async def test_preflight_classifies_complexity(self, tmp_path):
+    async def test_preflight_classifies_complexity(self):
         from src.genver.pipeline import classify_complexity
 
         assert classify_complexity("fix typo in README") in ("trivial", "small")
@@ -61,7 +61,7 @@ class TestGenVerPipeline:
             == "large"
         )
 
-    async def test_phase_list_from_complexity(self, tmp_path):
+    async def test_phase_list_from_complexity(self):
         from src.genver.pipeline import phases_for_complexity
 
         assert Phase.SPEC not in phases_for_complexity("trivial")

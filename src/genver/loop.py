@@ -41,7 +41,7 @@ def _make_provider_for_model(model: str, fallback: LLMProvider) -> LLMProvider:
     (e.g. openai-codex/ needs OpenAICodexProvider), create one.
     Otherwise return the fallback.
     """
-    if model.startswith("openai-codex/") or model.startswith("openai_codex/"):
+    if model.startswith(("openai-codex/", "openai_codex/")):
         from src.providers.openai_codex_provider import OpenAICodexProvider
 
         return OpenAICodexProvider(default_model=model)
