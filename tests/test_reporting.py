@@ -1,5 +1,6 @@
 """Tests for reporting module — metrics collection and report generation."""
 
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from src.store.event_store import EventStore
 
 
 @pytest.fixture
-async def db_with_events(tmp_path: Path):
+async def db_with_events(tmp_path: Path) -> AsyncIterator[Database]:
     db = Database(tmp_path / "test.db")
     await db.connect()
     es = EventStore(db)
@@ -124,7 +125,7 @@ async def db_with_events(tmp_path: Path):
     await db.close()
 
 
-async def test_collect_all(db_with_events: Database):
+async def test_collect_all(db_with_events: Database) -> None:
     collector = MetricsCollector(db_with_events)
     m = await collector.collect()
     assert m["total_tasks"] == 3
@@ -135,7 +136,7 @@ async def test_collect_all(db_with_events: Database):
     assert m["retry_rate"] > 0
 
 
-async def test_collect_with_time_filter(db_with_events: Database):
+async def test_collect_with_time_filter(db_with_events: Database) -> None:
     collector = MetricsCollector(db_with_events)
     since = datetime(2025, 6, 1, 11, 30, 0)
     m = await collector.collect(since=since)
@@ -145,7 +146,7 @@ async def test_collect_with_time_filter(db_with_events: Database):
     assert m["failed"] == 0
 
 
-async def test_collect_with_until_filter(db_with_events: Database):
+async def test_collect_with_until_filter(db_with_events: Database) -> None:
     collector = MetricsCollector(db_with_events)
     until = datetime(2025, 6, 1, 10, 30, 0)
     m = await collector.collect(until=until)
@@ -156,7 +157,7 @@ async def test_collect_with_until_filter(db_with_events: Database):
     assert m["sessions_active"] == 1
 
 
-async def test_collect_with_since_and_until_filter(db_with_events: Database):
+async def test_collect_with_since_and_until_filter(db_with_events: Database) -> None:
     collector = MetricsCollector(db_with_events)
     m = await collector.collect(
         since=datetime(2025, 6, 1, 10, 30, 0),
@@ -170,19 +171,19 @@ async def test_collect_with_since_and_until_filter(db_with_events: Database):
     assert m["events_by_type"] == {"created": 1, "transition": 3}
 
 
-async def test_daily(db_with_events: Database):
+async def test_daily(db_with_events: Database) -> None:
     collector = MetricsCollector(db_with_events)
     m = await collector.daily(date=datetime(2025, 6, 1))
     assert m["total_tasks"] == 3
 
 
-async def test_weekly(db_with_events: Database):
+async def test_weekly(db_with_events: Database) -> None:
     collector = MetricsCollector(db_with_events)
     m = await collector.weekly(end_date=datetime(2025, 6, 2))
     assert m["total_tasks"] == 3
 
 
-def test_render_report():
+def test_render_report() -> None:
     metrics = {
         "total_tasks": 10,
         "completed": 8,
@@ -203,7 +204,7 @@ def test_render_report():
     assert "| transition | 20 |" in report
 
 
-def test_render_empty_report():
+def test_render_empty_report() -> None:
     metrics = {
         "total_tasks": 0,
         "completed": 0,
