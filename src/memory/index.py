@@ -51,11 +51,11 @@ class MemoryIndex:
             await self._replace_source_entries("memory", [])
             return 0
 
-        rows = []
-        for title, body, ts in sections:
-            if not body.strip():
-                continue
-            rows.append((title, body.strip(), ts))
+        rows = [
+            (title, content, ts)
+            for title, body, ts in sections
+            if (content := body.strip())
+        ]
 
         await self._replace_source_entries("memory", rows)
         logger.debug("memory_fts: synced {} memory sections", len(rows))
@@ -71,11 +71,11 @@ class MemoryIndex:
             await self._replace_source_entries("history", [])
             return 0
 
-        rows = []
-        for ts, content in entries:
-            if not content.strip():
-                continue
-            rows.append(("", content.strip(), ts))
+        rows = [
+            ("", clean_content, ts)
+            for ts, content in entries
+            if (clean_content := content.strip())
+        ]
 
         await self._replace_source_entries("history", rows)
         logger.debug("memory_fts: synced {} history entries", len(rows))
