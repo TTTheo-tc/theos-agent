@@ -26,6 +26,23 @@ def _backoff_delay(attempt: int) -> float:
     return delay + jitter
 
 
+def _error_delta_from_exception(exc: Exception) -> StreamDelta:
+    return StreamDelta(
+        content=f"Error: {exc}",
+        is_final=True,
+        finish_reason="error",
+        error_type=type(exc).__name__,
+    )
+
+
+def _error_response_from_exception(exc: Exception) -> LLMResponse:
+    return LLMResponse(
+        content=f"Error calling LLM: {exc}",
+        finish_reason="error",
+        error_type=type(exc).__name__,
+    )
+
+
 class RecoveryProvider(LLMProvider):
     """Wraps a primary provider with retry logic and ordered fallback providers.
 
@@ -117,12 +134,7 @@ class RecoveryProvider(LLMProvider):
 
                 except Exception as exc:
                     if has_yielded:
-                        yield StreamDelta(
-                            content=f"Error: {exc}",
-                            is_final=True,
-                            finish_reason="error",
-                            error_type=type(exc).__name__,
-                        )
+                        yield _error_delta_from_exception(exc)
                         return
                     failure = classify_failure(exception=exc)
                     action = decide_recovery(
@@ -138,12 +150,7 @@ class RecoveryProvider(LLMProvider):
                     elif action is RecoveryAction.FAILOVER:
                         break  # next provider
                     else:
-                        yield StreamDelta(
-                            content=f"Error: {exc}",
-                            is_final=True,
-                            finish_reason="error",
-                            error_type=type(exc).__name__,
-                        )
+                        yield _error_delta_from_exception(exc)
                         return
                 else:
                     # for-loop exhausted without break — check action
@@ -246,11 +253,7 @@ class RecoveryProvider(LLMProvider):
                 )
                 failure = classify_failure(response=response)
             except Exception as exc:
-                response = LLMResponse(
-                    content=f"Error calling LLM: {exc}",
-                    finish_reason="error",
-                    error_type=type(exc).__name__,
-                )
+                response = _error_response_from_exception(exc)
                 failure = classify_failure(exception=exc)
 
             action = decide_recovery(failure, attempt=attempt, has_fallback=has_fallback)
