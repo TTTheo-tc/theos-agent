@@ -11,7 +11,7 @@ Retrieval sources
 -----------------
 Retrieval currently draws from two sources:
   1. Markdown long-term memory (MEMORY.md) — via ``MemoryStore``
-  2. Structured memory (JSON) — via ``StructuredMemoryStore``
+  2. Structured memory (KG) — via ``StructuredMemoryStore``
 
 The SQLite short-term tier (``memory_short_term``) is a buffer/audit
 layer and is **not** a retrieval source.  If SQLite data is ever surfaced
@@ -124,33 +124,6 @@ def _score_section(section: tuple[str, str], query: str) -> float:
     return title_hits + normalized_body
 
 
-def _graded_fallback(sections: list[tuple[str, str]], budget_chars: int) -> str:
-    """Fallback when no sections match: pinned first, then recent.
-
-    Returns empty string if no pinned/recent sections — caller decides
-    whether to fall back to full MEMORY.md dump.
-    """
-    pinned: list[tuple[str, str]] = []
-    for title, body in sections:
-        if title == "_preamble":
-            continue
-        if "<!-- pinned" in body:
-            pinned.append((title, body))
-
-    if pinned:
-        selected: list[str] = []
-        used = 0
-        for title, body in pinned:
-            txt = f"## {title}\n{body}"
-            if used + len(txt) > budget_chars and selected:
-                break
-            selected.append(txt)
-            used += len(txt)
-        return "## Long-term Memory (pinned fallback)\n" + "\n\n".join(selected)
-
-    return ""
-
-
 if TYPE_CHECKING:
     from src.config.schema import MemoryConfig
     from src.memory.scope import MemoryScopeResolver
@@ -159,6 +132,9 @@ if TYPE_CHECKING:
 _CHARS_PER_TOKEN = 4
 _STALE_SECTION_DAYS = 7
 _VERIFY_WARNING_SUFFIX = " \u2014 verify before acting on this information."
+_FULL_MEMORY_HEADER = "## Long-term Memory"
+_FILTERED_MEMORY_HEADER = "## Long-term Memory (filtered)"
+_PINNED_MEMORY_HEADER = "## Long-term Memory (pinned fallback)"
 
 
 def _freshness_warning(body: str, store: Any) -> str:
@@ -169,6 +145,55 @@ def _freshness_warning(body: str, store: Any) -> str:
     if age is None:
         return f"\n> \u26a0 No timestamp{_VERIFY_WARNING_SUFFIX}"
     return ""
+
+
+def _memory_budget_chars(config: "MemoryConfig") -> int:
+    return config.injection.max_context_tokens * _CHARS_PER_TOKEN
+
+
+def _section_text(
+    title: str,
+    body: str,
+    *,
+    store: Any | None = None,
+) -> str:
+    if title == "_preamble":
+        return body
+    text = f"## {title}\n{body}"
+    if store is not None:
+        text += _freshness_warning(body, store)
+    return text
+
+
+def _take_budgeted(texts: list[str], budget_chars: int) -> list[str]:
+    selected: list[str] = []
+    used_chars = 0
+    for text in texts:
+        if used_chars + len(text) > budget_chars and selected:
+            break
+        selected.append(text)
+        used_chars += len(text)
+    return selected
+
+
+def _memory_block(header: str, parts: list[str] | str) -> str:
+    body = "\n\n".join(parts) if isinstance(parts, list) else parts
+    return f"{header}\n{body}"
+
+
+def _graded_fallback(sections: list[tuple[str, str]], budget_chars: int) -> str:
+    """Fallback when no sections match: pinned sections only.
+
+    Returns empty string if no pinned sections — caller decides
+    whether to fall back to full MEMORY.md dump.
+    """
+    pinned = [
+        _section_text(title, body)
+        for title, body in sections
+        if title != "_preamble" and "<!-- pinned" in body
+    ]
+    selected = _take_budgeted(pinned, budget_chars)
+    return _memory_block(_PINNED_MEMORY_HEADER, selected) if selected else ""
 
 
 class MemoryRecallService:
@@ -230,9 +255,8 @@ class MemoryRecallService:
         if not long_term:
             return ""
 
-        # Default: full injection (backward compatible)
         if not effective_config or effective_config.injection.mode == "full" or not query:
-            return f"## Long-term Memory\n{self._annotate_freshness(long_term)}"
+            return _memory_block(_FULL_MEMORY_HEADER, self._annotate_freshness(long_term))
 
         return self._select_markdown_sections(
             long_term=long_term,
@@ -256,13 +280,7 @@ class MemoryRecallService:
 
         parts: list[str] = []
         for title, body in sections:
-            if title == "_preamble":
-                parts.append(body)
-                continue
-
-            section_text = f"## {title}\n{body}"
-            section_text += _freshness_warning(body, MemoryStore)
-            parts.append(section_text)
+            parts.append(_section_text(title, body, store=MemoryStore))
 
         return "\n\n".join(parts)
 
@@ -284,7 +302,7 @@ class MemoryRecallService:
         """
         sections = store.split_sections(long_term)
         if not sections:
-            return f"## Long-term Memory\n{long_term}"
+            return _memory_block(_FULL_MEMORY_HEADER, long_term)
 
         # Score sections with title boost + length normalization (BM25-lite)
         scored: list[tuple[float, str, str]] = []
@@ -293,36 +311,20 @@ class MemoryRecallService:
             if score > 0:
                 scored.append((score, title, body))
 
-        budget_chars = config.injection.max_context_tokens * _CHARS_PER_TOKEN
+        budget_chars = _memory_budget_chars(config)
         if not scored:
             # Graded fallback: pinned sections first, then full dump (if enabled)
             pinned_fallback = _graded_fallback(sections, budget_chars)
             if pinned_fallback:
                 return pinned_fallback
             if config.injection.fallback_to_full:
-                return f"## Long-term Memory\n{long_term}"
+                return _memory_block(_FULL_MEMORY_HEADER, long_term)
             return ""
 
-        # Sort by relevance (descending), then fill up to budget
-        budget = config.injection.max_context_tokens
         scored.sort(key=lambda x: x[0], reverse=True)
-        selected: list[str] = []
-        used_chars = 0
-        budget_chars = budget * _CHARS_PER_TOKEN
-
-        for _score, title, body in scored:
-            section_text = f"## {title}\n{body}" if title != "_preamble" else body
-
-            # Annotate freshness per section
-            if title != "_preamble":
-                section_text += _freshness_warning(body, store)
-
-            if used_chars + len(section_text) > budget_chars and selected:
-                break
-            selected.append(section_text)
-            used_chars += len(section_text)
-
-        return "## Long-term Memory (filtered)\n" + "\n\n".join(selected)
+        candidates = [_section_text(title, body, store=store) for _score, title, body in scored]
+        selected = _take_budgeted(candidates, budget_chars)
+        return _memory_block(_FILTERED_MEMORY_HEADER, selected)
 
     # ------------------------------------------------------------------
     # Structured memory recall

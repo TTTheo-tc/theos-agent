@@ -299,3 +299,30 @@ class TestFreshnessWarnings:
         # The warning blockquote should contain "verify" or "No timestamp"
         assert "> \u26a0" in result
         assert "> \u26a0 No timestamp \u2014 verify before acting on this information." in result
+
+    def test_retrieval_mode_adds_warning_to_selected_stale_section(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Retrieval mode should keep the same freshness annotation as full mode."""
+        content = """\
+# Long-term Memory
+
+## Asyncio Facts
+<!-- updated: 2025-01-15 -->
+- asyncio provider pipeline details
+
+## Vim Preferences
+<!-- updated: 2025-01-15 -->
+- prefers vim bindings
+"""
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        _write_memory(workspace, content)
+
+        recall = _make_recall(workspace, mode="retrieval", fallback_to_full=False)
+        result = recall.get_memory_context(query="asyncio provider")
+
+        assert "Asyncio Facts" in result
+        assert "Vim Preferences" not in result
+        assert "> \u26a0 Last updated" in result
