@@ -66,8 +66,7 @@ class ResponseCache:
         if warm_hit is None:
             return None
 
-        self._hot[key] = (warm_hit, now)
-        self._evict_hot()
+        self._store_hot(key, warm_hit, now)
         await self._touch_warm(key)
         return warm_hit
 
@@ -121,8 +120,7 @@ class ResponseCache:
         await self.ensure_table()
         now = time.time()
         now_iso = _utc_now_iso()
-        self._hot[key] = (response, now)
-        self._evict_hot()
+        self._store_hot(key, response, now)
         await self._db.execute(
             """INSERT INTO response_cache
                (cache_key, model, response, token_count, hit_count, created_at, accessed_at)
@@ -163,6 +161,10 @@ class ResponseCache:
         await self.ensure_table()
         self._hot.clear()
         await self._db.execute("DELETE FROM response_cache")
+
+    def _store_hot(self, key: str, response: str, now: float) -> None:
+        self._hot[key] = (response, now)
+        self._evict_hot()
 
     def _evict_hot(self) -> None:
         while len(self._hot) > self._max_memory:
