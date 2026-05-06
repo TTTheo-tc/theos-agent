@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from src.security.secret_refs import resolve_inline_secret_refs
+from src.security.secret_refs import resolve_inline_mapping_refs, resolve_inline_secret_refs
 
 
 class InjectionMethod(Enum):
@@ -122,13 +122,13 @@ class CredentialInjector:
         query_params: dict[str, str] | None = None,
     ) -> tuple[dict[str, str], dict[str, str] | None]:
         """Resolve ``secret://name`` references in headers and query params."""
-        resolved_headers = {key: self._resolve_ref(value) for key, value in dict(headers).items()}
-        resolved_query: dict[str, str] | None = None
-        if query_params is not None:
-            resolved_query = {
-                key: self._resolve_ref(value) for key, value in dict(query_params).items()
-            }
-        return resolved_headers, resolved_query
+        return (
+            resolve_inline_mapping_refs(dict(headers), self._resolver.resolve) or {},
+            resolve_inline_mapping_refs(
+                dict(query_params) if query_params is not None else None,
+                self._resolver.resolve,
+            ),
+        )
 
     def prepare_request(
         self,
@@ -154,7 +154,8 @@ class CredentialInjector:
         prepared_url = urlunparse(parsed._replace(query=final_query))
         return prepared_url, prepared_headers
 
-    def _resolve_ref(self, value: str) -> str:
+    def resolve_value(self, value: str) -> str:
+        """Resolve embedded ``secret://name`` references in a string value."""
         return resolve_inline_secret_refs(value, self._resolver.resolve)
 
 

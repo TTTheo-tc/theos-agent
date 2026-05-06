@@ -33,9 +33,7 @@ def _resolve_request_data(value: Any, injector: CredentialInjector) -> Any:
     if isinstance(value, tuple):
         return tuple(_resolve_request_data(item, injector) for item in value)
     if isinstance(value, str):
-        return injector._resolve_ref(
-            value
-        )  # reuse the same secret resolution path as headers/query
+        return injector.resolve_value(value)
     return value
 
 

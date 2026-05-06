@@ -7,6 +7,7 @@ from src.channels.registry import _resolve_dotpath
 from src.config.schema import Config
 from src.security.secret_refs import (
     resolve_data_secret_refs,
+    resolve_inline_mapping_refs,
     resolve_inline_secret_refs,
     resolve_secret_ref,
 )
@@ -42,6 +43,17 @@ def test_resolve_inline_secret_refs_handles_full_value_and_multiple_refs() -> No
 
     assert resolve_inline_secret_refs("secret://first", secrets.get) == "one"
     assert resolve_inline_secret_refs("secret://first,secret://second", secrets.get) == "one,two"
+
+
+def test_resolve_inline_mapping_refs_resolves_string_mapping() -> None:
+    secrets = {"token": "xyz"}
+
+    resolved = resolve_inline_mapping_refs(
+        {"Authorization": "Bearer secret://token", "Mode": "test"},
+        secrets.get,
+    )
+
+    assert resolved == {"Authorization": "Bearer xyz", "Mode": "test"}
 
 
 def test_resolve_data_secret_refs_preserves_model_type(monkeypatch) -> None:

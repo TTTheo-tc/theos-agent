@@ -68,6 +68,16 @@ def resolve_inline_secret_refs(
     return _SECRET_REF_RE.sub(_replace, value)
 
 
+def resolve_inline_mapping_refs(
+    mapping: dict[str, str] | None,
+    resolver: Callable[[str], str | None],
+) -> dict[str, str] | None:
+    """Resolve embedded ``secret://name`` references inside a string mapping."""
+    if mapping is None:
+        return None
+    return {key: resolve_inline_secret_refs(value, resolver) for key, value in mapping.items()}
+
+
 def resolve_data_secret_refs(value: Any) -> Any:
     """Recursively resolve secret refs in lists, dicts, and pydantic models."""
     if isinstance(value, BaseModel):
