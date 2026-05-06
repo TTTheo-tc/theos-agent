@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import math
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -116,8 +116,8 @@ def temporal_decay(created_at: str, half_life_days: float) -> float:
     try:
         ts = datetime.fromisoformat(created_at)
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        age_days = (datetime.now(timezone.utc) - ts).total_seconds() / 86400.0
+            ts = ts.replace(tzinfo=UTC)
+        age_days = (datetime.now(UTC) - ts).total_seconds() / 86400.0
     except (ValueError, TypeError):
         return 1.0
     if age_days <= 0:
@@ -131,7 +131,7 @@ def temporal_decay(created_at: str, half_life_days: float) -> float:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _join_list(items: list[str] | None) -> str:
