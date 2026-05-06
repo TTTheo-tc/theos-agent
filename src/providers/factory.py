@@ -64,14 +64,9 @@ def _build_provider(
     - ``openai_compat`` → OpenAICompatProvider (native OpenAI SDK)
     """
     from src.providers.credentials import resolve_credentials
-    from src.security.secret_refs import resolve_secret_ref
 
     # Codex: OAuth-based, bypasses everything
-    if (
-        (spec and spec.backend == "codex")
-        or provider_name == "openai_codex"
-        or model.startswith("openai-codex/")
-    ):
+    if _is_codex_provider(spec, provider_name, model):
         from src.providers.openai_codex_provider import OpenAICodexProvider
 
         return OpenAICodexProvider(default_model=model)
@@ -100,31 +95,14 @@ def _build_provider(
         from src.providers.custom_provider import OpenAICompatProvider
 
         if provider_name == "custom":
-            # Custom uses config.providers.custom directly (existing pattern)
-            p = getattr(config.providers, "custom", None)
-            api_key = resolve_secret_ref(p.api_key, default="") if p else "no-key"
-            api_base = resolve_secret_ref(config.get_api_base(model)) or "http://localhost:8000/v1"
-            extra_headers = None
+            api_key, api_base, extra_headers = _custom_openai_compat_settings(config, model)
         else:
-            creds = resolve_credentials(provider_name, config, model, spec=spec)
-            api_key = creds.api_key
-            api_base = (
-                creds.api_base
-                or (spec.default_api_base if spec else "")
-                or "https://api.openai.com/v1"
+            api_key, api_base, extra_headers = _configured_openai_compat_settings(
+                spec,
+                provider_name,
+                model,
+                config,
             )
-            extra_headers = creds.extra_headers
-            if not api_key:
-                if spec and spec.is_oauth:
-                    provider_label = provider_name.replace("_", "-") if provider_name else "provider"
-                    raise ValueError(
-                        f"No OAuth credentials configured for {provider_label}. "
-                        f"Run: theos provider login {provider_label}"
-                    )
-                raise ValueError(
-                    f"No API key configured for {provider_name}. "
-                    f"Set one with: theos auth add --provider {provider_name} --key <key>"
-                )
         return OpenAICompatProvider(
             api_key=api_key or "no-key",
             api_base=api_base,
@@ -139,6 +117,61 @@ def _build_provider(
     raise ValueError(
         f"No provider implementation for backend={backend!r} (provider={provider_name}, "
         f"model={model}). All providers must use 'anthropic', 'openai_compat', or 'codex' backend."
+    )
+
+
+def _is_codex_provider(
+    spec: "ProviderSpec | None",
+    provider_name: str | None,
+    model: str,
+) -> bool:
+    return (
+        (spec and spec.backend == "codex")
+        or provider_name == "openai_codex"
+        or model.startswith("openai-codex/")
+    )
+
+
+def _custom_openai_compat_settings(
+    config: "Config",
+    model: str,
+) -> tuple[str | None, str, dict[str, str] | None]:
+    """Resolve settings for the explicit custom OpenAI-compatible endpoint."""
+    from src.security.secret_refs import resolve_secret_ref
+
+    p = getattr(config.providers, "custom", None)
+    api_key = resolve_secret_ref(p.api_key, default="") if p else "no-key"
+    api_base = resolve_secret_ref(config.get_api_base(model)) or "http://localhost:8000/v1"
+    return api_key, api_base, None
+
+
+def _configured_openai_compat_settings(
+    spec: "ProviderSpec",
+    provider_name: str | None,
+    model: str,
+    config: "Config",
+) -> tuple[str | None, str, dict[str, str] | None]:
+    """Resolve settings for registry-backed OpenAI-compatible providers."""
+    from src.providers.credentials import resolve_credentials
+
+    creds = resolve_credentials(provider_name, config, model, spec=spec)
+    if not creds.api_key:
+        _raise_missing_credentials(provider_name, spec)
+
+    api_base = creds.api_base or spec.default_api_base or "https://api.openai.com/v1"
+    return creds.api_key, api_base, creds.extra_headers
+
+
+def _raise_missing_credentials(provider_name: str | None, spec: "ProviderSpec") -> None:
+    provider_label = provider_name.replace("_", "-") if provider_name else "provider"
+    if spec.is_oauth:
+        raise ValueError(
+            f"No OAuth credentials configured for {provider_label}. "
+            f"Run: theos provider login {provider_label}"
+        )
+    raise ValueError(
+        f"No API key configured for {provider_name}. "
+        f"Set one with: theos auth add --provider {provider_name} --key <key>"
     )
 
 

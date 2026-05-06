@@ -35,6 +35,7 @@ class TestFactoryRouting:
             name="openai",
             model_prefix="",
             default_api_base="https://api.openai.com/v1",
+            is_oauth=False,
         )
         with patch("src.providers.credentials.resolve_credentials") as mock_creds:
             mock_creds.return_value = MagicMock(
@@ -44,6 +45,45 @@ class TestFactoryRouting:
             )
             provider = _build_provider(spec, "openai", "gpt-4o", MagicMock())
         assert isinstance(provider, OpenAICompatProvider)
+
+    def test_openai_backend_requires_api_key(self):
+        spec = MagicMock(
+            backend="openai_compat",
+            name="openai",
+            model_prefix="",
+            default_api_base="https://api.openai.com/v1",
+            is_oauth=False,
+        )
+        with patch("src.providers.credentials.resolve_credentials") as mock_creds:
+            mock_creds.return_value = MagicMock(
+                api_key=None,
+                api_base=None,
+                extra_headers=None,
+            )
+            with pytest.raises(ValueError, match="theos auth add --provider openai"):
+                _build_provider(spec, "openai", "gpt-4o", MagicMock())
+
+    def test_oauth_openai_compat_backend_requires_login(self):
+        spec = MagicMock(
+            backend="openai_compat",
+            name="github_copilot",
+            model_prefix="github_copilot",
+            default_api_base="https://api.githubcopilot.com",
+            is_oauth=True,
+        )
+        with patch("src.providers.credentials.resolve_credentials") as mock_creds:
+            mock_creds.return_value = MagicMock(
+                api_key=None,
+                api_base=None,
+                extra_headers=None,
+            )
+            with pytest.raises(ValueError, match="theos provider login github-copilot"):
+                _build_provider(
+                    spec,
+                    "github_copilot",
+                    "github_copilot/gpt-5.3-codex",
+                    MagicMock(),
+                )
 
     def test_custom_backend_uses_config(self):
         spec = MagicMock(backend="openai_compat", name="custom", model_prefix="")
@@ -56,6 +96,41 @@ class TestFactoryRouting:
         ):
             provider = _build_provider(spec, "custom", "my-model", config)
         assert isinstance(provider, OpenAICompatProvider)
+        assert provider.api_key == "sk-custom"
+        assert provider.api_base == "http://gateway/v1"
+        assert provider._extra_headers == {}
+
+    def test_oauth_openai_compat_backend_passes_token_headers(self):
+        spec = MagicMock(
+            backend="openai_compat",
+            name="github_copilot",
+            model_prefix="github_copilot",
+            default_api_base="https://api.githubcopilot.com",
+            is_oauth=True,
+        )
+        with patch("src.providers.credentials.resolve_credentials") as mock_creds:
+            mock_creds.return_value = MagicMock(
+                api_key="copilot-token",
+                api_base="https://api.githubcopilot.com",
+                extra_headers={
+                    "Authorization": "Bearer copilot-token",
+                    "x-app": "theos",
+                },
+            )
+            provider = _build_provider(
+                spec,
+                "github_copilot",
+                "github_copilot/gpt-5.3-codex",
+                MagicMock(),
+            )
+
+        assert isinstance(provider, OpenAICompatProvider)
+        assert provider.api_key == "copilot-token"
+        assert provider.api_base == "https://api.githubcopilot.com"
+        assert provider._extra_headers == {
+            "Authorization": "Bearer copilot-token",
+            "x-app": "theos",
+        }
 
     def test_unknown_backend_raises(self):
         spec = MagicMock(
