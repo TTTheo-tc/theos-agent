@@ -93,7 +93,7 @@ class Tool(ABC):
 
     def _validate(self, val: Any, schema: dict[str, Any], path: str) -> list[str]:
         t, label = schema.get("type"), path or "parameter"
-        if t in self._TYPE_MAP and not isinstance(val, self._TYPE_MAP[t]):
+        if t in self._TYPE_MAP and not self._matches_json_type(val, t):
             return [f"{label} should be {t}"]
 
         errors = []
@@ -123,6 +123,12 @@ class Tool(ABC):
                     self._validate(item, schema["items"], f"{path}[{i}]" if path else f"[{i}]")
                 )
         return errors
+
+    @classmethod
+    def _matches_json_type(cls, val: Any, type_name: str) -> bool:
+        if type_name in ("integer", "number") and isinstance(val, bool):
+            return False
+        return isinstance(val, cls._TYPE_MAP[type_name])
 
     def to_schema(self) -> dict[str, Any]:
         """Convert tool to OpenAI function schema format."""

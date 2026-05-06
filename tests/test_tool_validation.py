@@ -40,6 +40,27 @@ class SampleTool(Tool):
         return "ok"
 
 
+class NumberTool(Tool):
+    @property
+    def name(self) -> str:
+        return "number"
+
+    @property
+    def description(self) -> str:
+        return "number tool"
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {"ratio": {"type": "number"}},
+            "required": ["ratio"],
+        }
+
+    async def execute(self, **kwargs: Any) -> str:
+        return "ok"
+
+
 def test_validate_params_missing_required() -> None:
     tool = SampleTool()
     errors = tool.validate_params({"query": "hi"})
@@ -53,6 +74,15 @@ def test_validate_params_type_and_range() -> None:
 
     errors = tool.validate_params({"query": "hi", "count": "2"})
     assert any("count should be integer" in e for e in errors)
+
+    errors = tool.validate_params({"query": "hi", "count": True})
+    assert any("count should be integer" in e for e in errors)
+
+
+def test_validate_params_rejects_bool_for_number() -> None:
+    tool = NumberTool()
+    errors = tool.validate_params({"ratio": False})
+    assert any("ratio should be number" in e for e in errors)
 
 
 def test_validate_params_enum_and_min_length() -> None:
