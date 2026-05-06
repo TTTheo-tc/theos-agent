@@ -41,6 +41,30 @@ def _read_text_with_encoding(fp: Path) -> tuple[str, str]:
         return fp.read_text(encoding="utf-8"), "utf-8"
 
 
+def _load_edit_target(
+    target: str,
+    workspace: Path | None,
+    allowed_dir: Path | None,
+    session_key: str | None,
+) -> tuple[Path | None, str, str, str | None]:
+    fp, error = _resolve_edit_path(target, workspace, allowed_dir)
+    if error:
+        return None, "", "", error
+    assert fp is not None
+
+    staleness = WriteFileTool.check_staleness(session_key, str(fp))
+    if staleness:
+        return None, "", "", staleness
+
+    content, encoding = _read_text_with_encoding(fp)
+    return fp, content, encoding, None
+
+
+def _write_edit_result(fp: Path, content: str, encoding: str, session_key: str | None) -> None:
+    fp.write_text(content, encoding=encoding)
+    WriteFileTool.record_read(session_key, str(fp), fp.stat().st_mtime)
+
+
 def _replace_content(
     content: str,
     old: str,
@@ -141,16 +165,15 @@ class EditFileTool(ContextAwareTool):
         if old is None or new is None:
             return "Error: old_string and new_string are required"
         try:
-            fp, error = _resolve_edit_path(target, self._workspace, self._allowed_dir)
+            fp, content, encoding, error = _load_edit_target(
+                target,
+                self._workspace,
+                self._allowed_dir,
+                session_key,
+            )
             if error:
                 return error
             assert fp is not None
-
-            staleness = WriteFileTool.check_staleness(session_key, str(fp))
-            if staleness:
-                return staleness
-
-            content, encoding = _read_text_with_encoding(fp)
 
             if old not in content:
                 return self._not_found_message(old, content, target)
@@ -163,9 +186,7 @@ class EditFileTool(ContextAwareTool):
                 )
 
             new_content, replaced = _replace_content(content, old, new, replace_all=replace_all)
-            fp.write_text(new_content, encoding=encoding)
-
-            WriteFileTool.record_read(session_key, str(fp), fp.stat().st_mtime)
+            _write_edit_result(fp, new_content, encoding, session_key)
             return f"Successfully edited {fp} ({replaced} replacement{'s' if replaced > 1 else ''})"
         except PermissionError as e:
             return f"Error: {e}"
@@ -267,16 +288,15 @@ class MultiEditTool(ContextAwareTool):
         if not edits:
             return "Error: edits list is required"
         try:
-            fp, error = _resolve_edit_path(target, self._workspace, self._allowed_dir)
+            fp, content, encoding, error = _load_edit_target(
+                target,
+                self._workspace,
+                self._allowed_dir,
+                session_key,
+            )
             if error:
                 return error
             assert fp is not None
-
-            staleness = WriteFileTool.check_staleness(session_key, str(fp))
-            if staleness:
-                return staleness
-
-            content, encoding = _read_text_with_encoding(fp)
 
             applied = 0
 
@@ -291,9 +311,7 @@ class MultiEditTool(ContextAwareTool):
                 content, _ = _replace_content(content, old, new, replace_all=replace_all)
                 applied += 1
 
-            fp.write_text(content, encoding=encoding)
-
-            WriteFileTool.record_read(session_key, str(fp), fp.stat().st_mtime)
+            _write_edit_result(fp, content, encoding, session_key)
             return f"Successfully applied {applied} edit(s) to {fp}"
         except PermissionError as e:
             return f"Error: {e}"
