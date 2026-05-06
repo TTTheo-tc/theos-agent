@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from src.agent.tools.base import ContextAwareTool
 from src.memory.structured import StructuredMemoryStore
@@ -13,6 +13,45 @@ if TYPE_CHECKING:
 
     from src.agent.tools.context import ToolContext
 
+WorkspaceResolver = Callable[[str | None], "Path | None"] | None
+
+
+def _resolve_workspace(
+    workspace_resolver: WorkspaceResolver,
+    context: "ToolContext | None",
+    *,
+    unavailable_message: str,
+) -> tuple["Path | None", str | None]:
+    if workspace_resolver is None:
+        return None, unavailable_message
+    workspace = workspace_resolver(context.session_key if context else None)
+    if workspace is None:
+        return None, unavailable_message
+    return workspace, None
+
+
+def _required_text_arg(kwargs: dict[str, Any], name: str, label: str) -> tuple[str, str | None]:
+    value = kwargs.get(name, "")
+    if not value:
+        return "", f"Please provide a {label}."
+    return str(value), None
+
+
+async def _load_structured_record(
+    workspace: "Path",
+    loader: Callable[[StructuredMemoryStore], Awaitable[dict[str, Any] | None]],
+) -> dict[str, Any] | None:
+    store = StructuredMemoryStore(workspace)
+    try:
+        await store.ensure_kg()
+        return await loader(store)
+    finally:
+        await store.close()
+
+
+def _dump_json(record: dict[str, Any]) -> str:
+    return json.dumps(record, ensure_ascii=False, indent=2)
+
 
 class StructuredMemorySearchTool(ContextAwareTool):
     """Search structured task, rule, and research-note objects."""
@@ -20,7 +59,7 @@ class StructuredMemorySearchTool(ContextAwareTool):
     def __init__(
         self,
         *,
-        workspace_resolver: Callable[[str | None], "Path"] | None = None,
+        workspace_resolver: WorkspaceResolver = None,
         default_max_results: int = 6,
         recall_telemetry_enabled: bool = False,
     ) -> None:
@@ -64,15 +103,15 @@ class StructuredMemorySearchTool(ContextAwareTool):
             "required": ["query"],
         }
 
-    def _resolve_workspace(self, session_key: str | None) -> "Path | None":
-        if self._workspace_resolver is None:
-            return None
-        return self._workspace_resolver(session_key)
-
     async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
-        workspace = self._resolve_workspace(_context.session_key if _context else None)
-        if workspace is None:
-            return "Structured memory search is not available (workspace not resolved)."
+        workspace, error = _resolve_workspace(
+            self._workspace_resolver,
+            _context,
+            unavailable_message="Structured memory search is not available (workspace not resolved).",
+        )
+        if error:
+            return error
+        assert workspace is not None
 
         query = kwargs.get("query", "")
         if not query:
@@ -135,7 +174,7 @@ class StructuredMemorySearchTool(ContextAwareTool):
 class ResearchNoteGetTool(ContextAwareTool):
     """Retrieve a structured research note by ID."""
 
-    def __init__(self, *, workspace_resolver: Callable[[str | None], "Path"] | None = None) -> None:
+    def __init__(self, *, workspace_resolver: WorkspaceResolver = None) -> None:
         self._workspace_resolver = workspace_resolver
 
     @property
@@ -162,35 +201,33 @@ class ResearchNoteGetTool(ContextAwareTool):
             "required": ["note_id"],
         }
 
-    def _resolve_workspace(self, session_key: str | None) -> "Path | None":
-        if self._workspace_resolver is None:
-            return None
-        return self._workspace_resolver(session_key)
-
     async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
-        workspace = self._resolve_workspace(_context.session_key if _context else None)
-        if workspace is None:
-            return "Research note retrieval is not available (workspace not resolved)."
+        workspace, error = _resolve_workspace(
+            self._workspace_resolver,
+            _context,
+            unavailable_message="Research note retrieval is not available (workspace not resolved).",
+        )
+        if error:
+            return error
+        assert workspace is not None
 
-        note_id = kwargs.get("note_id", "")
-        if not note_id:
-            return "Please provide a research note ID."
+        note_id, error = _required_text_arg(kwargs, "note_id", "research note ID")
+        if error:
+            return error
 
-        store = StructuredMemoryStore(workspace)
-        try:
-            await store.ensure_kg()
-            note = await store.get_research_note(note_id)
-        finally:
-            await store.close()
+        note = await _load_structured_record(
+            workspace,
+            lambda store: store.get_research_note(note_id),
+        )
         if note is None:
             return f"Research note '{note_id}' not found."
-        return json.dumps(note, ensure_ascii=False, indent=2)
+        return _dump_json(note)
 
 
 class TaskMemoryGetTool(ContextAwareTool):
     """Retrieve a structured task memory by ID."""
 
-    def __init__(self, *, workspace_resolver: Callable[[str | None], "Path"] | None = None) -> None:
+    def __init__(self, *, workspace_resolver: WorkspaceResolver = None) -> None:
         self._workspace_resolver = workspace_resolver
 
     @property
@@ -217,29 +254,27 @@ class TaskMemoryGetTool(ContextAwareTool):
             "required": ["task_id"],
         }
 
-    def _resolve_workspace(self, session_key: str | None) -> "Path | None":
-        if self._workspace_resolver is None:
-            return None
-        return self._workspace_resolver(session_key)
-
     async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
-        workspace = self._resolve_workspace(_context.session_key if _context else None)
-        if workspace is None:
-            return "Task memory retrieval is not available (workspace not resolved)."
+        workspace, error = _resolve_workspace(
+            self._workspace_resolver,
+            _context,
+            unavailable_message="Task memory retrieval is not available (workspace not resolved).",
+        )
+        if error:
+            return error
+        assert workspace is not None
 
-        task_id = kwargs.get("task_id", "")
-        if not task_id:
-            return "Please provide a task memory ID."
+        task_id, error = _required_text_arg(kwargs, "task_id", "task memory ID")
+        if error:
+            return error
 
-        store = StructuredMemoryStore(workspace)
-        try:
-            await store.ensure_kg()
-            task = await store.get_task_memory(task_id)
-        finally:
-            await store.close()
+        task = await _load_structured_record(
+            workspace,
+            lambda store: store.get_task_memory(task_id),
+        )
         if task is None:
             return f"Task memory '{task_id}' not found."
-        return json.dumps(task, ensure_ascii=False, indent=2)
+        return _dump_json(task)
 
 
 class DomainRuleGetTool(ContextAwareTool):
@@ -248,7 +283,7 @@ class DomainRuleGetTool(ContextAwareTool):
     def __init__(
         self,
         *,
-        workspace_resolver: Callable[[str | None], "Path"] | None = None,
+        workspace_resolver: WorkspaceResolver = None,
         recall_telemetry_enabled: bool = False,
     ) -> None:
         self._workspace_resolver = workspace_resolver
@@ -278,26 +313,24 @@ class DomainRuleGetTool(ContextAwareTool):
             "required": ["rule_id"],
         }
 
-    def _resolve_workspace(self, session_key: str | None) -> "Path | None":
-        if self._workspace_resolver is None:
-            return None
-        return self._workspace_resolver(session_key)
-
     async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
-        workspace = self._resolve_workspace(_context.session_key if _context else None)
-        if workspace is None:
-            return "Domain rule retrieval is not available (workspace not resolved)."
+        workspace, error = _resolve_workspace(
+            self._workspace_resolver,
+            _context,
+            unavailable_message="Domain rule retrieval is not available (workspace not resolved).",
+        )
+        if error:
+            return error
+        assert workspace is not None
 
-        rule_id = kwargs.get("rule_id", "")
-        if not rule_id:
-            return "Please provide a domain rule ID."
+        rule_id, error = _required_text_arg(kwargs, "rule_id", "domain rule ID")
+        if error:
+            return error
 
-        store = StructuredMemoryStore(workspace)
-        try:
-            await store.ensure_kg()
-            rule = await store.get_domain_rule(rule_id)
-        finally:
-            await store.close()
+        rule = await _load_structured_record(
+            workspace,
+            lambda store: store.get_domain_rule(rule_id),
+        )
         if rule is None:
             return f"Domain rule '{rule_id}' not found."
 
@@ -326,4 +359,4 @@ class DomainRuleGetTool(ContextAwareTool):
                 )
             )
 
-        return json.dumps(rule, ensure_ascii=False, indent=2)
+        return _dump_json(rule)

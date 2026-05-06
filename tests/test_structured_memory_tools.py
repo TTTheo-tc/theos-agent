@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -166,6 +167,83 @@ async def test_domain_rule_get_tool_returns_json(tmp_path: Path) -> None:
         assert meta["selected_primary"] == "paper/reading"
     finally:
         await store.close()
+
+
+async def test_domain_rule_get_tool_writes_recall_telemetry_when_enabled(
+    tmp_path: Path,
+) -> None:
+    store, result = await _seed_store(tmp_path)
+    try:
+        rule_id = str(result.rule_ids[0])
+        tool = DomainRuleGetTool(
+            workspace_resolver=lambda _sk: tmp_path,
+            recall_telemetry_enabled=True,
+        )
+
+        output = await tool.execute(
+            rule_id=rule_id,
+            _context=ToolContext(session_key="cli:test"),
+        )
+        await asyncio.sleep(0)
+
+        payload = json.loads(output)
+        journal = tmp_path / "memory" / "instinct" / "recall_journal.jsonl"
+        entries = [json.loads(line) for line in journal.read_text().splitlines()]
+        entry = next(item for item in entries if item["target_id"] == rule_id)
+        assert payload["id"] == rule_id
+        assert entry["target_kind"] == "kg_rule"
+        assert entry["tool"] == "domain_rule_get"
+    finally:
+        await store.close()
+
+
+@pytest.mark.parametrize(
+    ("tool_cls", "kwargs", "expected"),
+    [
+        (ResearchNoteGetTool, {}, "Please provide a research note ID."),
+        (TaskMemoryGetTool, {}, "Please provide a task memory ID."),
+        (DomainRuleGetTool, {}, "Please provide a domain rule ID."),
+    ],
+)
+async def test_structured_get_tools_require_ids(
+    tool_cls: type,
+    kwargs: dict,
+    expected: str,
+    tmp_path: Path,
+) -> None:
+    tool = tool_cls(workspace_resolver=lambda _sk: tmp_path)
+
+    assert await tool.execute(**kwargs) == expected
+
+
+@pytest.mark.parametrize(
+    ("tool_cls", "kwargs", "expected"),
+    [
+        (
+            ResearchNoteGetTool,
+            {"note_id": "missing"},
+            "Research note retrieval is not available (workspace not resolved).",
+        ),
+        (
+            TaskMemoryGetTool,
+            {"task_id": "missing"},
+            "Task memory retrieval is not available (workspace not resolved).",
+        ),
+        (
+            DomainRuleGetTool,
+            {"rule_id": "missing"},
+            "Domain rule retrieval is not available (workspace not resolved).",
+        ),
+    ],
+)
+async def test_structured_get_tools_report_unavailable_workspace(
+    tool_cls: type,
+    kwargs: dict,
+    expected: str,
+) -> None:
+    tool = tool_cls()
+
+    assert await tool.execute(**kwargs) == expected
 
 
 async def test_structured_memory_search_tool_filters_object_type(tmp_path: Path) -> None:
