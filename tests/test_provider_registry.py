@@ -48,6 +48,22 @@ class TestProviderBackend:
                 "codex",
             ), f"{spec.name} has no valid backend"
 
+    def test_provider_names_are_unique(self):
+        names = [spec.name for spec in PROVIDERS]
+        assert len(names) == len(set(names))
+
+    def test_default_field_intent_is_pinned_for_plain_openai_provider(self):
+        spec = find_by_name("openai")
+        assert spec is not None
+        assert spec.backend == "openai_compat"
+        assert spec.model_prefix == ""
+        assert spec.default_api_base == ""
+        assert spec.is_gateway is False
+        assert spec.is_local is False
+        assert spec.is_oauth is False
+        assert spec.strip_model_prefix is False
+        assert spec.supports_prompt_caching is False
+
     def test_model_prefix_field_exists(self):
         spec = find_by_name("openrouter")
         assert spec is not None
