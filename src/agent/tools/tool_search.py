@@ -77,8 +77,7 @@ class ToolSearchTool(Tool):
 
         # Mode 2: select:name1,name2 -> activate exact names
         if query.startswith("select:"):
-            names = [n.strip() for n in query[len("select:") :].split(",") if n.strip()]
-            return self._activate_by_names(names)
+            return self._activate_by_names(self._parse_selection(query))
 
         # Mode 3: keyword search -> return candidate deferred tools
         matches = self._registry.search_deferred(query, max_results=max_results)
@@ -96,6 +95,10 @@ class ToolSearchTool(Tool):
         for item in summary:
             lines.append(f"- **{item['name']}**: {item['description']}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _parse_selection(query: str) -> list[str]:
+        return [name.strip() for name in query[len("select:") :].split(",") if name.strip()]
 
     def _activate_by_names(self, names: list[str]) -> str:
         """Activate tools by exact name and return results."""
@@ -116,6 +119,14 @@ class ToolSearchTool(Tool):
         if not activated and not already_active and not_found:
             return f"No matching deferred tools found. Not found: {', '.join(not_found)}"
 
+        return self._format_activation_result(activated, already_active, not_found)
+
+    @staticmethod
+    def _format_activation_result(
+        activated: list[dict[str, str]],
+        already_active: list[str],
+        not_found: list[str],
+    ) -> str:
         lines = [f"**Activated {len(activated)} new tool(s):**\n"]
         for item in activated:
             lines.append(f"- **{item['name']}**: {item['description']}")
