@@ -1,6 +1,16 @@
-"""Tests for SafeExecTool command whitelist and environment sanitization."""
+"""Tests for shell tools, command guards, and environment sanitization."""
 
-from src.agent.tools.shell import _SAFE_ENV_VARS, SafeExecTool, _filter_env
+import asyncio
+
+from src.agent.tools.shell import (
+    _SAFE_ENV_VARS,
+    ExecTool,
+    SafeExecTool,
+    _filter_env,
+    _format_command_result,
+    _semantic_exit_message,
+    _strip_wrappers,
+)
 
 
 def _tool():
@@ -94,6 +104,54 @@ async def test_safe_exec_blocks_subshell():
 
 def test_safe_exec_tool_name():
     assert _tool().name == "bash"
+
+
+# ---------------------------------------------------------------------------
+# Result formatting and wrapper helpers
+# ---------------------------------------------------------------------------
+
+
+def test_semantic_exit_message_skips_env_assignments():
+    assert _semantic_exit_message("FOO=bar grep needle missing.txt", 1) == (
+        "(grep: No matches found)"
+    )
+
+
+def test_format_command_result_handles_semantic_and_generic_errors():
+    assert _format_command_result("grep needle missing.txt", "", 1) == "\n(grep: No matches found)"
+    assert _format_command_result("python fail.py", "boom", 2) == "boom\n\nExit code: 2"
+    assert _format_command_result("true", "", 0) == "(no output)"
+
+
+def test_strip_wrappers_recurses_through_common_prefixes():
+    assert _strip_wrappers("timeout 10 nice -n 5 rm -rf /tmp/x") == "rm -rf /tmp/x"
+
+
+def test_exec_tool_timeout_conversion_caps_seconds():
+    tool = ExecTool(timeout=120)
+    assert tool._effective_timeout(None) == 120
+    assert tool._effective_timeout(2500) == 2
+    assert tool._effective_timeout(900000) == 600
+
+
+async def test_exec_tool_background_result_uses_shared_formatter():
+    tool = ExecTool(timeout=5)
+    task = asyncio.create_task(tool._run_command(_FakeState("", 1), "grep needle file", 5))
+    task_id = "bg_test"
+    tool._background_tasks[task_id] = task
+    tool._background_created[task_id] = 10**18
+    await task
+
+    assert tool.get_background_result(task_id) == "\n(grep: No matches found)"
+
+
+class _FakeState:
+    def __init__(self, output: str, returncode: int) -> None:
+        self.output = output
+        self.returncode = returncode
+
+    async def run(self, command, timeout, on_progress=None):
+        return self.output, self.returncode
 
 
 # ---------------------------------------------------------------------------

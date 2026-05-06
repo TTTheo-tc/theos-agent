@@ -111,6 +111,19 @@ def _semantic_exit_message(command: str, returncode: int) -> str | None:
     return None
 
 
+def _format_command_result(command: str, output: str, returncode: int) -> str:
+    parts = []
+    if output.strip():
+        parts.append(output)
+    if returncode != 0:
+        semantic = _semantic_exit_message(command, returncode)
+        if semantic:
+            parts.append(f"\n{semantic}")
+        else:
+            parts.append(f"\nExit code: {returncode}")
+    return "\n".join(parts) if parts else "(no output)"
+
+
 # ---------------------------------------------------------------------------
 # Wrapper-command stripping for safety guard bypass prevention
 # ---------------------------------------------------------------------------
@@ -470,6 +483,31 @@ class ExecTool(Tool):
             return f"Background task {task_id} failed: {exc}"
         return task.result()
 
+    def _effective_timeout(self, timeout_ms: int | None) -> int:
+        if timeout_ms is not None:
+            return min(int(timeout_ms / 1000), 600)
+        return self.timeout
+
+    async def _run_command(self, state: _ShellState, command: str, timeout: int) -> str:
+        try:
+            output, returncode = await state.run(
+                command,
+                timeout,
+                on_progress=self._progress_callback,
+            )
+            return _format_command_result(command, output, returncode)
+        except Exception as e:
+            return f"Error executing command: {str(e)}"
+
+    def _start_background_task(self, state: _ShellState, command: str, timeout: int) -> str:
+        self._sweep_stale_background_tasks()
+        task_id = f"bg_{uuid4().hex[:8]}"
+        self._background_tasks[task_id] = asyncio.create_task(
+            self._run_command(state, command, timeout)
+        )
+        self._background_created[task_id] = time.monotonic()
+        return f"Background task started (id: {task_id}). Use task_id to check status."
+
     async def execute(
         self,
         command: str,
@@ -489,56 +527,12 @@ class ExecTool(Tool):
         if guard_error:
             return guard_error
 
-        if timeout is not None:
-            effective_timeout = min(int(timeout / 1000), 600)
-        else:
-            effective_timeout = self.timeout
+        effective_timeout = self._effective_timeout(timeout)
 
         if run_in_background:
-            task_id = f"bg_{uuid4().hex[:8]}"
+            return self._start_background_task(state, command, effective_timeout)
 
-            async def _bg_run() -> str:
-                try:
-                    output, returncode = await state.run(
-                        command, effective_timeout, on_progress=self._progress_callback
-                    )
-                    parts = []
-                    if output.strip():
-                        parts.append(output)
-                    if returncode != 0:
-                        semantic = _semantic_exit_message(command, returncode)
-                        if semantic:
-                            parts.append(f"\n{semantic}")
-                        else:
-                            parts.append(f"\nExit code: {returncode}")
-                    return "\n".join(parts) if parts else "(no output)"
-                except Exception as e:
-                    return f"Error executing command: {str(e)}"
-
-            self._sweep_stale_background_tasks()
-            task = asyncio.create_task(_bg_run())
-            self._background_tasks[task_id] = task
-            self._background_created[task_id] = time.monotonic()
-            return f"Background task started (id: {task_id}). Use task_id to check status."
-
-        try:
-            output, returncode = await state.run(
-                command, effective_timeout, on_progress=self._progress_callback
-            )
-
-            parts = []
-            if output.strip():
-                parts.append(output)
-            if returncode != 0:
-                semantic = _semantic_exit_message(command, returncode)
-                if semantic:
-                    parts.append(f"\n{semantic}")
-                else:
-                    parts.append(f"\nExit code: {returncode}")
-            return "\n".join(parts) if parts else "(no output)"
-
-        except Exception as e:
-            return f"Error executing command: {str(e)}"
+        return await self._run_command(state, command, effective_timeout)
 
     def close(self) -> None:
         """Reset shell state, cancel background tasks, and clean up."""
