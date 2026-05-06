@@ -87,6 +87,7 @@ class AgentTool(ContextAwareTool):
         **kwargs: Any,
     ) -> str:
         """Launch a subagent or send a message to an existing one."""
+        del kwargs
         from src.agent.tools.context import ToolContext
 
         ctx = _context or ToolContext()

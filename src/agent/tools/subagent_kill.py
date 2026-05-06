@@ -46,7 +46,8 @@ class SubagentKillTool(ContextAwareTool):
         task_id: str,
         cascade: bool = True,
         _context: Any = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> str:
+        del kwargs
         ok = await self._executor.kill(task_id, cascade=cascade, context=_context)
         return json.dumps({"task_id": task_id, "killed": ok, "cascade": cascade})

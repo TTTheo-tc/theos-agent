@@ -66,6 +66,7 @@ class MessageTool(ContextAwareTool):
         media: list[str] | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         from src.agent.tools.context import ToolContext
 
         ctx = _context or ToolContext()

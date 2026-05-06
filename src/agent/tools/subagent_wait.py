@@ -49,8 +49,9 @@ class SubagentWaitTool(ContextAwareTool):
         task_id: str,
         timeout_seconds: int = 30,
         _context: Any = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> str:
+        del kwargs
         result = await self._executor.wait(
             task_id,
             timeout_seconds=timeout_seconds,

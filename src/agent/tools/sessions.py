@@ -26,9 +26,9 @@ class SessionsListTool(Tool):
 
     def __init__(
         self,
-        session_manager: "SessionManager",
-        turn_store: "TurnStore | None" = None,
-        subagent_store: "SubagentStore | None" = None,
+        session_manager: SessionManager,
+        turn_store: TurnStore | None = None,
+        subagent_store: SubagentStore | None = None,
     ) -> None:
         self._sm = session_manager
         self._turns = turn_store
@@ -64,6 +64,7 @@ class SessionsListTool(Tool):
         }
 
     async def execute(self, limit: int = 20, recoverable_only: bool = False, **kwargs: Any) -> str:
+        del kwargs
         raw = self._sm.list_sessions()
         rows = []
         for info in raw:
@@ -142,9 +143,9 @@ class SessionsHistoryTool(Tool):
 
     def __init__(
         self,
-        session_manager: "SessionManager",
-        turn_store: "TurnStore | None" = None,
-        subagent_store: "SubagentStore | None" = None,
+        session_manager: SessionManager,
+        turn_store: TurnStore | None = None,
+        subagent_store: SubagentStore | None = None,
     ) -> None:
         self._sm = session_manager
         self._turns = turn_store
@@ -179,6 +180,7 @@ class SessionsHistoryTool(Tool):
     _MAX_CONTENT_CHARS = 2000
 
     async def execute(self, session_key: str = "", limit: int = 50, **kwargs: Any) -> str:
+        del kwargs
         if not session_key:
             return json.dumps({"error": "session_key is required"})
 
@@ -277,7 +279,7 @@ class SessionsHistoryTool(Tool):
 class SessionsSendTool(ContextAwareTool):
     """Send a message into another session via the message bus."""
 
-    def __init__(self, bus: "MessageBus") -> None:
+    def __init__(self, bus: MessageBus) -> None:
         self._bus = bus
 
     @property
@@ -319,6 +321,7 @@ class SessionsSendTool(ContextAwareTool):
         _context: Any = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         if error := self._validate_send_request(session_key, message):
             return error
 
@@ -386,7 +389,7 @@ class SessionsSendTool(ContextAwareTool):
 class SubagentsListTool(ContextAwareTool):
     """List currently active subagent tasks."""
 
-    def __init__(self, manager: "SubagentManager") -> None:
+    def __init__(self, manager: SubagentManager) -> None:
         self._manager = manager
 
     @property
@@ -406,6 +409,7 @@ class SubagentsListTool(ContextAwareTool):
         }
 
     async def execute(self, _context: Any = None, **kwargs: Any) -> str:
+        del kwargs
         executor = getattr(self._manager, "executor", None)
         records = executor.list_tasks(context=_context) if executor is not None else []
         running = sum(1 for r in records if not r.is_terminal)
