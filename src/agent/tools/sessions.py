@@ -319,41 +319,23 @@ class SessionsSendTool(ContextAwareTool):
         _context: Any = None,
         **kwargs: Any,
     ) -> str:
-        if not session_key:
-            return json.dumps({"status": "error", "error": "session_key is required"})
-        if not message:
-            return json.dumps({"status": "error", "error": "message is required"})
+        if error := self._validate_send_request(session_key, message):
+            return error
 
         from src.agent.tools.context import ToolContext
-        from src.bus.events import InboundMessage
 
         ctx = _context or ToolContext()
-
-        # Parse target session key into channel:chat_id
-        parts = session_key.split(":", 1)
-        if len(parts) != 2:
-            return json.dumps(
-                {
-                    "status": "error",
-                    "error": f"Invalid session_key format: {session_key!r}. Expected 'channel:chat_id'.",
-                }
+        target = self._parse_session_key(session_key)
+        if target is None:
+            return self._error(
+                f"Invalid session_key format: {session_key!r}. Expected 'channel:chat_id'."
             )
-
-        target_channel, target_chat_id = parts
-
-        msg = InboundMessage(
-            channel=target_channel,
-            sender_id=ctx.sender_id or "sessions_send",
-            chat_id=target_chat_id,
-            content=message,
-            metadata={"source": "sessions_send", "origin_session": ctx.session_key},
-            sender_is_owner=ctx.sender_is_owner,
-        )
+        msg = self._build_inbound_message(target, message, ctx)
 
         try:
             await self._bus.publish_inbound(msg)
         except Exception as e:
-            return json.dumps({"status": "error", "error": str(e)})
+            return self._error(str(e))
 
         return json.dumps(
             {
@@ -362,6 +344,38 @@ class SessionsSendTool(ContextAwareTool):
                 "message_length": len(message),
             }
         )
+
+    def _validate_send_request(self, session_key: str, message: str) -> str | None:
+        if not session_key:
+            return self._error("session_key is required")
+        if not message:
+            return self._error("message is required")
+        return None
+
+    @staticmethod
+    def _parse_session_key(session_key: str) -> tuple[str, str] | None:
+        parts = session_key.split(":", 1)
+        if len(parts) != 2:
+            return None
+        return parts[0], parts[1]
+
+    @staticmethod
+    def _build_inbound_message(target: tuple[str, str], message: str, ctx: Any) -> Any:
+        from src.bus.events import InboundMessage
+
+        target_channel, target_chat_id = target
+        return InboundMessage(
+            channel=target_channel,
+            sender_id=ctx.sender_id or "sessions_send",
+            chat_id=target_chat_id,
+            content=message,
+            metadata={"source": "sessions_send", "origin_session": ctx.session_key},
+            sender_is_owner=ctx.sender_is_owner,
+        )
+
+    @staticmethod
+    def _error(message: str) -> str:
+        return json.dumps({"status": "error", "error": message})
 
 
 # ---------------------------------------------------------------------------
