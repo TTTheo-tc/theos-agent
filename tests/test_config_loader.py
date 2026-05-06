@@ -128,6 +128,14 @@ def test_slim_runtime_defaults():
     assert config.memory.telemetry.recall_enabled is False
 
 
+def test_theos_env_prefix_overrides_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("THEOS_AGENTS__DEFAULTS__MODEL", "openai-codex/gpt-5.5")
+
+    config = Config()
+
+    assert config.agents.defaults.model == "openai-codex/gpt-5.5"
+
+
 def test_save_config_writes_only_non_default_values_by_default(tmp_path: Path):
     config_path = tmp_path / "config.json"
     config = Config()

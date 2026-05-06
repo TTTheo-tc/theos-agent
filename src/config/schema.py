@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import src.config.schema_channels as _channel_schema
 from src.security.autonomy import AutonomyLevel
@@ -552,4 +552,4 @@ class Config(BaseSettings):
                 return spec.default_api_base
         return None
 
-    model_config = ConfigDict(env_prefix="ARIESCLAW_", env_nested_delimiter="__")
+    model_config = SettingsConfigDict(env_prefix="THEOS_", env_nested_delimiter="__")
