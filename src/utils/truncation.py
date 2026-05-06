@@ -10,11 +10,11 @@ import json
 from typing import Any
 
 
-def _truncate_value(v: Any, max_len: int = 200) -> Any:
+def _truncate_value(value: Any, max_len: int = 200) -> Any:
     """Truncate a single value if it's a long string, preserving type."""
-    if isinstance(v, str) and len(v) > max_len:
-        return v[:max_len] + "... [truncated]"
-    return v
+    if isinstance(value, str) and len(value) > max_len:
+        return value[:max_len] + "... [truncated]"
+    return value
 
 
 def truncate_tool_call_arguments(

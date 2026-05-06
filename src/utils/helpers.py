@@ -32,6 +32,7 @@ def safe_filename(name: str) -> str:
 def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]:
     """Sync bundled templates to workspace. Only creates missing files."""
     from importlib.resources import files as pkg_files
+    from importlib.resources.abc import Traversable
 
     from loguru import logger
 
@@ -46,7 +47,7 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
 
     added: list[str] = []
 
-    def _write(src, dest: Path):
+    def _write(src: Traversable | None, dest: Path) -> None:
         if dest.exists():
             return
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -65,6 +66,7 @@ def sync_workspace_templates(workspace: Path, silent: bool = False) -> list[str]
     if added and not silent:
         from rich.console import Console
 
+        console = Console()
         for name in added:
-            Console().print(f"  [dim]Created {name}[/dim]")
+            console.print(f"  [dim]Created {name}[/dim]")
     return added

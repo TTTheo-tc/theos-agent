@@ -13,7 +13,7 @@ def strip_think(text: str | None) -> str | None:
     return re.sub(r"<think>[\s\S]*?</think>", "", text).strip() or None
 
 
-def tool_hint(tool_calls: list) -> str:
+def tool_hint(tool_calls: list[Any]) -> str:
     """Format tool calls as concise hint, e.g. 'web_search("query")'."""
 
     def _fmt(tc: Any) -> str:
