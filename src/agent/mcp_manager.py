@@ -14,6 +14,15 @@ if TYPE_CHECKING:
     from src.agent.tools.registry import ToolRegistry
 
 
+def _is_mcp_close_noise(exc: BaseException) -> bool:
+    """Return True for MCP SDK close errors that are safe to suppress."""
+    if isinstance(exc, RuntimeError):
+        return True
+    if isinstance(exc, BaseExceptionGroup):
+        return all(_is_mcp_close_noise(item) for item in exc.exceptions)
+    return False
+
+
 class MCPManager:
     """Manages lazy connection to MCP servers."""
 
@@ -74,9 +83,23 @@ class MCPManager:
         if self._stack:
             try:
                 await self._stack.aclose()
-            except (RuntimeError, BaseExceptionGroup):
+            except (RuntimeError, BaseExceptionGroup) as exc:
+                if not _is_mcp_close_noise(exc):
+                    raise
                 pass  # MCP SDK cancel scope cleanup is noisy but harmless
-            self._stack = None
+            finally:
+                self._stack = None
+                self._mark_closed()
+        else:
+            self._mark_closed()
+
+    def _mark_closed(self) -> None:
+        self._connected = False
+        self._connecting = False
+        for entry in self._catalog.values():
+            if entry.get("status") == "connected":
+                entry["connected"] = False
+                entry["status"] = "closed"
 
     def _record_server_catalog(
         self,
