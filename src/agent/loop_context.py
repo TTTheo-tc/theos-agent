@@ -61,7 +61,7 @@ class TurnContextAssembler:
         roles: dict[str, AgentRoleConfig] | None = None,
         recall_service: MemoryRecallService | None = None,
         learning_enabled: bool = False,
-    ):
+    ) -> None:
         self._workspace = workspace
         self._roles = roles or {}
         self._recall_service = recall_service

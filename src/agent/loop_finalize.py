@@ -45,7 +45,7 @@ class TurnFinalizer:
         safety_fn: Callable[[], SafetyLayer],
         sessions: SessionManager,
         provider: LLMProvider | None = None,
-    ):
+    ) -> None:
         self.hooks = hooks
         self._get_safety = safety_fn
         self.sessions = sessions

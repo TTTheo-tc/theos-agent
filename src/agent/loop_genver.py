@@ -27,11 +27,11 @@ class GenVerHandler:
 
     def __init__(
         self,
-        provider: "LLMProvider",
+        provider: LLMProvider,
         workspace: Path,
-        bus: "MessageBus",
-        turn_store: "TurnStore | None" = None,
-    ):
+        bus: MessageBus,
+        turn_store: TurnStore | None = None,
+    ) -> None:
         self.provider = provider
         self.workspace = workspace
         self.bus = bus
@@ -131,7 +131,7 @@ class GenVerHandler:
         self,
         initial_messages: list[dict],
         *,
-        tools: "ToolRegistry",
+        tools: ToolRegistry,
         model: str,
         temperature: float,
         max_tokens: int | None,
@@ -146,11 +146,11 @@ class GenVerHandler:
         stock_config: Any,
         provider_keys: dict[str, str] | None,
         channel_env: dict[str, str],
-        memory_handler: "MemoryHandler",
+        memory_handler: MemoryHandler,
         genver_config: Any,
         context_add_assistant: Callable,
         context_add_tool_result: Callable,
-        subagent_manager: "SubagentManager | None" = None,
+        subagent_manager: SubagentManager | None = None,
         on_progress: Callable[..., Awaitable[None]] | None = None,
         tool_context: Any = None,
         session_key: str | None = None,
