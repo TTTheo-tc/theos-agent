@@ -91,18 +91,21 @@ async def append_recall_entries(
         day = now.strftime("%Y-%m-%d")
         qhash = _query_hash(query)
 
-        lines: list[str] = []
-        for r in results:
-            entry = _entry_for_result(
-                r,
-                timestamp=ts,
-                session_key=session_key,
-                tool=tool,
-                query=query,
-                query_hash=qhash,
-                day=day,
+        lines = [
+            json.dumps(
+                _entry_for_result(
+                    r,
+                    timestamp=ts,
+                    session_key=session_key,
+                    tool=tool,
+                    query=query,
+                    query_hash=qhash,
+                    day=day,
+                ),
+                ensure_ascii=False,
             )
-            lines.append(json.dumps(entry, ensure_ascii=False))
+            for r in results
+        ]
 
         with open(journal_path, "a") as f:
             f.write("\n".join(lines) + "\n")
