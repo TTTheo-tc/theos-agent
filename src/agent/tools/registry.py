@@ -287,6 +287,23 @@ class ToolRegistry:
             return response.modified_args, True, None
         return params, False, None
 
+    def _params_after_approval(
+        self,
+        tool: Tool,
+        name: str,
+        params: dict[str, Any],
+        risk: str,
+        approved_params: dict[str, Any],
+        *,
+        modified: bool,
+    ) -> tuple[dict[str, Any], str | None]:
+        if modified:
+            params = approved_params
+            risk = self._assess_risk(tool, params)
+            if autonomy_error := self._autonomy_error(name, params, risk):
+                return params, autonomy_error
+        return approved_params, None
+
     @staticmethod
     def _validation_error(tool: Tool, name: str, params: dict[str, Any]) -> str | None:
         errors = tool.validate_params(params)
@@ -331,13 +348,16 @@ class ToolRegistry:
             )
             if approval_error:
                 return approval_error
-            if modified:
-                params = approved_params
-                risk = self._assess_risk(tool, params)
-                if autonomy_error := self._autonomy_error(name, params, risk):
-                    return autonomy_error
-            else:
-                params = approved_params
+            params, approved_error = self._params_after_approval(
+                tool,
+                name,
+                params,
+                risk,
+                approved_params,
+                modified=modified,
+            )
+            if approved_error:
+                return approved_error
 
             if validation_error := self._validation_error(tool, name, params):
                 return validation_error
