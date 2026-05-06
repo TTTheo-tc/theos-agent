@@ -28,7 +28,7 @@ class ExploreTool(Tool):
         temperature: float = 0.1,
         max_tokens: int = 4096,
         restrict_to_workspace: bool = False,
-    ):
+    ) -> None:
         self._provider = provider
         self._workspace = workspace
         self._agentfs = agentfs
@@ -66,6 +66,8 @@ class ExploreTool(Tool):
 
     async def execute(self, task: str, **kwargs: Any) -> str:
         """Run the exploration sub-loop and return a workspace pointer."""
+        del kwargs
+
         from src.agent.loop_core import run_tool_loop
         from src.agent.tools.fs_list import ListDirTool
         from src.agent.tools.fs_read import ReadFileTool

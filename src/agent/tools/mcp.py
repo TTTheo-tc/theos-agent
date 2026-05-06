@@ -1,6 +1,7 @@
 """MCP client: connects to MCP servers and wraps their tools as native TheOS tools."""
 
 import asyncio
+from collections.abc import Callable
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -34,7 +35,7 @@ def _prepare_stdio_env(env: dict[str, str] | None) -> dict[str, str] | None:
 class MCPToolWrapper(Tool):
     """Wraps a single MCP server tool as a TheOS Tool."""
 
-    def __init__(self, session, server_name: str, tool_def, tool_timeout: int = 30):
+    def __init__(self, session: Any, server_name: str, tool_def: Any, tool_timeout: int = 30) -> None:
         self._session = session
         self._original_name = tool_def.name
         self._name = f"mcp_{server_name}_{tool_def.name}"
@@ -75,12 +76,12 @@ class MCPToolWrapper(Tool):
 
 
 async def connect_mcp_servers(
-    mcp_servers: dict,
+    mcp_servers: dict[str, Any],
     registry: ToolRegistry,
     stack: AsyncExitStack,
     *,
-    on_server_catalog=None,
-    on_server_failure=None,
+    on_server_catalog: Callable[..., None] | None = None,
+    on_server_failure: Callable[..., None] | None = None,
 ) -> None:
     """Connect to configured MCP servers and register their tools."""
     from mcp import ClientSession, StdioServerParameters
