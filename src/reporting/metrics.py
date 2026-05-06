@@ -8,6 +8,10 @@ from typing import Any
 from src.store.database import Database
 
 
+def _where_clause(where_parts: list[str]) -> str:
+    return (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+
 class MetricsCollector:
     """Compute aggregate metrics from the ``task_events`` table."""
 
@@ -39,8 +43,6 @@ class MetricsCollector:
             where_parts.append("timestamp <= ?")
             params.append(until.isoformat())
 
-        where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
-
         # Total unique tasks
         total_tasks = await self._count_distinct_tasks(where_parts, params)
 
@@ -55,7 +57,7 @@ class MetricsCollector:
 
         # Events by type
         rows = await self._db.fetchall(
-            f"SELECT event_type, COUNT(*) FROM task_events{where_clause} GROUP BY event_type",
+            f"SELECT event_type, COUNT(*) FROM task_events{_where_clause(where_parts)} GROUP BY event_type",
             tuple(params),
         )
         events_by_type = {r[0]: r[1] for r in rows}
@@ -109,9 +111,8 @@ class MetricsCollector:
         where_parts: list[str],
         params: list[Any],
     ) -> int:
-        where_clause = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
         row = await self._db.fetchone(
-            f"SELECT COUNT(DISTINCT {column}) FROM task_events{where_clause}",
+            f"SELECT COUNT(DISTINCT {column}) FROM task_events{_where_clause(where_parts)}",
             tuple(params),
         )
         return row[0] if row else 0
