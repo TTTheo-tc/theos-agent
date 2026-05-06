@@ -5,7 +5,7 @@ Extracted from AgentLoop to reduce loop.py complexity.
 
 from __future__ import annotations
 
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, suppress
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -47,7 +47,7 @@ class MCPManager:
         """Return configured server metadata plus any discovered MCP tools."""
         return [self._catalog[name].copy() for name in sorted(self._catalog)]
 
-    async def connect(self, registry: "ToolRegistry") -> None:
+    async def connect(self, registry: ToolRegistry) -> None:
         """Connect to configured MCP servers (one-time, lazy)."""
         if self._connected or self._connecting or not self._servers:
             return
@@ -70,10 +70,8 @@ class MCPManager:
                 "Failed to connect MCP servers (will retry next message)"
             )
             if self._stack:
-                try:
+                with suppress(Exception):
                     await self._stack.aclose()
-                except Exception:
-                    pass
                 self._stack = None
         finally:
             self._connecting = False
@@ -86,7 +84,7 @@ class MCPManager:
             except (RuntimeError, BaseExceptionGroup) as exc:
                 if not _is_mcp_close_noise(exc):
                     raise
-                pass  # MCP SDK cancel scope cleanup is noisy but harmless
+                # MCP SDK cancel scope cleanup is noisy but harmless.
             finally:
                 self._stack = None
                 self._mark_closed()

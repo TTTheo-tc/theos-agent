@@ -31,7 +31,7 @@ class SubagentManager:
         workspace: Path | str,
         bus: MessageBus,
         model: str | None = None,
-        roles: "dict[str, AgentRoleConfig] | None" = None,
+        roles: dict[str, AgentRoleConfig] | None = None,
         policy: SubagentPolicyConfig | None = None,
     ):
         self.provider = provider
