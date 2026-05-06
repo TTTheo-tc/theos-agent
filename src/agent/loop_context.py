@@ -59,7 +59,7 @@ class TurnContextAssembler:
         self,
         workspace: Path,
         roles: dict[str, AgentRoleConfig] | None = None,
-        recall_service: "MemoryRecallService | None" = None,
+        recall_service: MemoryRecallService | None = None,
         learning_enabled: bool = False,
     ):
         self._workspace = workspace
@@ -215,16 +215,16 @@ class TurnContextAssembler:
 
     async def build_turn_messages(
         self,
-        msg: "InboundMessage",
+        msg: InboundMessage,
         *,
         key: str,
         run_genver: bool,
         task_workspace: Path,
         ctx: ContextBuilder,
         history: list[dict],
-        hooks: "HookRunner",
+        hooks: HookRunner,
         model: str,
-        memory_config: "MemoryConfig | None",
+        memory_config: MemoryConfig | None,
         memory_search_enabled: bool,
         build_structured_recall: Callable[..., Any],
         maybe_compact: Callable[[list[dict]], Any],
@@ -282,8 +282,9 @@ class TurnContextAssembler:
                 last_msg["content"] = f"{ephemeral_block}\n\n{last_msg['content']}"
             else:
                 # multimodal list: prepend as text block
-                last_msg["content"] = [{"type": "text", "text": ephemeral_block}] + last_msg[
-                    "content"
+                last_msg["content"] = [
+                    {"type": "text", "text": ephemeral_block},
+                    *last_msg["content"],
                 ]
         initial_count = len(initial_messages)
 
