@@ -9,9 +9,8 @@ from __future__ import annotations
 import re
 import uuid
 
-import json_repair
-
 from src.providers.base import ToolCallRequest
+from src.providers.tool_args import parse_tool_arguments_object
 
 # ---------------------------------------------------------------------------
 # Allowlist
@@ -61,13 +60,7 @@ def _validate_and_build(payload_text: str) -> ToolCallRequest | None:
 
     Returns a ToolCallRequest on success, None on any validation failure.
     """
-    try:
-        data = json_repair.loads(payload_text)
-    except Exception:
-        return None
-
-    if not isinstance(data, dict):
-        return None
+    data = parse_tool_arguments_object(payload_text)
 
     name = data.get("name")
     arguments = data.get("arguments")

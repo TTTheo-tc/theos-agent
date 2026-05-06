@@ -19,6 +19,14 @@ def test_xml_tool_call_tag():
     assert tc.id.startswith("parsed_")
 
 
+def test_tool_call_payload_uses_shared_json_repair():
+    text = '<tool_call>{"name": "search", "arguments": {"q": "hello",},}</tool_call>'
+    result = parse_tool_calls_from_text(text)
+
+    assert len(result) == 1
+    assert result[0].arguments == {"q": "hello"}
+
+
 def test_xml_function_call_tag():
     text = '<FunctionCall>{"name": "read_file", "arguments": {"path": "/tmp/a"}}</FunctionCall>'
     result = parse_tool_calls_from_text(text)
