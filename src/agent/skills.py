@@ -408,15 +408,14 @@ class SkillsLoader:
 
     def _get_missing_requirements(self, skill_meta: dict) -> str:
         """Get a description of missing requirements."""
-        missing = []
+        return ", ".join(self._missing_requirements(skill_meta))
+
+    def _missing_requirements(self, skill_meta: dict) -> list[str]:
+        """Return unmet skill requirement labels in prompt display order."""
         requires = skill_meta.get("requires", {})
-        for b in requires.get("bins", []):
-            if not shutil.which(b):
-                missing.append(f"CLI: {b}")
-        for env in requires.get("env", []):
-            if not os.environ.get(env):
-                missing.append(f"ENV: {env}")
-        return ", ".join(missing)
+        missing = [f"CLI: {b}" for b in requires.get("bins", []) if not shutil.which(b)]
+        missing.extend(f"ENV: {env}" for env in requires.get("env", []) if not os.environ.get(env))
+        return missing
 
     def _parse_skill_metadata(self, raw: Any) -> dict:
         """Parse skill metadata JSON from frontmatter (supports TheOS and openclaw keys)."""
@@ -430,14 +429,7 @@ class SkillsLoader:
 
     def _check_requirements(self, skill_meta: dict) -> bool:
         """Check if skill requirements are met (bins, env vars)."""
-        requires = skill_meta.get("requires", {})
-        for b in requires.get("bins", []):
-            if not shutil.which(b):
-                return False
-        for env in requires.get("env", []):
-            if not os.environ.get(env):
-                return False
-        return True
+        return not self._missing_requirements(skill_meta)
 
     def _get_skill_meta(self, name: str) -> dict:
         """Get TheOS metadata for a skill (cached in frontmatter)."""
