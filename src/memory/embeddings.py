@@ -8,6 +8,10 @@ from typing import Any
 import httpx
 
 
+def _endpoint_url(base_url: str, path: str) -> str:
+    return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+
+
 class EmbeddingProvider(ABC):
     """Async interface for computing text embeddings."""
 
@@ -30,7 +34,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     ) -> None:
         self._model = model
         self._dimensions = dimensions
-        self._url = f"{base_url.rstrip('/')}/v1/embeddings"
+        self._url = _endpoint_url(base_url, "v1/embeddings")
         self._headers = {"Authorization": f"Bearer {api_key}"}
 
     async def embed_one(self, text: str) -> list[float]:
@@ -55,7 +59,7 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         base_url: str = "http://localhost:11434",
     ) -> None:
         self._model = model
-        self._url = f"{base_url.rstrip('/')}/api/embed"
+        self._url = _endpoint_url(base_url, "api/embed")
 
     async def embed_one(self, text: str) -> list[float]:
         async with httpx.AsyncClient(timeout=60) as client:

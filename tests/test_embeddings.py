@@ -65,6 +65,14 @@ class TestOpenAIProvider:
         assert provider.name() == "text-embedding-3-small"
         assert provider._dimensions == 512
 
+    def test_base_url_trailing_slash_normalized(self):
+        provider = OpenAIEmbeddingProvider(
+            model="text-embedding-3-small",
+            api_key="key",
+            base_url="https://api.example.com/",
+        )
+        assert provider._url == "https://api.example.com/v1/embeddings"
+
 
 # ---------------------------------------------------------------------------
 # TestOllamaProvider
@@ -91,6 +99,13 @@ class TestOllamaProvider:
     def test_name(self):
         provider = OllamaEmbeddingProvider(model="nomic-embed-text")
         assert provider.name() == "ollama/nomic-embed-text"
+
+    def test_base_url_trailing_slash_normalized(self):
+        provider = OllamaEmbeddingProvider(
+            model="nomic-embed-text",
+            base_url="http://localhost:11434/",
+        )
+        assert provider._url == "http://localhost:11434/api/embed"
 
 
 # ---------------------------------------------------------------------------
