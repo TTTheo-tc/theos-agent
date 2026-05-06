@@ -20,9 +20,11 @@ class TestResolveFromEnv:
             assert key == bytes.fromhex(key_hex)
 
     def test_env_var_too_short(self) -> None:
-        with patch.dict(os.environ, {"SECRETS_MASTER_KEY": "aa" * 10}):
-            with pytest.raises(ValueError, match="too short"):
-                resolve_master_key()
+        with (
+            patch.dict(os.environ, {"SECRETS_MASTER_KEY": "aa" * 10}),
+            pytest.raises(ValueError, match="too short"),
+        ):
+            resolve_master_key()
 
 
 class TestResolveFromKeychain:
@@ -87,9 +89,11 @@ class TestAuthStoreLifecycle:
 
             # Try to load with a different key
             key_b = "bb" * 32
-            with patch.dict(os.environ, {"SECRETS_MASTER_KEY": key_b}):
-                with pytest.raises(RuntimeError, match="Failed to decrypt"):
-                    load_auth_store()
+            with (
+                patch.dict(os.environ, {"SECRETS_MASTER_KEY": key_b}),
+                pytest.raises(RuntimeError, match="Failed to decrypt"),
+            ):
+                load_auth_store()
 
     def test_legacy_migration_success(self, tmp_path: Path) -> None:
         """Legacy JSON is migrated to .enc and deleted."""

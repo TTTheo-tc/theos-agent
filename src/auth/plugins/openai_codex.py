@@ -51,6 +51,7 @@ class OpenAICodexPlugin:
         import shutil
         import subprocess
 
+        del redirect_uri  # Required by OAuthPlugin; Codex CLI auth is not redirect-based.
         if shutil.which("codex"):
             try:
                 subprocess.run(["codex", "auth"], timeout=120)

@@ -59,6 +59,7 @@ class GitHubCopilotPlugin:
 
     def login(self, redirect_uri: str) -> OAuthCredential | None:
         """Device flow: obtain GitHub access token, then exchange for API key."""
+        del redirect_uri  # Required by OAuthPlugin; GitHub Copilot uses device flow.
         try:
             # Step 1: Get device code
             with httpx.Client(timeout=30) as client:
@@ -212,7 +213,7 @@ class GitHubCopilotPlugin:
 
         # Try reading cached API key
         if api_key_file.exists():
-            try:
+            with suppress(Exception):
                 api_key_info = json.loads(api_key_file.read_text(encoding="utf-8"))
                 token = api_key_info.get("token", "")
                 expires_at = api_key_info.get("expires_at", 0)
@@ -223,8 +224,6 @@ class GitHubCopilotPlugin:
                         refresh=access_token,
                         expires=int(expires_at) * 1000,
                     )
-            except Exception:
-                pass
 
         # API key expired or missing — try to refresh with the access token
         api_key_info = self._exchange_for_api_key(access_token)

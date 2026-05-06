@@ -21,10 +21,11 @@ def _make_cred(
     refresh: str = "1//refresh",
     expired: bool = False,
 ) -> OAuthCredential:
-    if expired:
-        expires = int((time.time() - 60) * 1000)  # 60s in the past
-    else:
-        expires = int((time.time() + 3600) * 1000)  # 1h in the future
+    expires = (
+        int((time.time() - 60) * 1000)  # 60s in the past
+        if expired
+        else int((time.time() + 3600) * 1000)  # 1h in the future
+    )
     return OAuthCredential(
         provider=provider,
         access=access,

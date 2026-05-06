@@ -18,9 +18,11 @@ class _FakePlugin:
         return {"Authorization": f"Bearer {token}"}
 
     def refresh(self, cred: OAuthCredential) -> OAuthCredential | None:
+        del cred
         return None
 
     def login(self, redirect_uri: str) -> OAuthCredential | None:
+        del redirect_uri
         return None
 
     def read_external_credentials(self) -> OAuthCredential | None:
