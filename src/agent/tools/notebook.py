@@ -8,11 +8,28 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent.tools.base import ContextAwareTool
 from src.agent.tools.fs_write import WriteFileTool
-from src.agent.tools.tool_security import policy_error
-from src.utils.path import resolve_path as _resolve_path
+from src.agent.tools.tool_security import resolve_policy_path
 
 if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
+
+
+def _resolve_notebook_path(
+    notebook_path: str,
+    workspace: Path | None,
+    allowed_dir: Path | None,
+    *,
+    kind: str,
+) -> tuple[Path | None, str | None]:
+    fp, error = resolve_policy_path(notebook_path, workspace, allowed_dir, kind=kind)
+    if error:
+        return None, error
+    assert fp is not None
+    if not fp.exists():
+        return None, f"Error: File not found: {notebook_path}"
+    if fp.suffix != ".ipynb":
+        return None, f"Error: Not a notebook file: {notebook_path}"
+    return fp, None
 
 
 class NotebookReadTool(ContextAwareTool):
@@ -54,17 +71,15 @@ class NotebookReadTool(ContextAwareTool):
     ) -> str:
         session_key = _context.session_key if _context else None
         try:
-            raw_policy_error = policy_error(notebook_path, kind="Notebook read")
-            if raw_policy_error:
-                return raw_policy_error
-            fp = _resolve_path(notebook_path, self._workspace, self._allowed_dir)
-            resolved_policy_error = policy_error(str(fp), kind="Notebook read")
-            if resolved_policy_error:
-                return resolved_policy_error
-            if not fp.exists():
-                return f"Error: File not found: {notebook_path}"
-            if fp.suffix != ".ipynb":
-                return f"Error: Not a notebook file: {notebook_path}"
+            fp, error = _resolve_notebook_path(
+                notebook_path,
+                self._workspace,
+                self._allowed_dir,
+                kind="Notebook read",
+            )
+            if error:
+                return error
+            assert fp is not None
 
             nb = json.loads(fp.read_text(encoding="utf-8"))
             cells = nb.get("cells", [])
@@ -172,17 +187,15 @@ class NotebookEditTool(ContextAwareTool):
     ) -> str:
         session_key = _context.session_key if _context else None
         try:
-            raw_policy_error = policy_error(notebook_path, kind="Notebook edit")
-            if raw_policy_error:
-                return raw_policy_error
-            fp = _resolve_path(notebook_path, self._workspace, self._allowed_dir)
-            resolved_policy_error = policy_error(str(fp), kind="Notebook edit")
-            if resolved_policy_error:
-                return resolved_policy_error
-            if not fp.exists():
-                return f"Error: File not found: {notebook_path}"
-            if fp.suffix != ".ipynb":
-                return f"Error: Not a notebook file: {notebook_path}"
+            fp, error = _resolve_notebook_path(
+                notebook_path,
+                self._workspace,
+                self._allowed_dir,
+                kind="Notebook edit",
+            )
+            if error:
+                return error
+            assert fp is not None
 
             # Enforce read-before-edit: the notebook must have been read first.
             resolved = str(fp)

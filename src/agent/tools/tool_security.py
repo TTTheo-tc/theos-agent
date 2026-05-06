@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.safety.policy import PolicyEngine
+from src.utils.path import resolve_path
 
 _POLICY = PolicyEngine()
 
@@ -17,3 +20,24 @@ def policy_error(text: str, *, kind: str) -> str | None:
         rule_ids = ", ".join(v.rule_id for v in result.violations if v.action.value == "review")
         return f"Error: {kind} requires human review by security policy ({rule_ids})"
     return None
+
+
+def resolve_policy_path(
+    target: str,
+    workspace: Path | None,
+    allowed_dir: Path | None,
+    *,
+    kind: str,
+) -> tuple[Path | None, str | None]:
+    """Resolve a tool path after checking both raw and resolved policy surfaces."""
+    raw_policy_error = policy_error(target, kind=kind)
+    if raw_policy_error:
+        return None, raw_policy_error
+    try:
+        resolved = resolve_path(target, workspace, allowed_dir)
+    except PermissionError as e:
+        return None, f"Error: {e}"
+    resolved_policy_error = policy_error(str(resolved), kind=kind)
+    if resolved_policy_error:
+        return None, resolved_policy_error
+    return resolved, None

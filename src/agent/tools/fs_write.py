@@ -7,33 +7,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.agent.tools.base import ContextAwareTool
-from src.agent.tools.tool_security import policy_error
+from src.agent.tools.tool_security import resolve_policy_path
 from src.utils.path import resolve_path as _resolve_path
 
 if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
 
 _DIFF_LIMIT = 2000
-
-
-def _resolve_write_path(
-    target: str,
-    workspace: Path | None,
-    allowed_dir: Path | None,
-    *,
-    kind: str,
-) -> tuple[Path | None, str | None]:
-    raw_policy_error = policy_error(target, kind=kind)
-    if raw_policy_error:
-        return None, raw_policy_error
-    try:
-        fp = _resolve_path(target, workspace, allowed_dir)
-    except PermissionError as e:
-        return None, f"Error: {e}"
-    resolved_policy_error = policy_error(str(fp), kind=kind)
-    if resolved_policy_error:
-        return None, resolved_policy_error
-    return fp, None
 
 
 def _read_existing_content(fp: Path) -> str | None:
@@ -179,7 +159,7 @@ class WriteFileTool(ContextAwareTool):
         if not target:
             return "Error: file_path is required"
         try:
-            fp, error = _resolve_write_path(
+            fp, error = resolve_policy_path(
                 target,
                 self._workspace,
                 self._allowed_dir,

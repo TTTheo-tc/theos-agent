@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from src.agent.tools.base import Tool
-from src.agent.tools.tool_security import policy_error
-from src.utils.path import resolve_path as _resolve_path
+from src.agent.tools.tool_security import resolve_policy_path
 
 
 def _resolve_directory(
@@ -16,16 +15,10 @@ def _resolve_directory(
     workspace: Path | None,
     allowed_dir: Path | None,
 ) -> tuple[Path | None, str | None]:
-    raw_policy_error = policy_error(path, kind="Directory listing")
-    if raw_policy_error:
-        return None, raw_policy_error
-    try:
-        dir_path = _resolve_path(path, workspace, allowed_dir)
-    except PermissionError as e:
-        return None, f"Error: {e}"
-    resolved_policy_error = policy_error(str(dir_path), kind="Directory listing")
-    if resolved_policy_error:
-        return None, resolved_policy_error
+    dir_path, error = resolve_policy_path(path, workspace, allowed_dir, kind="Directory listing")
+    if error:
+        return None, error
+    assert dir_path is not None
     if not dir_path.exists():
         return None, f"Error: Directory not found: {path}"
     if not dir_path.is_dir():

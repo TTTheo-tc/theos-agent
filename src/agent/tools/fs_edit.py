@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent.tools.base import ContextAwareTool
 from src.agent.tools.fs_write import WriteFileTool
-from src.agent.tools.tool_security import policy_error
-from src.utils.path import resolve_path as _resolve_path
+from src.agent.tools.tool_security import resolve_policy_path
 
 if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
@@ -20,16 +19,10 @@ def _resolve_edit_path(
     workspace: Path | None,
     allowed_dir: Path | None,
 ) -> tuple[Path | None, str | None]:
-    raw_policy_error = policy_error(target, kind="File edit")
-    if raw_policy_error:
-        return None, raw_policy_error
-    try:
-        fp = _resolve_path(target, workspace, allowed_dir)
-    except PermissionError as e:
-        return None, f"Error: {e}"
-    resolved_policy_error = policy_error(str(fp), kind="File edit")
-    if resolved_policy_error:
-        return None, resolved_policy_error
+    fp, error = resolve_policy_path(target, workspace, allowed_dir, kind="File edit")
+    if error:
+        return None, error
+    assert fp is not None
     if not fp.exists():
         return None, f"Error: File not found: {target}"
     return fp, None

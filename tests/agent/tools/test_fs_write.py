@@ -58,3 +58,21 @@ async def test_write_file_blocks_stale_read(tmp_path: Path) -> None:
 
     assert "modified since you last read it" in result
     assert target.read_text(encoding="utf-8") == "old\n"
+
+
+async def test_write_file_checks_policy_after_path_resolution(tmp_path: Path) -> None:
+    target = tmp_path / ".env"
+    target.write_text("SECRET=old\n", encoding="utf-8")
+    link = tmp_path / "safe-name"
+    try:
+        link.symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this platform")
+
+    result = await WriteFileTool(workspace=tmp_path).execute(
+        file_path="safe-name",
+        content="SECRET=new\n",
+    )
+
+    assert "requires human review" in result.lower()
+    assert target.read_text(encoding="utf-8") == "SECRET=old\n"
