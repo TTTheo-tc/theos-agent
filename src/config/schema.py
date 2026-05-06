@@ -165,10 +165,10 @@ class KnowledgeGraphConfig(Base):
     """Knowledge graph storage configuration."""
 
     enabled: bool = False
-    half_life_task_days: float = Field(default=30.0, alias="halfLifeTaskDays")
-    half_life_rule_days: float = Field(default=60.0, alias="halfLifeRuleDays")
-    half_life_research_days: float = Field(default=90.0, alias="halfLifeResearchDays")
-    max_nodes: int = Field(default=100_000, alias="maxNodes")
+    half_life_task_days: float = 30.0
+    half_life_rule_days: float = 60.0
+    half_life_research_days: float = 90.0
+    max_nodes: int = 100_000
 
 
 class EmbeddingConfig(Base):
@@ -176,8 +176,8 @@ class EmbeddingConfig(Base):
 
     provider: str = "none"
     model: str = "text-embedding-3-small"
-    base_url: str | None = Field(default=None, alias="baseUrl")
-    api_key: str | None = Field(default=None, alias="apiKey")
+    base_url: str | None = None
+    api_key: str | None = None
     dimensions: int = 1536
 
 
@@ -185,9 +185,9 @@ class ResponseCacheConfig(Base):
     """Response cache configuration."""
 
     enabled: bool = False
-    max_memory_entries: int = Field(default=256, alias="maxMemoryEntries")
-    ttl_seconds: int = Field(default=3600, alias="ttlSeconds")
-    max_db_entries: int = Field(default=5000, alias="maxDbEntries")
+    max_memory_entries: int = 256
+    ttl_seconds: int = 3600
+    max_db_entries: int = 5000
 
 
 class EventStoreConfig(Base):
@@ -257,8 +257,8 @@ class AgentsConfig(Base):
     """Agent configuration."""
 
     mode: Literal["auto", "single", "team", "genver"] = "single"
-    team_enabled: bool = Field(default=False, alias="teamEnabled")
-    genver_enabled: bool = Field(default=False, alias="genverEnabled")
+    team_enabled: bool = False
+    genver_enabled: bool = False
     defaults: AgentDefaults = Field(default_factory=AgentDefaults)
     roles: dict[str, AgentRoleConfig] = Field(default_factory=dict)
     genver: GenVerConfig = Field(default_factory=GenVerConfig)
@@ -403,11 +403,11 @@ class BrowserConfig(Base):
     """Browser automation tool configuration."""
 
     enabled: bool = False
-    allowed_domains: list[str] = Field(default_factory=list, alias="allowedDomains")
-    default_viewport_width: int = Field(1280, alias="defaultViewportWidth")
-    default_viewport_height: int = Field(720, alias="defaultViewportHeight")
-    navigate_timeout_ms: int = Field(60_000, alias="navigateTimeoutMs")
-    action_timeout_ms: int = Field(30_000, alias="actionTimeoutMs")
+    allowed_domains: list[str] = Field(default_factory=list)
+    default_viewport_width: int = 1280
+    default_viewport_height: int = 720
+    navigate_timeout_ms: int = 60_000
+    action_timeout_ms: int = 30_000
 
 
 class ToolsConfig(Base):
@@ -425,19 +425,17 @@ class ToolsConfig(Base):
 class AutonomyConfig(Base):
     """Autonomy level and guardrails for agent tool execution."""
 
-    level: AutonomyLevel = Field(AutonomyLevel.SUPERVISED, alias="level")
-    workspace_only: bool = Field(True, alias="workspaceOnly")
+    level: AutonomyLevel = AutonomyLevel.SUPERVISED
+    workspace_only: bool = True
     forbidden_paths: list[str] = Field(
         default_factory=lambda: ["/etc", "/sys", "/proc", "/boot", "~/.ssh"],
-        alias="forbiddenPaths",
     )
-    allowed_commands: list[str] = Field(default_factory=list, alias="allowedCommands")
-    max_actions_per_hour: int = Field(0, alias="maxActionsPerHour")
-    max_cost_per_day: float = Field(0.0, alias="maxCostPerDay")
-    auto_approve: list[str] = Field(default_factory=list, alias="autoApprove")
+    allowed_commands: list[str] = Field(default_factory=list)
+    max_actions_per_hour: int = 0
+    max_cost_per_day: float = 0.0
+    auto_approve: list[str] = Field(default_factory=list)
     always_ask: list[str] = Field(
         default_factory=lambda: ["bash", "write_file", "edit_file"],
-        alias="alwaysAsk",
     )
 
 
@@ -448,9 +446,9 @@ class SecurityConfig(Base):
     group_memory_enabled: bool = (
         False  # Keep legacy global memory behavior unless explicitly enabled
     )
-    scrub_tool_args_log: bool = Field(True, alias="scrubToolArgsLog")
-    scrub_session_history: bool = Field(True, alias="scrubSessionHistory")
-    leak_sensitivity: float = Field(0.7, alias="leakSensitivity")
+    scrub_tool_args_log: bool = True
+    scrub_session_history: bool = True
+    leak_sensitivity: float = 0.7
     autonomy: AutonomyConfig = Field(default_factory=AutonomyConfig)
 
 
