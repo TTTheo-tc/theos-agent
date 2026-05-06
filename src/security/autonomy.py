@@ -105,11 +105,10 @@ class AutonomyPolicy:
             return f"Path blocked: {path} is write-protected"
         for fp in self._config.forbidden_paths:
             forbidden = Path(fp).expanduser().resolve()
-            if resolved == forbidden or forbidden in resolved.parents:
+            if _is_path_within(resolved, forbidden):
                 return f"Path blocked: {path} is in forbidden_paths"
-        if self._config.workspace_only:
-            if self._workspace not in resolved.parents and resolved != self._workspace:
-                return f"Path blocked: {path} is outside workspace"
+        if self._config.workspace_only and not _is_path_within(resolved, self._workspace):
+            return f"Path blocked: {path} is outside workspace"
         return None
 
     def check_command_allowed(self, command: str) -> str | None:
@@ -139,3 +138,7 @@ class AutonomyPolicy:
         if tool_name in getattr(self._config, "always_ask", []):
             return True
         return risk_level in ("medium", "high", "critical")
+
+
+def _is_path_within(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents

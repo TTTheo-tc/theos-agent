@@ -112,6 +112,12 @@ def test_workspace_path_allowed(tmp_path):
     assert policy.check_path_allowed(str(target)) is None
 
 
+def test_workspace_root_allowed(tmp_path):
+    cfg = _FakeConfig()
+    policy = AutonomyPolicy(cfg, tmp_path)
+    assert policy.check_path_allowed(str(tmp_path)) is None
+
+
 def test_config_write_protected(tmp_path):
     cfg = _FakeConfig()
     policy = AutonomyPolicy(cfg, tmp_path)

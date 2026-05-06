@@ -43,12 +43,7 @@ def resolve_master_key() -> bytes:
     # 1. Environment variable
     env_hex = os.environ.get("SECRETS_MASTER_KEY")
     if env_hex:
-        key = bytes.fromhex(env_hex)
-        if len(key) < _KEY_BYTES:
-            raise ValueError(
-                f"SECRETS_MASTER_KEY too short: {len(key)} bytes, need >= {_KEY_BYTES}"
-            )
-        return key[:_KEY_BYTES]
+        return _normalize_master_key(bytes.fromhex(env_hex), "SECRETS_MASTER_KEY")
 
     # 2. OS keychain — read existing key
     key = _keychain_get()
@@ -76,10 +71,10 @@ def _keychain_get() -> bytes | None:
 
         stored = keyring.get_password(_SERVICE, _ACCOUNT)
         if stored:
-            key = bytes.fromhex(stored)
-            if len(key) >= _KEY_BYTES:
-                return key[:_KEY_BYTES]
-            logger.warning("Keychain key too short ({} bytes), ignoring", len(key))
+            try:
+                return _normalize_master_key(bytes.fromhex(stored), "Keychain key")
+            except ValueError as exc:
+                logger.warning("{}, ignoring", exc)
     except ImportError:
         logger.debug("keyring package not installed, skipping OS keychain")
     except Exception as exc:
@@ -119,3 +114,9 @@ def delete_master_key() -> bool:
         return True
     except Exception:
         return False
+
+
+def _normalize_master_key(key: bytes, source: str) -> bytes:
+    if len(key) < _KEY_BYTES:
+        raise ValueError(f"{source} too short: {len(key)} bytes, need >= {_KEY_BYTES}")
+    return key[:_KEY_BYTES]

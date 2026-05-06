@@ -27,9 +27,7 @@ def encrypt(plaintext: bytes, master_key: bytes) -> bytes:
 
     Returns ``salt || nonce || ciphertext+tag``.
     """
-    if len(master_key) < _KEY_BYTES:
-        raise ValueError(f"Master key too short: {len(master_key)} bytes, need >= {_KEY_BYTES}")
-
+    master_key = _validate_master_key(master_key)
     salt = os.urandom(_SALT_BYTES)
     derived = _derive_key(master_key, salt)
     nonce = os.urandom(_NONCE_BYTES)
@@ -43,9 +41,7 @@ def decrypt(blob: bytes, master_key: bytes) -> bytes:
     Raises ``cryptography.exceptions.InvalidTag`` if the key is wrong
     or the ciphertext was tampered with.
     """
-    if len(master_key) < _KEY_BYTES:
-        raise ValueError(f"Master key too short: {len(master_key)} bytes, need >= {_KEY_BYTES}")
-
+    master_key = _validate_master_key(master_key)
     min_len = _SALT_BYTES + _NONCE_BYTES + 16  # 16 = GCM tag
     if len(blob) < min_len:
         raise ValueError(f"Ciphertext too short ({len(blob)} bytes)")
@@ -57,6 +53,12 @@ def decrypt(blob: bytes, master_key: bytes) -> bytes:
     return AESGCM(derived).decrypt(nonce, ct, None)
 
 
+def _validate_master_key(master_key: bytes) -> bytes:
+    if len(master_key) < _KEY_BYTES:
+        raise ValueError(f"Master key too short: {len(master_key)} bytes, need >= {_KEY_BYTES}")
+    return master_key[:_KEY_BYTES]
+
+
 def _derive_key(master_key: bytes, salt: bytes) -> bytes:
     """HKDF-SHA256 key derivation: master_key + salt → 32-byte derived key."""
     return HKDF(
@@ -64,4 +66,4 @@ def _derive_key(master_key: bytes, salt: bytes) -> bytes:
         length=_KEY_BYTES,
         salt=salt,
         info=_INFO,
-    ).derive(master_key[:_KEY_BYTES])
+    ).derive(master_key)
