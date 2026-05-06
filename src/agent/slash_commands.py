@@ -6,7 +6,7 @@ keeping AgentLoop focused on message dispatch.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -188,6 +188,34 @@ def _genver_enabled(loop: "AgentLoop", config: "Config") -> bool:
     )
 
 
+def _role_lines(roles: dict[str, Any]) -> list[str]:
+    return [f"  • {role}: {config.model}" for role, config in roles.items()]
+
+
+def _switch_agent_mode(
+    loop: "AgentLoop",
+    config: "Config",
+    *,
+    mode: str,
+    root_agent_mode: str,
+    genver_config: "GenVerConfig | None" = None,
+    team_enabled: bool | None = None,
+    genver_enabled: bool | None = None,
+) -> None:
+    from src.config.loader import save_config
+
+    config.agents.mode = mode
+    save_config(config)
+    loop.genver_config = genver_config
+    if team_enabled is not None:
+        loop.team_enabled = team_enabled
+    if genver_enabled is not None:
+        loop.genver_enabled = genver_enabled
+    loop._root_agent_mode = root_agent_mode
+    loop.reload_roles(config.agents.roles)
+    loop.rebuild_tools()
+
+
 async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage | None:
     """Handle ``/agent [single|team|genver]`` slash command for hot mode switching."""
     parts = msg.content.strip().split()
@@ -200,17 +228,17 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
                 chat_id=msg.chat_id,
                 content="Already in single-agent mode.",
             )
-        from src.config.loader import load_config, save_config
+        from src.config.loader import load_config
 
         config = load_config()
-        config.agents.mode = "single"
-        save_config(config)
-        loop.genver_config = None
-        loop.team_enabled = config.agents.team_enabled
-        loop.genver_enabled = config.agents.genver_enabled
-        loop._root_agent_mode = "single"
-        loop.reload_roles(config.agents.roles)
-        loop.rebuild_tools()
+        _switch_agent_mode(
+            loop,
+            config,
+            mode="single",
+            root_agent_mode="single",
+            team_enabled=config.agents.team_enabled,
+            genver_enabled=config.agents.genver_enabled,
+        )
         return OutboundMessage(
             channel=msg.channel,
             chat_id=msg.chat_id,
@@ -232,16 +260,14 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
             )
         if config.agents.roles:
             # Roles already configured on disk — just reload them
-            config.agents.mode = "team"
-            from src.config.loader import save_config
-
-            save_config(config)
-            loop.genver_config = None
-            loop.team_enabled = True
-            loop._root_agent_mode = "team"
-            loop.reload_roles(config.agents.roles)
-            role_lines = [f"  • {r}: {c.model}" for r, c in config.agents.roles.items()]
-            loop.rebuild_tools()
+            _switch_agent_mode(
+                loop,
+                config,
+                mode="team",
+                root_agent_mode="team",
+                team_enabled=True,
+            )
+            role_lines = _role_lines(loop.roles)
             return OutboundMessage(
                 channel=msg.channel,
                 chat_id=msg.chat_id,
@@ -265,7 +291,7 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
         )
 
     if subcommand == "genver":
-        from src.config.loader import load_config, save_config
+        from src.config.loader import load_config
 
         config = load_config()
         if not _genver_enabled(loop, config):
@@ -298,23 +324,24 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
                 ),
             )
 
-        config.agents.mode = "genver"
-        save_config(config)
-        loop.genver_enabled = True
-        loop.genver_config = gv
-        loop._root_agent_mode = "single"
-        loop.reload_roles(config.agents.roles)
-        loop.rebuild_tools()
+        _switch_agent_mode(
+            loop,
+            config,
+            mode="genver",
+            root_agent_mode="single",
+            genver_config=gv,
+            genver_enabled=True,
+        )
         return _genver_status_message(loop, msg)
 
     # Show current status or usage
     if loop.is_genver:
         status = "Generator-Verifier mode"
     elif loop.mode == "team":
-        role_lines = [f"  • {r}: {c.model}" for r, c in loop.roles.items()]
+        role_lines = _role_lines(loop.roles)
         status = "Team mode\n" + "\n".join(role_lines)
     elif loop.roles:
-        role_lines = [f"  • {r}: {c.model}" for r, c in loop.roles.items()]
+        role_lines = _role_lines(loop.roles)
         status = "Single-agent mode\nDelegation roles loaded:\n" + "\n".join(role_lines)
     else:
         status = "Single-agent mode"

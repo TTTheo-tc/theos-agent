@@ -108,6 +108,33 @@ async def test_agent_team_switches_when_enabled(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_agent_team_status_includes_workspace_agent_definitions(tmp_path: Path):
+    config = _make_single_config(tmp_path)
+    config.agents.team_enabled = True
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "reviewer.md").write_text(
+        "---\n"
+        "description: Review agent\n"
+        "model: reviewer-model\n"
+        "---\n"
+        "Review work.\n",
+        encoding="utf-8",
+    )
+    loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+
+    msg = InboundMessage(channel="cli", sender_id="user", chat_id="direct", content="/agent team")
+    with (
+        patch("src.config.loader.load_config", return_value=config),
+        patch("src.config.loader.save_config"),
+    ):
+        resp = await handle_agent_command(loop, msg)
+
+    assert "reviewer: reviewer-model" in resp.content
+    assert "reviewer" in loop.roles
+
+
+@pytest.mark.asyncio
 async def test_agent_genver_requires_explicit_enable(tmp_path: Path):
     config = _make_single_config(tmp_path)
     config.agents.genver.generator_model = "generator-model"
