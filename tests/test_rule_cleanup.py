@@ -124,6 +124,31 @@ def test_cleanup_structured_rules_is_idempotent(tmp_path: Path) -> None:
     assert second.quarantined == 0
 
 
+def test_cleanup_structured_rules_avoids_quarantine_name_collision(tmp_path: Path) -> None:
+    base = tmp_path / "memory" / "structured"
+    _write_json(
+        base / "rules" / "rule-bad.json",
+        {
+            "id": "rule-bad",
+            "rule_text": "Received Messages=[{'role': 'user'}]",
+        },
+    )
+    _write_json(base / "rules_quarantine" / "rule-bad.json", {"existing": 1})
+    _write_json(base / "rules_quarantine" / "rule-bad-noise-text.json", {"existing": 2})
+
+    report = cleanup_structured_rules(tmp_path)
+
+    assert report.quarantined == 1
+    assert report.quarantined_files == ["rule-bad-noise-text-2.json"]
+    assert json.loads((base / "rules_quarantine" / "rule-bad.json").read_text()) == {
+        "existing": 1
+    }
+    assert json.loads(
+        (base / "rules_quarantine" / "rule-bad-noise-text.json").read_text()
+    ) == {"existing": 2}
+    assert (base / "rules_quarantine" / "rule-bad-noise-text-2.json").exists()
+
+
 def test_ensure_structured_rule_cleanup_job_is_created_and_deduped(tmp_path: Path) -> None:
     service = CronService(tmp_path / "cron" / "jobs.json")
 

@@ -60,9 +60,7 @@ def cleanup_structured_rules(workspace: Path) -> StructuredRuleCleanupReport:
         if reason is None:
             report.kept += 1
             continue
-        target = quarantine_dir / rule_path.name
-        if target.exists():
-            target = quarantine_dir / f"{rule_path.stem}-{reason}{rule_path.suffix}"
+        target = _quarantine_target(quarantine_dir, rule_path, reason)
         shutil.move(str(rule_path), str(target))
         report.quarantined += 1
         report.quarantined_files.append(target.name)
@@ -153,6 +151,21 @@ def _load_task_statuses(tasks_dir: Path) -> dict[str, str]:
         if task_id:
             statuses[task_id] = str(payload.get("status") or "")
     return statuses
+
+
+def _quarantine_target(quarantine_dir: Path, rule_path: Path, reason: str) -> Path:
+    target = quarantine_dir / rule_path.name
+    if not target.exists():
+        return target
+    fallback = quarantine_dir / f"{rule_path.stem}-{reason}{rule_path.suffix}"
+    if not fallback.exists():
+        return fallback
+    index = 2
+    while True:
+        candidate = quarantine_dir / f"{rule_path.stem}-{reason}-{index}{rule_path.suffix}"
+        if not candidate.exists():
+            return candidate
+        index += 1
 
 
 def _dirty_rule_reason(rule_path: Path, task_statuses: dict[str, str]) -> str | None:
