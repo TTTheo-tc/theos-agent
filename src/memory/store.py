@@ -129,13 +129,11 @@ class MemoryStore:
         Used as emergency compaction when context window approaches limits.
         Returns summary text.
         """
-        lines = []
-        for m in messages:
-            content = m.get("content", "")
-            if not content:
-                continue
-            role = m.get("role", "unknown").upper()
-            lines.append(f"{role}: {content[:500]}")
+        lines = [
+            f"{m.get('role', 'unknown').upper()}: {content[:500]}"
+            for m in messages
+            if (content := m.get("content", ""))
+        ]
 
         if not lines:
             return "(no content to summarize)"
