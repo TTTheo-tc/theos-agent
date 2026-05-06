@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -53,7 +54,7 @@ class SubagentExecutor:
         provider: LLMProvider,
         workspace: Path,
         subagent_manager: Any | None = None,
-        store: "SubagentStore | None" = None,
+        store: SubagentStore | None = None,
     ) -> None:
         self._policy = policy
         self._bus = bus
@@ -218,10 +219,8 @@ class SubagentExecutor:
             await self._cancel_running_children(task_id)
 
         asyncio_task.cancel()
-        try:
+        with suppress(asyncio.TimeoutError, asyncio.CancelledError):
             await asyncio.wait_for(asyncio.shield(asyncio_task), timeout=_KILL_WAIT_TIMEOUT)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
-            pass
         return True
 
     async def cancel_by_session(self, root_session_key: str) -> int:
@@ -400,7 +399,6 @@ class SubagentExecutor:
         )
 
         prompt = self._build_prompt(
-            task=record.task,
             role_config=role_config,
             handoff=record.handoff,
         )
@@ -542,11 +540,12 @@ class SubagentExecutor:
     def _build_prompt(
         self,
         *,
-        task: str,
         role_config: RuntimeRoleConfig | None,
         handoff: HandoffSpec | None = None,
+        task: str | None = None,
     ) -> str:
         """Build system prompt from role config and handoff spec."""
+        del task
         parts: list[str] = []
 
         if role_config and role_config.system_prompt:
