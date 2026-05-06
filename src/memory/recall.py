@@ -147,7 +147,7 @@ def _freshness_warning(body: str, store: Any) -> str:
     return ""
 
 
-def _memory_budget_chars(config: "MemoryConfig") -> int:
+def _memory_budget_chars(config: MemoryConfig) -> int:
     return config.injection.max_context_tokens * _CHARS_PER_TOKEN
 
 
@@ -209,7 +209,7 @@ class MemoryRecallService:
 
     def __init__(
         self,
-        scope: "MemoryScopeResolver",
+        scope: MemoryScopeResolver,
         *,
         memory_config: Any = None,
     ):
@@ -225,7 +225,7 @@ class MemoryRecallService:
         query: str | None = None,
         *,
         workspace: Path | None = None,
-        memory_config: "MemoryConfig | Any | None" = None,
+        memory_config: MemoryConfig | Any | None = None,
     ) -> str:
         """Return memory context for system prompt injection.
 
@@ -276,11 +276,7 @@ class MemoryRecallService:
         if not sections:
             return text
 
-        parts: list[str] = []
-        for title, body in sections:
-            parts.append(_section_text(title, body, store=store))
-
-        return "\n\n".join(parts)
+        return "\n\n".join(_section_text(title, body, store=store) for title, body in sections)
 
     # ------------------------------------------------------------------
     # Section-based retrieval (internal)
@@ -290,7 +286,7 @@ class MemoryRecallService:
     def _select_markdown_sections(
         long_term: str,
         query: str,
-        config: "MemoryConfig",
+        config: MemoryConfig,
         store: Any,
     ) -> str:
         """Score and select sections by keyword overlap against *query*.
