@@ -91,7 +91,7 @@ def test_channel_manager_passes_resolved_channel_config(monkeypatch) -> None:
     captured: dict[str, str] = {}
 
     class _FakeChannel:
-        def __init__(self, config, bus, **kwargs):
+        def __init__(self, config, bus, **kwargs) -> None:
             del bus, kwargs
             captured["token"] = config.token
             self.is_running = False
