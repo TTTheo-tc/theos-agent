@@ -3,25 +3,24 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from src.agent.tools.base import ContextAwareTool
 from src.memory.structured import StructuredMemoryStore
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from src.agent.tools.context import ToolContext
 
-WorkspaceResolver = Callable[[str | None], "Path | None"] | None
+WorkspaceResolver = Callable[[str | None], Path | None] | None
 
 
 def _resolve_workspace(
     workspace_resolver: WorkspaceResolver,
-    context: "ToolContext | None",
+    context: ToolContext | None,
     *,
     unavailable_message: str,
-) -> tuple["Path | None", str | None]:
+) -> tuple[Path | None, str | None]:
     if workspace_resolver is None:
         return None, unavailable_message
     workspace = workspace_resolver(context.session_key if context else None)
@@ -38,7 +37,7 @@ def _required_text_arg(kwargs: dict[str, Any], name: str, label: str) -> tuple[s
 
 
 async def _load_structured_record(
-    workspace: "Path",
+    workspace: Path,
     loader: Callable[[StructuredMemoryStore], Awaitable[dict[str, Any] | None]],
 ) -> dict[str, Any] | None:
     store = StructuredMemoryStore(workspace)
@@ -56,7 +55,7 @@ def _dump_json(record: dict[str, Any]) -> str:
 async def _execute_get_record(
     *,
     workspace_resolver: WorkspaceResolver,
-    context: "ToolContext | None",
+    context: ToolContext | None,
     kwargs: dict[str, Any],
     unavailable_message: str,
     arg_name: str,
@@ -133,7 +132,7 @@ class StructuredMemorySearchTool(ContextAwareTool):
             "required": ["query"],
         }
 
-    async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
+    async def execute(self, _context: ToolContext | None = None, **kwargs: Any) -> str:
         workspace, error = _resolve_workspace(
             self._workspace_resolver,
             _context,
@@ -231,7 +230,7 @@ class ResearchNoteGetTool(ContextAwareTool):
             "required": ["note_id"],
         }
 
-    async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
+    async def execute(self, _context: ToolContext | None = None, **kwargs: Any) -> str:
         return await _execute_get_record(
             workspace_resolver=self._workspace_resolver,
             context=_context,
@@ -276,7 +275,7 @@ class TaskMemoryGetTool(ContextAwareTool):
             "required": ["task_id"],
         }
 
-    async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
+    async def execute(self, _context: ToolContext | None = None, **kwargs: Any) -> str:
         return await _execute_get_record(
             workspace_resolver=self._workspace_resolver,
             context=_context,
@@ -325,7 +324,7 @@ class DomainRuleGetTool(ContextAwareTool):
             "required": ["rule_id"],
         }
 
-    async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
+    async def execute(self, _context: ToolContext | None = None, **kwargs: Any) -> str:
         workspace, error = _resolve_workspace(
             self._workspace_resolver,
             _context,

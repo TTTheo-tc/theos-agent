@@ -146,8 +146,8 @@ class MemorySearchTool(ContextAwareTool):
     def __init__(
         self,
         *,
-        index_resolver: Callable[[str | None], "MemoryIndex | None"] | None = None,
-        workspace_resolver: Callable[[str | None], "Path | None"] | None = None,
+        index_resolver: Callable[[str | None], MemoryIndex | None] | None = None,
+        workspace_resolver: Callable[[str | None], Path | None] | None = None,
         default_max_results: int = 6,
         default_min_score: float = 0.0,
         recall_telemetry_enabled: bool = False,
@@ -223,7 +223,7 @@ class MemorySearchTool(ContextAwareTool):
             "required": ["query"],
         }
 
-    def _resolve_index(self, session_key: str | None) -> "MemoryIndex | None":
+    def _resolve_index(self, session_key: str | None) -> MemoryIndex | None:
         if self._index_resolver is None:
             return None
         return self._index_resolver(session_key)
@@ -233,7 +233,7 @@ class MemorySearchTool(ContextAwareTool):
             return None
         return self._workspace_resolver(session_key)
 
-    async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
+    async def execute(self, _context: ToolContext | None = None, **kwargs: Any) -> str:
         query = kwargs.get("query", "")
         if not query:
             return "Please provide a search query."
@@ -363,7 +363,7 @@ class MemoryGetTool(ContextAwareTool):
     def __init__(
         self,
         *,
-        index_resolver: Callable[[str | None], "MemoryIndex | None"] | None = None,
+        index_resolver: Callable[[str | None], MemoryIndex | None] | None = None,
     ) -> None:
         self._index_resolver = index_resolver
 
@@ -401,12 +401,12 @@ class MemoryGetTool(ContextAwareTool):
             "required": ["section"],
         }
 
-    def _resolve_index(self, session_key: str | None) -> "MemoryIndex | None":
+    def _resolve_index(self, session_key: str | None) -> MemoryIndex | None:
         if self._index_resolver is None:
             return None
         return self._index_resolver(session_key)
 
-    async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
+    async def execute(self, _context: ToolContext | None = None, **kwargs: Any) -> str:
         index = self._resolve_index(_context.session_key if _context else None)
         if not index:
             return "Memory get is not available (index not initialized)."
