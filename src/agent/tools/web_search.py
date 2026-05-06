@@ -111,6 +111,7 @@ class WebSearchTool(Tool):
         blocked_domains: list[str] | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         provider = self._effective_provider
         if provider == "tavily":
             return await self._search_tavily(query, count, allowed_domains, blocked_domains)

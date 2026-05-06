@@ -122,9 +122,9 @@ def _redirect_method_and_body(
     next_method = method
     next_kwargs = dict(request_kwargs)
 
-    if status_code == 303 and method != "HEAD":
-        next_method = "GET"
-    elif status_code in {301, 302} and method not in {"GET", "HEAD"}:
+    if (status_code == 303 and method != "HEAD") or (
+        status_code in {301, 302} and method not in {"GET", "HEAD"}
+    ):
         next_method = "GET"
 
     if next_method != method:

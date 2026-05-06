@@ -71,16 +71,15 @@ class ImageSearchTool(Tool):
             if not results:
                 return "No images found."
 
-            items = []
-            for r in results:
-                items.append(
-                    {
-                        "title": r.get("title", ""),
-                        "image_url": r.get("image", ""),
-                        "thumbnail_url": r.get("thumbnail", ""),
-                        "source_url": r.get("url", ""),
-                    }
-                )
+            items = [
+                {
+                    "title": r.get("title", ""),
+                    "image_url": r.get("image", ""),
+                    "thumbnail_url": r.get("thumbnail", ""),
+                    "source_url": r.get("url", ""),
+                }
+                for r in results
+            ]
             return json.dumps(items, indent=2, ensure_ascii=False)
         except Exception as e:
             return f"Image search failed: {e}"

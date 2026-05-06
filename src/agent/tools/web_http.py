@@ -111,6 +111,7 @@ class HttpRequestTool(Tool):
         max_chars: int | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         is_valid, error_msg = validate_http_url(url)
         if not is_valid:
             return json.dumps(
