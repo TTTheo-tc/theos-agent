@@ -21,6 +21,10 @@ def send_sighup(pid: int | None) -> bool:
 class GatewayService(ABC):
     """Platform-specific gateway daemon lifecycle manager."""
 
+    def _try_sighup_restart(self) -> bool:
+        """Try graceful restart for the currently reported service PID."""
+        return send_sighup(self.status().get("pid"))
+
     @abstractmethod
     def install(
         self,

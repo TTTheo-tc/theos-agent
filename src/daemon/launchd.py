@@ -7,7 +7,7 @@ import plistlib
 import subprocess
 from pathlib import Path
 
-from src.daemon.base import GatewayService, send_sighup
+from src.daemon.base import GatewayService
 
 _DEFAULT_PLIST_DIR = Path.home() / "Library" / "LaunchAgents"
 _DEFAULT_LOG_DIR = Path.home() / ".theos" / "logs"
@@ -81,7 +81,7 @@ class LaunchdService(GatewayService):
 
     def restart(self):
         # Prefer SIGHUP for graceful restart
-        if send_sighup(self.status().get("pid")):
+        if self._try_sighup_restart():
             return
         # Fallback: kickstart
         if self.is_loaded():
