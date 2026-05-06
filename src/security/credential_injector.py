@@ -16,13 +16,11 @@ from __future__ import annotations
 
 import base64
 import fnmatch
-import re
 from dataclasses import dataclass, field
 from enum import Enum
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-_SECRET_REF_PREFIX = "secret://"
-_SECRET_REF_RE = re.compile(r"secret://([A-Za-z0-9_.:-]+)")
+from src.security.secret_refs import resolve_inline_secret_refs
 
 
 class InjectionMethod(Enum):
@@ -157,17 +155,7 @@ class CredentialInjector:
         return prepared_url, prepared_headers
 
     def _resolve_ref(self, value: str) -> str:
-        if not isinstance(value, str) or _SECRET_REF_PREFIX not in value:
-            return value
-
-        def _replace(match: re.Match[str]) -> str:
-            secret_name = match.group(1).strip()
-            if not secret_name:
-                return match.group(0)
-            secret = self._resolver.resolve(secret_name)
-            return secret if secret is not None else match.group(0)
-
-        return _SECRET_REF_RE.sub(_replace, value)
+        return resolve_inline_secret_refs(value, self._resolver.resolve)
 
 
 class SecretResolver:

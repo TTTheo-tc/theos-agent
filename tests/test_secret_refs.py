@@ -5,7 +5,11 @@ from types import SimpleNamespace
 from src.channels.manager import ChannelManager
 from src.channels.registry import _resolve_dotpath
 from src.config.schema import Config
-from src.security.secret_refs import resolve_data_secret_refs, resolve_secret_ref
+from src.security.secret_refs import (
+    resolve_data_secret_refs,
+    resolve_inline_secret_refs,
+    resolve_secret_ref,
+)
 
 
 def test_resolve_secret_ref_prefers_auth_store(monkeypatch) -> None:
@@ -22,6 +26,22 @@ def test_resolve_secret_ref_falls_back_to_env(monkeypatch) -> None:
     monkeypatch.setenv("TELEGRAM_BOT", "tg-secret")
 
     assert resolve_secret_ref("secret://telegram-bot") == "tg-secret"
+
+
+def test_resolve_inline_secret_refs_replaces_embedded_refs() -> None:
+    result = resolve_inline_secret_refs(
+        "Bearer secret://mcp_token and secret://missing",
+        lambda name: "xyz" if name == "mcp_token" else None,
+    )
+
+    assert result == "Bearer xyz and secret://missing"
+
+
+def test_resolve_inline_secret_refs_handles_full_value_and_multiple_refs() -> None:
+    secrets = {"first": "one", "second": "two"}
+
+    assert resolve_inline_secret_refs("secret://first", secrets.get) == "one"
+    assert resolve_inline_secret_refs("secret://first,secret://second", secrets.get) == "one,two"
 
 
 def test_resolve_data_secret_refs_preserves_model_type(monkeypatch) -> None:

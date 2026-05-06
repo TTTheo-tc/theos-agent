@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
 
 _SECRET_REF_PREFIX = "secret://"
+_SECRET_REF_RE = re.compile(r"secret://([A-Za-z0-9_.:-]+)")
 _ENV_NAME_RE = re.compile(r"[^A-Za-z0-9]+")
 
 
@@ -46,6 +48,24 @@ def resolve_mapping_refs(mapping: dict[str, str] | None) -> dict[str, str] | Non
         if resolved_value:
             resolved[key] = resolved_value
     return resolved
+
+
+def resolve_inline_secret_refs(
+    value: str,
+    resolver: Callable[[str], str | None],
+) -> str:
+    """Resolve ``secret://name`` references embedded inside a string."""
+    if not isinstance(value, str) or _SECRET_REF_PREFIX not in value:
+        return value
+
+    def _replace(match: re.Match[str]) -> str:
+        secret_name = match.group(1).strip()
+        if not secret_name:
+            return match.group(0)
+        secret = resolver(secret_name)
+        return secret if secret is not None else match.group(0)
+
+    return _SECRET_REF_RE.sub(_replace, value)
 
 
 def resolve_data_secret_refs(value: Any) -> Any:
