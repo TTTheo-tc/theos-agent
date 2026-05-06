@@ -340,6 +340,35 @@ class TestToolSearchTool:
         assert "historical recall" in result
         assert "`structured_memory_search` before answering" in result
 
+    @pytest.mark.asyncio
+    async def test_select_active_memory_tool_still_returns_recall_policy(self):
+        from src.agent.tools.tool_search import ToolSearchTool
+
+        reg = ToolRegistry()
+        reg.register(_DummyTool("memory_search", "Search memory."))
+        tool = ToolSearchTool(registry=reg)
+
+        result = await tool.execute(query="select:memory_search")
+
+        assert "Already active: memory_search" in result
+        assert "historical recall" in result
+        assert "`memory_search` before answering" in result
+
+    @pytest.mark.asyncio
+    async def test_select_already_active_tool_is_not_counted_as_activated(self):
+        from src.agent.tools.tool_search import ToolSearchTool
+
+        reg = ToolRegistry()
+        reg.register(_DummyTool("read_file", "Read files."))
+        reg.register(_DummyTool("pdf", "Read PDFs."), deferred=True)
+        tool = ToolSearchTool(registry=reg)
+
+        result = await tool.execute(query="select:read_file,pdf")
+
+        assert "**Activated 1 new tool(s):**" in result
+        assert "- **pdf**: Read PDFs." in result
+        assert "Already active: read_file" in result
+
 
 # ---------------------------------------------------------------------------
 # TestEndToEnd

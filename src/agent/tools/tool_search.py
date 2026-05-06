@@ -89,6 +89,7 @@ class ToolSearchTool(Tool):
     def _activate_by_names(self, names: list[str]) -> str:
         """Activate tools by exact name and return results."""
         activated: list[dict[str, str]] = []
+        already_active: list[str] = []
         not_found: list[str] = []
 
         for name in names:
@@ -96,22 +97,30 @@ class ToolSearchTool(Tool):
             if tool is None:
                 not_found.append(name)
                 continue
-            self._registry.activate(name)
-            activated.append({"name": name, "description": tool.description})
+            if self._registry.activate(name):
+                activated.append({"name": name, "description": tool.description})
+            else:
+                already_active.append(name)
 
-        if not activated and not_found:
+        if not activated and not already_active and not_found:
             return f"No matching deferred tools found. Not found: {', '.join(not_found)}"
 
-        lines = [f"**Activated {len(activated)} tool(s):**\n"]
+        lines = [f"**Activated {len(activated)} new tool(s):**\n"]
         for item in activated:
             lines.append(f"- **{item['name']}**: {item['description']}")
-        memory_search_tools = [item["name"] for item in activated if item["name"] in _MEMORY_SEARCH_TOOLS]
+        memory_search_tools = [
+            name
+            for name in [*(item["name"] for item in activated), *already_active]
+            if name in _MEMORY_SEARCH_TOOLS
+        ]
         if memory_search_tools:
             search_phrase = " or ".join(f"`{name}`" for name in memory_search_tools)
             lines.append(
                 "\nFor historical recall questions not covered by injected memory, "
                 f"call {search_phrase} before answering."
             )
+        if already_active:
+            lines.append(f"\nAlready active: {', '.join(already_active)}")
         if not_found:
             lines.append(f"\nNot found: {', '.join(not_found)}")
         return "\n".join(lines)
