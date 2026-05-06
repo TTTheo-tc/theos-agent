@@ -153,9 +153,10 @@ class EditFileTool(ContextAwareTool):
         old_text: str | None = None,
         new_text: str | None = None,
         replace_all: bool = False,
-        _context: "ToolContext | None" = None,
+        _context: ToolContext | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         session_key = _context.session_key if _context else None
         target = file_path or path
         old = old_string if old_string is not None else old_text
@@ -278,9 +279,10 @@ class MultiEditTool(ContextAwareTool):
         file_path: str | None = None,
         path: str | None = None,
         edits: list[dict] | None = None,
-        _context: "ToolContext | None" = None,
+        _context: ToolContext | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         session_key = _context.session_key if _context else None
         target = file_path or path
         if not target:
