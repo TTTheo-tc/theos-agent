@@ -169,27 +169,14 @@ class TurnFinalizer:
         if final_content is None:
             final_content = "I've completed processing but have no response to give."
 
-        # Safety: scan output for credential leaks before delivery
-        _safety_result = self._get_safety().scan_outbound(final_content)
-        scanned_content = _safety_result.output_text
-        task_status, task_error = self.classify_task_outcome(scanned_content)
-        rewritten_content = self.rewrite_invalid_request_error(scanned_content, usage)
-        if rewritten_content != scanned_content:
-            final_content = rewritten_content or scanned_content
-            task_status = "failed"
-            task_error = scanned_content
-        else:
-            final_content = scanned_content
-
-        genver_handoff = genver_last_handoff if run_genver else None
-        post_chat_artifacts = list(
-            dict.fromkeys(getattr(genver_handoff, "files_changed", []) or [])
+        final_content, task_status, task_error = self._prepare_final_content(
+            final_content,
+            usage=usage,
         )
-        post_chat_tests = [
-            path
-            for path in post_chat_artifacts
-            if isinstance(path, str) and path.lstrip("./").startswith("tests/")
-        ]
+        genver_handoff, post_chat_artifacts, post_chat_tests = self._genver_post_chat_context(
+            run_genver=run_genver,
+            genver_last_handoff=genver_last_handoff,
+        )
 
         if all_msgs and all_msgs[-1].get("role") == "assistant":
             all_msgs[-1] = {**all_msgs[-1], "content": final_content}
@@ -239,46 +226,35 @@ class TurnFinalizer:
         # Do not consolidate both phases into one location — the two-phase
         # timing is intentional for real-time dashboard visibility.
         if dashboard:
-            asyncio.ensure_future(
-                dashboard.finish_agent(agent_id, usage=usage, duration_ms=_duration_ms)
+            self._schedule_dashboard_finish(
+                dashboard,
+                key=key,
+                channel=msg.channel,
+                agent_id=agent_id,
+                usage=usage,
+                duration_ms=_duration_ms,
+                message_count=len(session.messages),
             )
-            asyncio.ensure_future(
-                dashboard.upsert_session(
-                    key,
-                    msg.channel,
-                    message_count=len(session.messages),
-                    total_tokens=(usage or {}).get("input_tokens", 0)
-                    + (usage or {}).get("output_tokens", 0),
-                )
-            )
-            asyncio.ensure_future(dashboard.emit_event(key, "agent_finished", agent_id=agent_id))
 
         # Post-chat hook: fire-and-forget. The reflector_active payload field is
         # kept for post-chat script compatibility; reflect.js ignores it.
-        asyncio.create_task(
-            self.hooks.run_post_chat(
-                key,
-                response=final_content,
-                error=task_error,
-                status=task_status,
-                user_message=msg.content,
-                tools_used=tools_used,
-                usage=usage,
-                duration_ms=_duration_ms,
-                routing_domains=routing_domains,
-                selected_primary=selected_primary,
-                workspace=task_workspace if run_genver else workspace,
-                reflector_active=False,
-                artifacts=post_chat_artifacts,
-                tests=post_chat_tests,
-            )
+        self._schedule_post_chat(
+            key,
+            response=final_content,
+            error=task_error,
+            status=task_status,
+            user_message=msg.content,
+            tools_used=tools_used,
+            usage=usage,
+            duration_ms=_duration_ms,
+            routing_domains=routing_domains,
+            selected_primary=selected_primary,
+            workspace=task_workspace if run_genver else workspace,
+            artifacts=post_chat_artifacts,
+            tests=post_chat_tests,
         )
 
-        if (
-            (mt := tools.get("message"))
-            and isinstance(mt, MessageTool)
-            and mt._messages_sent_in_turn
-        ):
+        if self._message_tool_sent_in_turn(tools):
             return None
 
         # Append routing footer (domain + skills) to the response
@@ -286,6 +262,113 @@ class TurnFinalizer:
 
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
+        return OutboundMessage(
+            channel=msg.channel,
+            chat_id=msg.chat_id,
+            content=final_content,
+            metadata=self._outbound_metadata(msg, usage=usage, genver_handoff=genver_handoff),
+        )
+
+    def _prepare_final_content(
+        self,
+        final_content: str,
+        *,
+        usage: dict[str, int] | None,
+    ) -> tuple[str, str, str | None]:
+        """Apply outbound safety scan and provider-error rewriting."""
+        safety_result = self._get_safety().scan_outbound(final_content)
+        scanned_content = safety_result.output_text
+        task_status, task_error = self.classify_task_outcome(scanned_content)
+        rewritten_content = self.rewrite_invalid_request_error(scanned_content, usage)
+        if rewritten_content != scanned_content:
+            return rewritten_content or scanned_content, "failed", scanned_content
+        return scanned_content, task_status, task_error
+
+    def _genver_post_chat_context(
+        self,
+        *,
+        run_genver: bool,
+        genver_last_handoff: Any | None,
+    ) -> tuple[Any | None, list[str], list[str]]:
+        genver_handoff = genver_last_handoff if run_genver else None
+        artifacts = list(dict.fromkeys(getattr(genver_handoff, "files_changed", []) or []))
+        tests = [
+            path
+            for path in artifacts
+            if isinstance(path, str) and path.lstrip("./").startswith("tests/")
+        ]
+        return genver_handoff, artifacts, tests
+
+    def _schedule_dashboard_finish(
+        self,
+        dashboard: Any,
+        *,
+        key: str,
+        channel: str,
+        agent_id: str,
+        usage: dict[str, int] | None,
+        duration_ms: float,
+        message_count: int,
+    ) -> None:
+        asyncio.ensure_future(dashboard.finish_agent(agent_id, usage=usage, duration_ms=duration_ms))
+        total_tokens = (usage or {}).get("input_tokens", 0) + (usage or {}).get("output_tokens", 0)
+        asyncio.ensure_future(
+            dashboard.upsert_session(
+                key,
+                channel,
+                message_count=message_count,
+                total_tokens=total_tokens,
+            )
+        )
+        asyncio.ensure_future(dashboard.emit_event(key, "agent_finished", agent_id=agent_id))
+
+    def _schedule_post_chat(
+        self,
+        key: str,
+        *,
+        response: str,
+        error: str | None,
+        status: str,
+        user_message: str,
+        tools_used: list[str],
+        usage: dict[str, int] | None,
+        duration_ms: float,
+        routing_domains: list[str],
+        selected_primary: str | None,
+        workspace: Path,
+        artifacts: list[str],
+        tests: list[str],
+    ) -> None:
+        asyncio.create_task(
+            self.hooks.run_post_chat(
+                key,
+                response=response,
+                error=error,
+                status=status,
+                user_message=user_message,
+                tools_used=tools_used,
+                usage=usage,
+                duration_ms=duration_ms,
+                routing_domains=routing_domains,
+                selected_primary=selected_primary,
+                workspace=workspace,
+                reflector_active=False,
+                artifacts=artifacts,
+                tests=tests,
+            )
+        )
+
+    def _message_tool_sent_in_turn(self, tools: Any) -> bool:
+        mt = tools.get("message")
+        return isinstance(mt, MessageTool) and bool(mt._messages_sent_in_turn)
+
+    def _outbound_metadata(
+        self,
+        msg: "InboundMessage",
+        *,
+        usage: dict[str, int] | None,
+        genver_handoff: Any | None,
+    ) -> dict[str, Any]:
         meta = dict(msg.metadata or {})
         if usage:
             meta["usage"] = usage
@@ -294,12 +377,7 @@ class TurnFinalizer:
                 "summary": getattr(genver_handoff, "summary", ""),
                 "files_changed": list(getattr(genver_handoff, "files_changed", []) or []),
             }
-        return OutboundMessage(
-            channel=msg.channel,
-            chat_id=msg.chat_id,
-            content=final_content,
-            metadata=meta,
-        )
+        return meta
 
     # -- background memory extraction -----------------------------------------
 
@@ -407,24 +485,10 @@ class TurnFinalizer:
             ):
                 entry["content"] = content[: self._TOOL_RESULT_MAX_CHARS] + "\n... (truncated)"
             elif role == "user":
-                if isinstance(content, str) and content.startswith(
-                    ContextBuilder._RUNTIME_CONTEXT_TAG
-                ):
-                    continue
-                if isinstance(content, str) and content.startswith(_EPHEMERAL_CONTEXT_TAG):
+                if self._skip_persisted_user_content(content):
                     continue
                 if isinstance(content, list):
-                    entry["content"] = [
-                        (
-                            {"type": "text", "text": "[image]"}
-                            if (
-                                c.get("type") == "image_url"
-                                and c.get("image_url", {}).get("url", "").startswith("data:image/")
-                            )
-                            else c
-                        )
-                        for c in content
-                    ]
+                    entry["content"] = self._sanitize_multimodal_content(content)
             if turn_id and role in {"assistant", "tool", "user"}:
                 entry.setdefault("turn_id", turn_id)
             entry.setdefault("timestamp", datetime.now().isoformat())
@@ -440,3 +504,22 @@ class TurnFinalizer:
                 memory_tiers.buffer_entry(session.key, entry)
 
         session.updated_at = datetime.now()
+
+    def _skip_persisted_user_content(self, content: Any) -> bool:
+        return isinstance(content, str) and (
+            content.startswith(ContextBuilder._RUNTIME_CONTEXT_TAG)
+            or content.startswith(_EPHEMERAL_CONTEXT_TAG)
+        )
+
+    def _sanitize_multimodal_content(self, content: list[Any]) -> list[Any]:
+        return [
+            {"type": "text", "text": "[image]"} if self._is_inline_image_part(part) else part
+            for part in content
+        ]
+
+    def _is_inline_image_part(self, part: Any) -> bool:
+        return (
+            isinstance(part, dict)
+            and part.get("type") == "image_url"
+            and part.get("image_url", {}).get("url", "").startswith("data:image/")
+        )

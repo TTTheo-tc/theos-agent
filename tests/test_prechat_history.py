@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.agent.context import ContextBuilder
 from src.agent.loop import AgentLoop
 from src.agent.loop_context import TurnContextAssembler
 from src.bus.events import InboundMessage
@@ -218,3 +219,47 @@ class TestPreChatHistory:
         persisted = session.messages[-1]["tool_calls"][0]["function"]["arguments"]
         assert json.loads(persisted) == {"_note": "tool arguments too large to include"}
         assert len(persisted) < len(huge_args)
+
+    def test_save_turn_skips_runtime_and_ephemeral_user_context(self, tmp_path: Path) -> None:
+        loop = _make_loop(tmp_path)
+        session = Session(key="cli:chat1")
+        messages = [
+            {
+                "role": "user",
+                "content": f"{ContextBuilder._RUNTIME_CONTEXT_TAG}\nCurrent Time: now",
+            },
+            {
+                "role": "user",
+                "content": "[Ephemeral Context — not part of user history]\nreflex context",
+            },
+            {"role": "assistant", "content": "ok"},
+        ]
+
+        loop._finalizer.save_turn(session, messages, skip=0)
+
+        assert [m["role"] for m in session.messages] == ["assistant"]
+        assert session.messages[0]["content"] == "ok"
+
+    def test_save_turn_sanitizes_inline_image_payloads(self, tmp_path: Path) -> None:
+        loop = _make_loop(tmp_path)
+        session = Session(key="cli:chat1")
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,abc"},
+                    },
+                    {"type": "text", "text": "describe"},
+                ],
+            },
+            {"role": "assistant", "content": "ok"},
+        ]
+
+        loop._finalizer.save_turn(session, messages, skip=0)
+
+        assert session.messages[0]["content"] == [
+            {"type": "text", "text": "[image]"},
+            {"type": "text", "text": "describe"},
+        ]
