@@ -1,14 +1,12 @@
 """Data models and text processing helpers for structured memory.
 
 Contains:
-- TaskMemory, DomainRule, ResearchNote dataclasses
 - Rule extraction, source reference, and remember/research hint helpers
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 
 _CODE_REF_RE = re.compile(r"(?:src|tests?|lib|hooks|instinct|skills)/[\w./-]+")
 _URL_RE = re.compile(r"https?://[^\s)]+")
@@ -42,71 +40,6 @@ _RULE_CONTEXTUAL_RE = re.compile(
     r"(你之前|刚才|这次|本次|现在就|今天|明天|昨天|这个|那个|下面|上面|此时|当前)",
     re.I,
 )
-
-
-# ---------------------------------------------------------------------------
-# Dataclasses
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class TaskMemory:
-    """High-value task record derived from a completed agent turn."""
-
-    id: str
-    session_key: str
-    created_at: str
-    status: str
-    user_message: str
-    response_summary: str
-    response_excerpt: str
-    tools_used: list[str] = field(default_factory=list)
-    routed_skills: list[str] = field(default_factory=list)
-    routing_domains: list[str] = field(default_factory=list)
-    selected_primary: str | None = None
-    usage: dict[str, int] = field(default_factory=dict)
-    duration_ms: float | None = None
-    source_refs: list[str] = field(default_factory=list)
-    artifacts: list[str] = field(default_factory=list)
-    tests: list[str] = field(default_factory=list)
-    is_latest_success: bool = True
-    superseded_by: str | None = None
-    superseded_at: str | None = None
-
-
-@dataclass
-class DomainRule:
-    """Transferable domain rule accumulated from repeated task outcomes."""
-
-    id: str
-    rule_text: str
-    domains: list[str]
-    selected_primary: str | None
-    source_task_ids: list[str] = field(default_factory=list)
-    occurrence_count: int = 0
-    first_seen_at: str = ""
-    last_seen_at: str = ""
-    confidence: float = 0.0
-
-
-@dataclass
-class ResearchNote:
-    """Structured research note extracted from paper-oriented tasks."""
-
-    id: str
-    task_memory_id: str
-    session_key: str
-    created_at: str
-    title: str
-    summary: str
-    domains: list[str] = field(default_factory=list)
-    tags: list[str] = field(default_factory=list)
-    source_refs: list[str] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# Text processing helpers
-# ---------------------------------------------------------------------------
 
 
 def first_sentence(text: str, *, max_chars: int = 240) -> str:
