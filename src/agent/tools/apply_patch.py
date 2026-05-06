@@ -136,67 +136,74 @@ def _parse_one_hunk(lines: list[str], offset: int) -> tuple[Hunk, int]:
     """Parse a single hunk starting at *offset*. Returns (hunk, lines_consumed)."""
     line = lines[offset].strip()
 
-    # --- Add File ---
     if line.startswith(ADD_FILE):
-        path = line[len(ADD_FILE) :]
-        contents_parts: list[str] = []
-        consumed = 1
-        for add_line in lines[offset + 1 :]:
-            if add_line.startswith("+"):
-                contents_parts.append(add_line[1:])
-                consumed += 1
-            else:
-                break
-        contents = "\n".join(contents_parts)
-        if contents_parts:
-            contents += "\n"
-        return AddHunk(path=path, contents=contents), consumed
+        return _parse_add_hunk(lines, offset)
 
-    # --- Delete File ---
     if line.startswith(DELETE_FILE):
-        path = line[len(DELETE_FILE) :]
-        return DeleteHunk(path=path), 1
+        return _parse_delete_hunk(line)
 
-    # --- Update File ---
     if line.startswith(UPDATE_FILE):
-        path = line[len(UPDATE_FILE) :]
-        consumed = 1
-        remaining = lines[offset + 1 :]
-
-        # Optional move
-        move_path: str | None = None
-        if remaining and remaining[0].strip().startswith(MOVE_TO):
-            move_path = remaining[0].strip()[len(MOVE_TO) :]
-            remaining = remaining[1:]
-            consumed += 1
-
-        chunks: list[UpdateChunk] = []
-        idx = 0
-        while idx < len(remaining):
-            # Skip blank lines between chunks
-            if remaining[idx].strip() == "":
-                idx += 1
-                consumed += 1
-                continue
-            # Stop at next hunk header
-            if remaining[idx].startswith("***"):
-                break
-            chunk, chunk_consumed = _parse_update_chunk(
-                remaining, idx, allow_missing_context=(len(chunks) == 0)
-            )
-            chunks.append(chunk)
-            idx += chunk_consumed
-            consumed += chunk_consumed
-
-        if not chunks:
-            raise PatchParseError(f"Update hunk for '{path}' has no chunks.")
-
-        return UpdateHunk(path=path, move_path=move_path, chunks=chunks), consumed
+        return _parse_update_hunk(lines, offset)
 
     raise PatchParseError(
         f"Unexpected hunk header: {lines[offset]!r}. "
         f"Expected '*** Add File:', '*** Delete File:', or '*** Update File:'."
     )
+
+
+def _parse_add_hunk(lines: list[str], offset: int) -> tuple[AddHunk, int]:
+    path = lines[offset].strip()[len(ADD_FILE) :]
+    contents_parts: list[str] = []
+    consumed = 1
+    for add_line in lines[offset + 1 :]:
+        if not add_line.startswith("+"):
+            break
+        contents_parts.append(add_line[1:])
+        consumed += 1
+    contents = "\n".join(contents_parts)
+    if contents_parts:
+        contents += "\n"
+    return AddHunk(path=path, contents=contents), consumed
+
+
+def _parse_delete_hunk(line: str) -> tuple[DeleteHunk, int]:
+    return DeleteHunk(path=line[len(DELETE_FILE) :]), 1
+
+
+def _parse_update_hunk(lines: list[str], offset: int) -> tuple[UpdateHunk, int]:
+    path = lines[offset].strip()[len(UPDATE_FILE) :]
+    consumed = 1
+    remaining = lines[offset + 1 :]
+
+    move_path, remaining, move_consumed = _parse_optional_move(remaining)
+    consumed += move_consumed
+
+    chunks: list[UpdateChunk] = []
+    idx = 0
+    while idx < len(remaining):
+        if remaining[idx].strip() == "":
+            idx += 1
+            consumed += 1
+            continue
+        if remaining[idx].startswith("***"):
+            break
+        chunk, chunk_consumed = _parse_update_chunk(
+            remaining, idx, allow_missing_context=(len(chunks) == 0)
+        )
+        chunks.append(chunk)
+        idx += chunk_consumed
+        consumed += chunk_consumed
+
+    if not chunks:
+        raise PatchParseError(f"Update hunk for '{path}' has no chunks.")
+
+    return UpdateHunk(path=path, move_path=move_path, chunks=chunks), consumed
+
+
+def _parse_optional_move(lines: list[str]) -> tuple[str | None, list[str], int]:
+    if not lines or not lines[0].strip().startswith(MOVE_TO):
+        return None, lines, 0
+    return lines[0].strip()[len(MOVE_TO) :], lines[1:], 1
 
 
 def _parse_update_chunk(
@@ -337,10 +344,7 @@ def _seek_context(
 
 def apply_update_hunk(file_content: str, chunks: list[UpdateChunk]) -> str:
     """Apply update chunks to file content. Returns new content."""
-    original_lines = file_content.split("\n")
-    # Remove trailing empty line (split artifact for files ending with \n)
-    if original_lines and original_lines[-1] == "":
-        original_lines.pop()
+    original_lines = _content_lines(file_content)
 
     replacements: list[tuple[int, int, list[str]]] = []
     line_idx = 0
@@ -394,6 +398,13 @@ def apply_update_hunk(file_content: str, chunks: list[UpdateChunk]) -> str:
         new_lines.append("")
 
     return "\n".join(new_lines)
+
+
+def _content_lines(file_content: str) -> list[str]:
+    lines = file_content.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    return lines
 
 
 class PatchApplyError(RuntimeError):
@@ -545,6 +556,9 @@ class _AtomicPatchSession:
         content = src.read_text(encoding="utf-8")
         new_content = apply_update_hunk(content, chunks)
         self._ensure_parent(dst)
+        if src == dst:
+            src.write_text(new_content, encoding="utf-8")
+            return src, dst
         self._backup_file(dst)
         dst.write_text(new_content, encoding="utf-8")
         src.unlink()
@@ -604,48 +618,58 @@ class ApplyPatchTool(Tool):
         if not patch.strip():
             return "Error: patch content is required."
 
-        # Parse
         try:
             hunks = parse_patch(patch)
         except PatchParseError as e:
             return f"Error parsing patch: {e}"
 
-        # Apply atomically
         session = _AtomicPatchSession(self._workspace, self._allowed_dir)
-        added: list[str] = []
-        modified: list[str] = []
-        deleted: list[str] = []
-
         try:
-            for hunk in hunks:
-                if isinstance(hunk, AddHunk):
-                    fp = session.add_file(hunk.path, hunk.contents)
-                    added.append(_display(fp, self._workspace))
-
-                elif isinstance(hunk, DeleteHunk):
-                    fp = session.delete_file(hunk.path)
-                    deleted.append(_display(fp, self._workspace))
-
-                elif isinstance(hunk, UpdateHunk):
-                    if hunk.move_path:
-                        src, dst = session.move_file(hunk.path, hunk.move_path, hunk.chunks)
-                        modified.append(_display(dst, self._workspace))
-                    else:
-                        fp = session.update_file(hunk.path, hunk.chunks)
-                        modified.append(_display(fp, self._workspace))
-
+            summary = _apply_hunks(session, hunks, self._workspace)
             session.commit()
-        except (PatchApplyError, PatchParseError) as e:
-            session.rollback()
-            return f"Error applying patch (rolled back): {e}"
-        except (FileNotFoundError, FileExistsError, PermissionError) as e:
-            session.rollback()
-            return f"Error applying patch (rolled back): {e}"
         except Exception as e:
             session.rollback()
             return f"Error applying patch (rolled back): {e}"
 
-        return _format_summary(added, modified, deleted)
+        return summary.format()
+
+
+@dataclass
+class _PatchSummary:
+    added: list[str] = field(default_factory=list)
+    modified: list[str] = field(default_factory=list)
+    deleted: list[str] = field(default_factory=list)
+
+    def format(self) -> str:
+        lines = ["Patch applied successfully."]
+        for file_path in self.added:
+            lines.append(f"  A {file_path}")
+        for file_path in self.modified:
+            lines.append(f"  M {file_path}")
+        for file_path in self.deleted:
+            lines.append(f"  D {file_path}")
+        return "\n".join(lines)
+
+
+def _apply_hunks(
+    session: _AtomicPatchSession, hunks: list[Hunk], workspace: Path | None
+) -> _PatchSummary:
+    summary = _PatchSummary()
+    for hunk in hunks:
+        if isinstance(hunk, AddHunk):
+            fp = session.add_file(hunk.path, hunk.contents)
+            summary.added.append(_display(fp, workspace))
+        elif isinstance(hunk, DeleteHunk):
+            fp = session.delete_file(hunk.path)
+            summary.deleted.append(_display(fp, workspace))
+        elif isinstance(hunk, UpdateHunk):
+            if hunk.move_path:
+                _, dst = session.move_file(hunk.path, hunk.move_path, hunk.chunks)
+                summary.modified.append(_display(dst, workspace))
+            else:
+                fp = session.update_file(hunk.path, hunk.chunks)
+                summary.modified.append(_display(fp, workspace))
+    return summary
 
 
 def _display(fp: Path, workspace: Path | None) -> str:
@@ -657,13 +681,3 @@ def _display(fp: Path, workspace: Path | None) -> str:
             pass
     return str(fp)
 
-
-def _format_summary(added: list[str], modified: list[str], deleted: list[str]) -> str:
-    lines = ["Patch applied successfully."]
-    for f in added:
-        lines.append(f"  A {f}")
-    for f in modified:
-        lines.append(f"  M {f}")
-    for f in deleted:
-        lines.append(f"  D {f}")
-    return "\n".join(lines)

@@ -466,6 +466,24 @@ class TestToolMoveFile:
         content = (tmp_path / "dst.py").read_text()
         assert "new_line" in content
 
+    @pytest.mark.asyncio
+    async def test_move_to_same_path_updates_without_deleting(self, tmp_path: Path):
+        _write(tmp_path, "same.py", "old_line\n")
+        tool = _tool(tmp_path)
+        patch = (
+            "*** Begin Patch\n"
+            "*** Update File: same.py\n"
+            "*** Move to: same.py\n"
+            "-old_line\n"
+            "+new_line\n"
+            "*** End Patch"
+        )
+
+        result = await tool.execute(patch=patch)
+
+        assert "Patch applied successfully" in result
+        assert (tmp_path / "same.py").read_text() == "new_line\n"
+
 
 # ---------------------------------------------------------------------------
 # Tool: execute — atomicity / rollback
@@ -524,6 +542,26 @@ class TestToolAtomicity:
         assert "rolled back" in result
         assert (tmp_path / "victim.py").exists()
         assert (tmp_path / "victim.py").read_text() == "precious\n"
+
+    @pytest.mark.asyncio
+    async def test_rollback_same_path_move_then_fail(self, tmp_path: Path):
+        """Same-path move updates should restore original content on later failure."""
+        _write(tmp_path, "same.py", "old_line\n")
+        tool = _tool(tmp_path)
+        patch = (
+            "*** Begin Patch\n"
+            "*** Update File: same.py\n"
+            "*** Move to: same.py\n"
+            "-old_line\n"
+            "+new_line\n"
+            "*** Delete File: missing.py\n"
+            "*** End Patch"
+        )
+
+        result = await tool.execute(patch=patch)
+
+        assert "rolled back" in result
+        assert (tmp_path / "same.py").read_text() == "old_line\n"
 
 
 # ---------------------------------------------------------------------------
