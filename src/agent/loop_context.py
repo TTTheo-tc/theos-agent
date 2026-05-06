@@ -24,6 +24,24 @@ _EPHEMERAL_CONTEXT_TAG = "[Ephemeral Context — not part of user history]"
 _INSTINCT_SIDECAR_RE = re.compile(r"<!-- instinct-routing:(.*?) -->")
 
 
+def _unique_matches(
+    matches: list[str],
+    *,
+    keep: Callable[[str], bool] | None = None,
+) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for match in matches:
+        value = match.strip()
+        if not value or value in seen:
+            continue
+        if keep is not None and not keep(value):
+            continue
+        seen.add(value)
+        values.append(value)
+    return values
+
+
 @dataclass(slots=True)
 class InstinctRouting:
     """Parsed instinct routing data for one pre-chat hook result."""
@@ -182,27 +200,16 @@ class TurnContextAssembler:
 
     @staticmethod
     def _extract_legacy_instinct_domains(hook_ctx: str) -> list[str]:
-        domains: list[str] = []
-        seen: set[str] = set()
-        for match in re.findall(r"^【([^】]+)】", hook_ctx, flags=re.MULTILINE):
-            label = match.strip()
-            if "/" not in label or label in seen:
-                continue
-            seen.add(label)
-            domains.append(label)
-        return domains
+        return _unique_matches(
+            re.findall(r"^【([^】]+)】", hook_ctx, flags=re.MULTILINE),
+            keep=lambda label: "/" in label,
+        )
 
     @staticmethod
     def _extract_legacy_instinct_skills(hook_ctx: str) -> list[str]:
-        skills: list[str] = []
-        seen: set[str] = set()
-        for match in re.findall(r"^\s*-\s+([\w-]+)\s*:", hook_ctx, flags=re.MULTILINE):
-            name = match.strip()
-            if not name or name in seen:
-                continue
-            seen.add(name)
-            skills.append(name)
-        return skills
+        return _unique_matches(
+            re.findall(r"^\s*-\s+([\w-]+)\s*:", hook_ctx, flags=re.MULTILINE)
+        )
 
     # -- turn message assembly -----------------------------------------------
 
