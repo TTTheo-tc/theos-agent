@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from src.session.checkpoint_utils import (
+    append_checkpoint_row,
     checkpoint_metadata,
     checkpoint_path,
+    checkpoint_timestamp,
     jsonable_metadata,
-    read_checkpoint_rows,
+    latest_checkpoint_row,
 )
 from src.utils.helpers import ensure_dir
 
@@ -67,12 +67,10 @@ class TurnStore:
             turn_id=turn_id,
             session_key=session_key,
             status=status,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=checkpoint_timestamp(),
             metadata=jsonable_metadata(metadata),
         )
-        path = self._get_path(session_key)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(checkpoint.to_dict(), ensure_ascii=False) + "\n")
+        append_checkpoint_row(self._get_path(session_key), checkpoint.to_dict())
         return checkpoint
 
     def latest(self, session_key: str) -> TurnCheckpoint | None:
@@ -109,9 +107,7 @@ class TurnStore:
 
     def _latest_from_path(self, path: Path) -> TurnCheckpoint | None:
         try:
-            rows = read_checkpoint_rows(path, "turn_checkpoint")
-            latest_row = rows[-1] if rows else None
-            return self._from_row(latest_row) if latest_row else None
+            return self._from_row(latest_checkpoint_row(path, "turn_checkpoint"))
         except Exception:
             logger.opt(exception=True).warning("Failed to read turn checkpoints from {}", path)
             return None

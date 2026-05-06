@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from src.session.checkpoint_utils import (
+    append_checkpoint_row,
     checkpoint_metadata,
     checkpoint_path,
+    checkpoint_timestamp,
     iter_checkpoint_rows,
     jsonable_metadata,
 )
@@ -62,12 +62,10 @@ class SubagentStore:
             task_id=task_id,
             session_key=session_key,
             status=status,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=checkpoint_timestamp(),
             metadata=jsonable_metadata(metadata),
         )
-        path = self._get_path(session_key)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(checkpoint.to_dict(), ensure_ascii=False) + "\n")
+        append_checkpoint_row(self._get_path(session_key), checkpoint.to_dict())
         return checkpoint
 
     def latest_for_session(self, session_key: str, limit: int = 5) -> list[SubagentCheckpoint]:

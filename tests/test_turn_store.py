@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.session.checkpoint_utils import read_checkpoint_rows
+from src.session.checkpoint_utils import latest_checkpoint_row, read_checkpoint_rows
 from src.session.turn_store import TurnStore
 
 
@@ -84,3 +84,23 @@ def test_read_checkpoint_rows_filters_type_and_ignores_empty_lines(tmp_path: Pat
 
 def test_read_checkpoint_rows_missing_file_returns_empty(tmp_path: Path):
     assert read_checkpoint_rows(tmp_path / "missing.jsonl", "turn_checkpoint") == []
+
+
+def test_latest_checkpoint_row_returns_last_matching_row(tmp_path: Path):
+    path = tmp_path / "checkpoints.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                '{"_type":"turn_checkpoint","turn_id":"a"}',
+                '{"_type":"subagent_checkpoint","task_id":"b"}',
+                '{"_type":"turn_checkpoint","turn_id":"c"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    row = latest_checkpoint_row(path, "turn_checkpoint")
+
+    assert row is not None
+    assert row["turn_id"] == "c"

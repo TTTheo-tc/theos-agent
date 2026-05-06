@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,17 @@ def checkpoint_metadata(row: dict[str, Any], id_key: str) -> dict[str, Any]:
     return {key: value for key, value in row.items() if key not in reserved}
 
 
+def checkpoint_timestamp() -> str:
+    """Return the canonical UTC checkpoint timestamp string."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def append_checkpoint_row(path: Path, row: dict[str, Any]) -> None:
+    """Append one checkpoint row to a JSONL file."""
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
 def iter_checkpoint_rows(path: Path, checkpoint_type: str) -> Iterator[dict[str, Any]]:
     """Read checkpoint rows of *checkpoint_type* from a JSONL file."""
     if not path.exists():
@@ -42,6 +53,14 @@ def iter_checkpoint_rows(path: Path, checkpoint_type: str) -> Iterator[dict[str,
 def read_checkpoint_rows(path: Path, checkpoint_type: str) -> list[dict[str, Any]]:
     """Read all checkpoint rows of *checkpoint_type* from a JSONL file."""
     return list(iter_checkpoint_rows(path, checkpoint_type))
+
+
+def latest_checkpoint_row(path: Path, checkpoint_type: str) -> dict[str, Any] | None:
+    """Read the latest checkpoint row of *checkpoint_type* without materializing all rows."""
+    latest: dict[str, Any] | None = None
+    for row in iter_checkpoint_rows(path, checkpoint_type):
+        latest = row
+    return latest
 
 
 def jsonable_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
