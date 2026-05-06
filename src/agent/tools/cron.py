@@ -73,11 +73,24 @@ class CronTool(ContextAwareTool):
         from src.agent.tools.context import ToolContext
 
         ctx = _context or ToolContext()
+        return self._dispatch(action, ctx, message, every_seconds, cron_expr, tz, at, job_id)
+
+    def _dispatch(
+        self,
+        action: str,
+        ctx: Any,
+        message: str,
+        every_seconds: int | None,
+        cron_expr: str | None,
+        tz: str | None,
+        at: str | None,
+        job_id: str | None,
+    ) -> str:
         if action == "add":
             return self._add_job(ctx, message, every_seconds, cron_expr, tz, at)
-        elif action == "list":
+        if action == "list":
             return self._list_jobs()
-        elif action == "remove":
+        if action == "remove":
             return self._remove_job(job_id)
         return f"Unknown action: {action}"
 
