@@ -15,7 +15,7 @@ class CronTool(ContextAwareTool):
     def owner_only(self) -> bool:
         return True
 
-    def __init__(self, cron_service: CronService):
+    def __init__(self, cron_service: CronService) -> None:
         self._cron = cron_service
 
     @property

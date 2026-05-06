@@ -12,7 +12,7 @@ AskUserFn = Callable[[str], Awaitable[str | None]]
 class AskUserTool(Tool):
     """Lets the Generator ask the user a clarification question."""
 
-    def __init__(self, ask_fn: AskUserFn | None = None):
+    def __init__(self, ask_fn: AskUserFn | None = None) -> None:
         self._ask_fn = ask_fn
 
     @property

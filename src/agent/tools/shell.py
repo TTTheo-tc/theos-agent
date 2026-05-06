@@ -355,7 +355,7 @@ class ExecTool(Tool):
         restrict_to_workspace: bool = False,
         path_append: str = "",
         env_passthrough: list[str] | None = None,
-    ):
+    ) -> None:
         self.timeout = timeout
         self.working_dir = working_dir or os.getcwd()
         self.deny_patterns = deny_patterns or [

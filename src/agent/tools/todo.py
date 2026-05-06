@@ -19,7 +19,7 @@ __all__ = [
 class TodoTool(Tool):
     """Tool to read and write a TODO task list."""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path) -> None:
         self._workspace = workspace
 
     @property

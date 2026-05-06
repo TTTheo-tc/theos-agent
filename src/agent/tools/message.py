@@ -16,7 +16,7 @@ class MessageTool(ContextAwareTool):
     def __init__(
         self,
         send_callback: Callable[[OutboundMessage], Awaitable[None]] | None = None,
-    ):
+    ) -> None:
         self._send_callback = send_callback
         self._messages_sent_in_turn: bool = False
 

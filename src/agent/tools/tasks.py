@@ -60,7 +60,7 @@ def _append_unique(target: dict[str, Any], field: str, values: list[str] | None)
 class TaskCreateTool(Tool):
     """Create a new task with subject and description."""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path) -> None:
         self._workspace = workspace
 
     @property
@@ -127,7 +127,7 @@ class TaskCreateTool(Tool):
 class TaskListTool(Tool):
     """List all tasks with their status and pending blockers."""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path) -> None:
         self._workspace = workspace
 
     @property
@@ -176,7 +176,7 @@ class TaskListTool(Tool):
 class TaskUpdateTool(Tool):
     """Update an existing task's fields."""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path) -> None:
         self._workspace = workspace
 
     @property
@@ -289,7 +289,7 @@ class TaskUpdateTool(Tool):
 class TaskGetTool(Tool):
     """Get full details of a single task."""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path) -> None:
         self._workspace = workspace
 
     @property

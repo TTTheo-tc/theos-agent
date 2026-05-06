@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class SubagentWaitTool(ContextAwareTool):
-    def __init__(self, executor: SubagentExecutor):
+    def __init__(self, executor: SubagentExecutor) -> None:
         self._executor = executor
 
     @property

@@ -15,7 +15,7 @@ class AgentTool(ContextAwareTool):
     def owner_only(self) -> bool:
         return True
 
-    def __init__(self, manager: "SubagentManager"):
+    def __init__(self, manager: "SubagentManager") -> None:
         self._manager = manager
 
     @property
