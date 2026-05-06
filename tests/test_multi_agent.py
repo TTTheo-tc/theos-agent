@@ -191,6 +191,13 @@ class TestFacadeDelegation:
         result = await manager.executor.wait(tasks[0].task_id)
         assert result is not None
 
+    def test_started_task_id_parser(self, manager):
+        assert (
+            manager._started_task_id("Subagent started: task_id=sub-abc123, label='explore'")
+            == "sub-abc123"
+        )
+        assert manager._started_task_id("Error: rejected") == ""
+
 
 class TestBuildModelChoices:
     """Verify the curated model list builder."""

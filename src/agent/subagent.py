@@ -79,9 +79,7 @@ class SubagentManager:
         if role and role not in self.roles:
             return f"Unknown role '{role}'. Available roles: {', '.join(self.roles) or 'none configured'}"
 
-        # Sync mutable state into executor so hot-swap works.
-        self.executor._provider = self.provider
-        self.executor._roles = self._resolve_all_roles()
+        self._sync_executor_runtime()
 
         display_label = label or task[:30] + ("..." if len(task) > 30 else "")
         root_session = root_session_key or session_key or "cli:direct"
@@ -104,8 +102,7 @@ class SubagentManager:
         if result_msg.startswith("Error:"):
             return result_msg
 
-        # Extract task_id from executor message ("Subagent started: task_id=sub-xxx, ...")
-        task_id = result_msg.split("task_id=")[1].split(",")[0] if "task_id=" in result_msg else ""
+        task_id = self._started_task_id(result_msg)
 
         logger.info("Agent [{}]: {}", task_id, display_label)
         parts = [f"Agent [{display_label}] started (id: {task_id})."]
@@ -171,3 +168,16 @@ class SubagentManager:
             name: RuntimeRoleConfig.from_agent_role(name, cfg, default_model)
             for name, cfg in self.roles.items()
         }
+
+    def _sync_executor_runtime(self) -> None:
+        """Push hot-swapped provider and roles into the executor."""
+        self.executor._provider = self.provider
+        self.executor._roles = self._resolve_all_roles()
+
+    @staticmethod
+    def _started_task_id(message: str) -> str:
+        """Extract task id from the executor's start message."""
+        marker = "task_id="
+        if marker not in message:
+            return ""
+        return message.split(marker, 1)[1].split(",", 1)[0]
