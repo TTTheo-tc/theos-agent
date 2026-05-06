@@ -17,6 +17,17 @@ class TestEstimateTokens:
         with_margin = estimate_tokens("a" * 400, safety_margin=1.2)
         assert with_margin > base
 
+    def test_fallback_safety_margin_applied(self, monkeypatch):
+        import src.memory.token_budget as token_budget
+
+        monkeypatch.setattr(token_budget, "_encoder_loaded", True)
+        monkeypatch.setattr(token_budget, "_encoder", None)
+
+        base = token_budget.estimate_tokens("a" * 400, safety_margin=1.0)
+        with_margin = token_budget.estimate_tokens("a" * 400, safety_margin=1.2)
+
+        assert with_margin > base
+
     def test_empty_string(self):
         assert estimate_tokens("") == 0
 
@@ -32,6 +43,18 @@ class TestEstimateMessagesTokens:
         ]
         result = estimate_messages_tokens(messages, safety_margin=1.0)
         assert 50 <= result <= 400
+
+    def test_fallback_safety_margin_applied(self, monkeypatch):
+        import src.memory.token_budget as token_budget
+
+        monkeypatch.setattr(token_budget, "_encoder_loaded", True)
+        monkeypatch.setattr(token_budget, "_encoder", None)
+        messages = [{"content": "a" * 400}]
+
+        base = token_budget.estimate_messages_tokens(messages, safety_margin=1.0)
+        with_margin = token_budget.estimate_messages_tokens(messages, safety_margin=1.2)
+
+        assert with_margin > base
 
 
 class TestResolveContextLimit:

@@ -29,14 +29,24 @@ def _get_encoder() -> Any:
     return _encoder
 
 
+def _estimate_text_tokens(
+    text: str,
+    encoder: Any,
+    *,
+    fallback_multiplier: float = 1.0,
+) -> int:
+    if encoder is not None:
+        return len(encoder.encode(text))
+    return int(len(text) / CHARS_PER_TOKEN * fallback_multiplier)
+
+
 def estimate_tokens(text: str | None, *, safety_margin: float = 1.05) -> int:
     """Estimate token count using tiktoken with character-based fallback."""
     if not text:
         return 0
     enc = _get_encoder()
-    if enc is not None:
-        return int(len(enc.encode(text)) * safety_margin)
-    return int(len(text) / CHARS_PER_TOKEN * 1.2)
+    base = _estimate_text_tokens(text, enc, fallback_multiplier=1.2)
+    return int(base * safety_margin)
 
 
 def estimate_messages_tokens(messages: list[dict], *, safety_margin: float = 1.05) -> int:
@@ -47,10 +57,7 @@ def estimate_messages_tokens(messages: list[dict], *, safety_margin: float = 1.0
         content = str(m.get("content", "") or "")
         if not content:
             continue
-        if enc is not None:
-            total += len(enc.encode(content))
-        else:
-            total += len(content) // CHARS_PER_TOKEN
+        total += _estimate_text_tokens(content, enc)
     return int(total * safety_margin) if total else 0
 
 
