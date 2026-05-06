@@ -60,6 +60,20 @@ class RecordTaskResult:
     history_entry: str | None = None  # set if task succeeded and needs HISTORY.md append
 
 
+@dataclass(frozen=True)
+class _TaskWrite:
+    task_id: str
+    title: str
+    domains: list[str]
+    skills: list[str]
+    tags: list[str]
+    artifacts: list[str]
+    tests: list[str]
+    source_refs: list[str]
+    metadata: dict[str, Any]
+    created_at: str
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -75,6 +89,24 @@ def _coerce_metadata(value: Any) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(items))
+
+
+def _clean_deduped_strings(items: list[str] | None) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for item in items or []:
+        if not item:
+            continue
+        value = str(item).strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        values.append(value)
+    return values
 
 
 def _search_node_types(object_type: str) -> list[str | None]:
@@ -260,18 +292,104 @@ class StructuredMemoryStore:
         assert self._kg is not None  # for type narrowing
         assert self._search is not None
 
-        now = _now_iso()
-        normalized_artifacts = list(
-            dict.fromkeys(str(item).strip() for item in (artifacts or []) if item)
+        task = self._build_task_write(
+            session_key=session_key,
+            user_message=user_message,
+            response=response,
+            tools_used=tools_used,
+            routed_skills=routed_skills,
+            routing_domains=routing_domains,
+            selected_primary=selected_primary,
+            usage=usage,
+            duration_ms=duration_ms,
+            artifacts=artifacts,
+            tests=tests,
+            status=status,
         )
-        normalized_tests = list(dict.fromkeys(str(item).strip() for item in (tests or []) if item))
-        source_refs = extract_source_refs(user_message, response, *normalized_artifacts)
-        task_id = f"task-{uuid.uuid4().hex[:12]}"
-        title = first_sentence(response or user_message)
+        await self._add_task_node(task, user_message=user_message)
 
-        deduped_tools = list(dict.fromkeys(tools_used))
-        deduped_skills = list(dict.fromkeys(routed_skills))
-        deduped_domains = list(dict.fromkeys(routing_domains))
+        # Supersede related older tasks
+        superseded = await self._supersede_related_tasks(
+            task_id=task.task_id,
+            status=status,
+            user_message=user_message,
+            source_refs=task.source_refs,
+            artifacts=task.artifacts,
+            selected_primary=selected_primary,
+            created_at=task.created_at,
+        )
+
+        history_entry = self._build_task_history_entry(
+            task_id=task.task_id,
+            title=task.title,
+            domains=task.domains,
+            status=status,
+            user_message=user_message,
+            artifacts=task.artifacts,
+            tests=task.tests,
+            superseded=superseded,
+        )
+
+        rule_ids = await self._record_rules(
+            response=response,
+            status=status,
+            domains=task.domains,
+            selected_primary=selected_primary,
+            task_id=task.task_id,
+            seen_at=task.created_at,
+        )
+
+        # Remember directive
+        remember_directive = (
+            derive_remembered_note(user_message, response) if status == "success" else None
+        )
+
+        research_id = await self._record_research_note(
+            session_key=session_key,
+            user_message=user_message,
+            response=response,
+            task_id=task.task_id,
+            domains=task.domains,
+            skills=task.skills,
+            source_refs=task.source_refs,
+        )
+
+        self._schedule_embeddings(
+            [task.task_id, *rule_ids, *([research_id] if research_id else [])]
+        )
+
+        return RecordTaskResult(
+            task_id=task.task_id,
+            rule_ids=rule_ids,
+            research_id=research_id,
+            superseded_task_ids=superseded,
+            remember_directive=remember_directive,
+            history_entry=history_entry,
+        )
+
+    @staticmethod
+    def _build_task_write(
+        *,
+        session_key: str,
+        user_message: str,
+        response: str,
+        tools_used: list[str],
+        routed_skills: list[str],
+        routing_domains: list[str],
+        selected_primary: str | None,
+        usage: dict[str, int] | None,
+        duration_ms: float | None,
+        artifacts: list[str] | None,
+        tests: list[str] | None,
+        status: str,
+    ) -> _TaskWrite:
+        deduped_tools = _dedupe(tools_used)
+        deduped_skills = _dedupe(routed_skills)
+        deduped_domains = _dedupe(routing_domains)
+        normalized_artifacts = _clean_deduped_strings(artifacts)
+        normalized_tests = _clean_deduped_strings(tests)
+        source_refs = extract_source_refs(user_message, response, *normalized_artifacts)
+        created_at = _now_iso()
 
         metadata: dict[str, Any] = {
             "session_key": session_key,
@@ -288,104 +406,100 @@ class StructuredMemoryStore:
             "is_latest_success": (status == "success"),
         }
 
-        tags = deduped_tools + deduped_skills
-        importance = compute_importance("task", user_message[:300])
-
-        await self._kg.add_node(
-            node_type="task",
-            title=title,
-            content=user_message[:300],
-            tags=tags,
+        return _TaskWrite(
+            task_id=f"task-{uuid.uuid4().hex[:12]}",
+            title=first_sentence(response or user_message),
             domains=deduped_domains,
-            importance=importance,
-            metadata=metadata,
-            node_id=task_id,
-        )
-
-        # Supersede related older tasks
-        superseded = await self._supersede_related_tasks(
-            task_id=task_id,
-            status=status,
-            user_message=user_message,
-            source_refs=source_refs,
-            artifacts=normalized_artifacts,
-            selected_primary=selected_primary,
-            created_at=now,
-        )
-
-        history_entry = self._build_task_history_entry(
-            task_id=task_id,
-            title=title,
-            domains=deduped_domains,
-            status=status,
-            user_message=user_message,
+            skills=deduped_skills,
+            tags=deduped_tools + deduped_skills,
             artifacts=normalized_artifacts,
             tests=normalized_tests,
-            superseded=superseded,
+            source_refs=source_refs,
+            metadata=metadata,
+            created_at=created_at,
         )
 
-        # Extract and upsert rules
+    async def _add_task_node(self, task: _TaskWrite, *, user_message: str) -> None:
+        assert self._kg is not None
+        await self._kg.add_node(
+            node_type="task",
+            title=task.title,
+            content=user_message[:300],
+            tags=task.tags,
+            domains=task.domains,
+            importance=compute_importance("task", user_message[:300]),
+            metadata=task.metadata,
+            node_id=task.task_id,
+        )
+
+    async def _record_rules(
+        self,
+        *,
+        response: str,
+        status: str,
+        domains: list[str],
+        selected_primary: str | None,
+        task_id: str,
+        seen_at: str,
+    ) -> list[str]:
+        if status != "success" or is_noise_response(response):
+            return []
+
+        assert self._kg is not None
         rule_ids: list[str] = []
-        if status == "success" and not is_noise_response(response):
-            for rule in extract_rules(response):
-                rid = await self._upsert_rule(
-                    rule_text=rule,
-                    routing_domains=deduped_domains,
-                    selected_primary=selected_primary,
-                    task_id=task_id,
-                    seen_at=now,
-                )
-                rule_ids.append(rid)
-                # Edge: task --derived--> rule
-                await self._kg.add_edge(task_id, rid, "derived")
-
-        # Remember directive
-        remember_directive = (
-            derive_remembered_note(user_message, response) if status == "success" else None
-        )
-
-        # Research note
-        research_id = None
-        if self._should_create_research_note(deduped_domains, user_message):
-            research_id = f"research-{uuid.uuid4().hex[:12]}"
-            r_title = first_sentence(user_message, max_chars=160) or "Research task"
-            r_summary = (response or "").strip()[:3000]
-            r_tags = self._research_tags(deduped_domains, deduped_skills)
-            r_metadata: dict[str, Any] = {
-                "task_memory_id": task_id,
-                "session_key": session_key,
-                "summary": r_summary,
-                "source_refs": source_refs,
-            }
-            await self._kg.add_node(
-                node_type="research",
-                title=r_title,
-                content=r_summary[:500],
-                tags=r_tags,
-                domains=deduped_domains,
-                importance=compute_importance("research", r_summary),
-                metadata=r_metadata,
-                node_id=research_id,
+        for rule in extract_rules(response):
+            rule_id = await self._upsert_rule(
+                rule_text=rule,
+                routing_domains=domains,
+                selected_primary=selected_primary,
+                task_id=task_id,
+                seen_at=seen_at,
             )
-            # Edge: task --produced--> research
-            await self._kg.add_edge(task_id, research_id, "produced")
+            rule_ids.append(rule_id)
+            await self._kg.add_edge(task_id, rule_id, "derived")
+        return rule_ids
 
-        # Fire-and-forget: embed new nodes when provider available
-        if self._embedding_provider:
-            embed_ids = [task_id] + rule_ids
-            if research_id:
-                embed_ids.append(research_id)
-            for nid in embed_ids:
-                asyncio.create_task(self._embed_node(nid))
+    async def _record_research_note(
+        self,
+        *,
+        session_key: str,
+        user_message: str,
+        response: str,
+        task_id: str,
+        domains: list[str],
+        skills: list[str],
+        source_refs: list[str],
+    ) -> str | None:
+        if not self._should_create_research_note(domains, user_message):
+            return None
 
-        return RecordTaskResult(
-            task_id=task_id,
-            rule_ids=rule_ids,
-            research_id=research_id,
-            superseded_task_ids=superseded,
-            remember_directive=remember_directive,
-            history_entry=history_entry,
+        assert self._kg is not None
+        research_id = f"research-{uuid.uuid4().hex[:12]}"
+        summary = (response or "").strip()[:3000]
+        metadata: dict[str, Any] = {
+            "task_memory_id": task_id,
+            "session_key": session_key,
+            "summary": summary,
+            "source_refs": source_refs,
+        }
+        await self._kg.add_node(
+            node_type="research",
+            title=first_sentence(user_message, max_chars=160) or "Research task",
+            content=summary[:500],
+            tags=self._research_tags(domains, skills),
+            domains=domains,
+            importance=compute_importance("research", summary),
+            metadata=metadata,
+            node_id=research_id,
         )
+        await self._kg.add_edge(task_id, research_id, "produced")
+        return research_id
+
+    def _schedule_embeddings(self, node_ids: list[str]) -> None:
+        if not self._embedding_provider:
+            return
+        for node_id in node_ids:
+            asyncio.create_task(self._embed_node(node_id))
 
     # -- search --------------------------------------------------------------
 

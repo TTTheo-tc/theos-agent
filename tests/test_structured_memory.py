@@ -207,6 +207,37 @@ async def test_structured_memory_store_marks_older_related_success_as_superseded
         await store.close()
 
 
+async def test_structured_memory_store_cleans_artifact_and_test_metadata(tmp_path: Path) -> None:
+    store = StructuredMemoryStore(tmp_path)
+    try:
+        await store.ensure_kg()
+
+        result = await store.record_task(
+            session_key="cli:test",
+            user_message="帮我更新 src/app.py",
+            response="已更新 src/app.py，并通过 tests/test_app.py。",
+            tools_used=["write_file", "write_file"],
+            routed_skills=["coding", "coding"],
+            routing_domains=["coding/general"],
+            selected_primary="coding/general",
+            artifacts=[" src/app.py ", "src/app.py", "   ", "tests/test_app.py"],
+            tests=[" tests/test_app.py ", "tests/test_app.py", " "],
+            usage={},
+            duration_ms=9.0,
+        )
+
+        task_node = await store.get_task_memory(result.task_id)
+        assert task_node is not None
+        meta = _coerce_metadata(task_node["metadata"])
+        assert meta["artifacts"] == ["src/app.py", "tests/test_app.py"]
+        assert meta["tests"] == ["tests/test_app.py"]
+        assert "src/app.py" in meta["source_refs"]
+        assert meta["tools_used"] == ["write_file"]
+        assert meta["routed_skills"] == ["coding"]
+    finally:
+        await store.close()
+
+
 async def test_structured_memory_store_failed_task_is_not_latest_success(tmp_path: Path) -> None:
     store = StructuredMemoryStore(tmp_path)
     try:
