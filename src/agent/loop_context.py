@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -21,6 +22,16 @@ if TYPE_CHECKING:
 
 _EPHEMERAL_CONTEXT_TAG = "[Ephemeral Context — not part of user history]"
 _INSTINCT_SIDECAR_RE = re.compile(r"<!-- instinct-routing:(.*?) -->")
+
+
+@dataclass(slots=True)
+class InstinctRouting:
+    """Parsed instinct routing data for one pre-chat hook result."""
+
+    domains: list[str] = field(default_factory=list)
+    selected_primary: str | None = None
+    skills: list[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
 
 
 class TurnContextAssembler:
@@ -123,55 +134,40 @@ class TurnContextAssembler:
     @staticmethod
     def extract_instinct_routing(hook_ctx: str | None) -> tuple[list[str], str | None]:
         """Extract matched ``category/domain`` labels from reflex output."""
-        if not hook_ctx:
-            return [], None
-
-        sidecar = TurnContextAssembler._extract_instinct_sidecar(hook_ctx)
-        if sidecar is not None:
-            return sidecar.get("domains", []), sidecar.get("selected_primary")
-
-        # Fallback: existing regex parsing
-        domains: list[str] = []
-        seen: set[str] = set()
-        for match in re.findall(r"^【([^】]+)】", hook_ctx, flags=re.MULTILINE):
-            label = match.strip()
-            if "/" not in label or label in seen:
-                continue
-            seen.add(label)
-            domains.append(label)
-        return domains, (domains[0] if domains else None)
+        routing = TurnContextAssembler.extract_instinct_context(hook_ctx)
+        return routing.domains, routing.selected_primary
 
     @staticmethod
     def extract_instinct_skills(hook_ctx: str | None) -> list[str]:
         """Extract recommended skill names from reflex output."""
-        if not hook_ctx:
-            return []
-
-        sidecar = TurnContextAssembler._extract_instinct_sidecar(hook_ctx)
-        if sidecar is not None:
-            return sidecar.get("skills", [])
-
-        # Fallback: existing regex parsing
-        skills: list[str] = []
-        seen: set[str] = set()
-        for match in re.findall(r"^\s*-\s+([\w-]+)\s*:", hook_ctx, flags=re.MULTILINE):
-            name = match.strip()
-            if not name or name in seen:
-                continue
-            seen.add(name)
-            skills.append(name)
-        return skills
+        return TurnContextAssembler.extract_instinct_context(hook_ctx).skills
 
     @staticmethod
     def extract_instinct_tools(hook_ctx: str | None) -> list[str]:
         """Extract recommended deferred tool names from reflex output."""
+        return TurnContextAssembler.extract_instinct_context(hook_ctx).tools
+
+    @staticmethod
+    def extract_instinct_context(hook_ctx: str | None) -> InstinctRouting:
+        """Extract all instinct routing fields from one hook output."""
         if not hook_ctx:
-            return []
+            return InstinctRouting()
 
         sidecar = TurnContextAssembler._extract_instinct_sidecar(hook_ctx)
         if sidecar is not None:
-            return sidecar.get("tools", [])
-        return []
+            return InstinctRouting(
+                domains=sidecar.get("domains", []),
+                selected_primary=sidecar.get("selected_primary"),
+                skills=sidecar.get("skills", []),
+                tools=sidecar.get("tools", []),
+            )
+
+        domains = TurnContextAssembler._extract_legacy_instinct_domains(hook_ctx)
+        return InstinctRouting(
+            domains=domains,
+            selected_primary=domains[0] if domains else None,
+            skills=TurnContextAssembler._extract_legacy_instinct_skills(hook_ctx),
+        )
 
     @staticmethod
     def _extract_instinct_sidecar(hook_ctx: str) -> dict[str, Any] | None:
@@ -183,6 +179,30 @@ class TurnContextAssembler:
         except json.JSONDecodeError:
             return None
         return data if isinstance(data, dict) else None
+
+    @staticmethod
+    def _extract_legacy_instinct_domains(hook_ctx: str) -> list[str]:
+        domains: list[str] = []
+        seen: set[str] = set()
+        for match in re.findall(r"^【([^】]+)】", hook_ctx, flags=re.MULTILINE):
+            label = match.strip()
+            if "/" not in label or label in seen:
+                continue
+            seen.add(label)
+            domains.append(label)
+        return domains
+
+    @staticmethod
+    def _extract_legacy_instinct_skills(hook_ctx: str) -> list[str]:
+        skills: list[str] = []
+        seen: set[str] = set()
+        for match in re.findall(r"^\s*-\s+([\w-]+)\s*:", hook_ctx, flags=re.MULTILINE):
+            name = match.strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            skills.append(name)
+        return skills
 
     # -- turn message assembly -----------------------------------------------
 
@@ -210,13 +230,14 @@ class TurnContextAssembler:
         selected_primary, routed_skills)``.
         """
         hook_ctx = await hooks.run_pre_chat(msg.content, workspace=task_workspace)
-        routing_domains, selected_primary = self.extract_instinct_routing(hook_ctx)
-        routed_skills = self.extract_instinct_skills(hook_ctx)
-        routed_tools = self.extract_instinct_tools(hook_ctx)
+        routing = self.extract_instinct_context(hook_ctx)
+        routing_domains = routing.domains
+        selected_primary = routing.selected_primary
+        routed_skills = routing.skills
 
         # Auto-activate deferred tools recommended by domain routing
-        if tool_activator and routed_tools:
-            for tool_name in routed_tools:
+        if tool_activator and routing.tools:
+            for tool_name in routing.tools:
                 tool_activator(tool_name)
         memory_names = memory_tool_names() if callable(memory_tool_names) else memory_tool_names
         initial_messages = ctx.build_messages(

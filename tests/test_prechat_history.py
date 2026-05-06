@@ -78,6 +78,32 @@ class TestPreChatHistory:
 
         assert skills == ["systematic-debugging", "writing-plans"]
 
+    def test_extract_instinct_context_parses_sidecar_once(self) -> None:
+        hook_ctx = (
+            "ignored fallback\n"
+            '<!-- instinct-routing:{"domains":["coding/general"],'
+            '"skills":["systematic-debugging"],'
+            '"tools":["structured_memory_search"],'
+            '"selected_primary":"coding/general"} -->'
+        )
+
+        routing = TurnContextAssembler.extract_instinct_context(hook_ctx)
+
+        assert routing.domains == ["coding/general"]
+        assert routing.selected_primary == "coding/general"
+        assert routing.skills == ["systematic-debugging"]
+        assert routing.tools == ["structured_memory_search"]
+
+    def test_extract_instinct_context_keeps_legacy_fallback(self) -> None:
+        routing = TurnContextAssembler.extract_instinct_context(
+            "【coding/general】\n  - summarize: fetch URLs\n  - summarize: duplicate"
+        )
+
+        assert routing.domains == ["coding/general"]
+        assert routing.selected_primary == "coding/general"
+        assert routing.skills == ["summarize"]
+        assert routing.tools == []
+
     def test_context_cache_uses_group_workspace_and_rebuild_clears_cache(
         self, tmp_path: Path
     ) -> None:
