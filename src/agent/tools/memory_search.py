@@ -77,6 +77,61 @@ def _format_kg_results(kg_results: list[dict[str, Any]]) -> str:
     return "\n\n".join(lines)
 
 
+def _truncate_content(content: str, max_chars: int) -> str:
+    if len(content) <= max_chars:
+        return content
+    return content[:max_chars] + "..."
+
+
+def _format_markdown_results(results: list[dict[str, Any]], query: str) -> str:
+    lines: list[str] = []
+    for i, result in enumerate(results, 1):
+        line_hint = _best_line_window(result.get("content", ""), query)
+        line_span = f" lines {line_hint[0]}-{line_hint[1]}" if line_hint is not None else ""
+        section = f" [{result['section']}{line_span}]" if result.get("section") else ""
+        timestamp = f" ({result['timestamp']})" if result.get("timestamp") else ""
+        content = _truncate_content(result["content"], 500)
+        lines.append(
+            f"{i}. [{result['source']}]{section}{timestamp} (score: {result['score']})\n"
+            f"   {content}"
+        )
+    return "\n\n".join(lines)
+
+
+def _markdown_recall_entries(results: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for result in results:
+        hint = _best_line_window(result.get("content", ""), query)
+        path = f"{result.get('source', '')}:{result.get('section', '')}"
+        if hint:
+            path += f"@{hint[0]}-{hint[1]}"
+        entries.append(
+            {
+                "target_kind": "markdown_section",
+                "target_id": None,
+                "path": path,
+                "score": result.get("score"),
+                "domains": [],
+                "content": result.get("content", ""),
+            }
+        )
+    return entries
+
+
+def _kg_recall_entries(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "target_kind": result.get("node_type", ""),
+            "target_id": result.get("id"),
+            "path": "",
+            "score": result.get("final_score"),
+            "domains": result.get("domains", []),
+            "content": result.get("content", "") or result.get("title", ""),
+        }
+        for result in results
+    ]
+
+
 class MemorySearchTool(ContextAwareTool):
     """Search long-term memory, conversation history, and knowledge graph."""
 
@@ -203,22 +258,7 @@ class MemorySearchTool(ContextAwareTool):
                     results_parts.append(f"Markdown search error: {exc}")
 
                 if md_results:
-                    lines: list[str] = []
-                    for i, r in enumerate(md_results, 1):
-                        src = r["source"]
-                        line_hint = _best_line_window(r.get("content", ""), query)
-                        line_span = (
-                            f" lines {line_hint[0]}-{line_hint[1]}" if line_hint is not None else ""
-                        )
-                        section = f" [{r['section']}{line_span}]" if r.get("section") else ""
-                        ts = f" ({r['timestamp']})" if r.get("timestamp") else ""
-                        content = r["content"]
-                        if len(content) > 500:
-                            content = content[:500] + "..."
-                        lines.append(
-                            f"{i}. [{src}]{section}{ts} (score: {r['score']})\n" f"   {content}"
-                        )
-                    results_parts.append("\n\n".join(lines))
+                    results_parts.append(_format_markdown_results(md_results, query))
             elif source == "markdown":
                 return "Memory search is not available (index not initialized)."
 
@@ -292,37 +332,10 @@ class MemorySearchTool(ContextAwareTool):
             telemetry_results: list[dict] = []
             # Markdown results don't have stable IDs
             if source in ("markdown", "all") and md_results:
-                for r in md_results:
-                    telemetry_results.append(
-                        {
-                            "target_kind": "markdown_section",
-                            "target_id": None,
-                            "path": (
-                                f"{r.get('source', '')}:{r.get('section', '')}"
-                                + (
-                                    f"@{hint[0]}-{hint[1]}"
-                                    if (hint := _best_line_window(r.get("content", ""), query))
-                                    else ""
-                                )
-                            ),
-                            "score": r.get("score"),
-                            "domains": [],
-                            "content": r.get("content", ""),
-                        }
-                    )
+                telemetry_results.extend(_markdown_recall_entries(md_results, query))
             # KG results have stable IDs
             if source in ("knowledge_graph", "all") and enriched:
-                for r in enriched:
-                    telemetry_results.append(
-                        {
-                            "target_kind": r.get("node_type", ""),
-                            "target_id": r.get("id"),
-                            "path": "",
-                            "score": r.get("final_score"),
-                            "domains": r.get("domains", []),
-                            "content": r.get("content", "") or r.get("title", ""),
-                        }
-                    )
+                telemetry_results.extend(_kg_recall_entries(enriched))
             if telemetry_results:
                 workspace_path = self._resolve_workspace(_context.session_key)
                 if workspace_path:
