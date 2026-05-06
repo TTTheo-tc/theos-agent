@@ -26,7 +26,7 @@ def _is_mcp_close_noise(exc: BaseException) -> bool:
 class MCPManager:
     """Manages lazy connection to MCP servers."""
 
-    def __init__(self, mcp_servers: dict | None = None):
+    def __init__(self, mcp_servers: dict[str, Any] | None = None) -> None:
         self._servers = mcp_servers or {}
         self._stack: AsyncExitStack | None = None
         self._connected = False
