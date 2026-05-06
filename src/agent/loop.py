@@ -756,7 +756,8 @@ class AgentLoop:
             chat_id=chat_id,
             model=self.model,
             memory_config=self._memory_config,
-            has_memory_tools=self._memory.search_enabled(),
+            has_memory_tools=bool(self._memory_tool_names()),
+            memory_tool_names=self._memory_tool_names(),
             prompt_profile=(ContextBuilder._GENVER_GENERATOR_PROFILE if self.is_genver else None),
         )
         initial_count = len(messages)
@@ -1506,6 +1507,7 @@ class AgentLoop:
             model=self.model,
             memory_config=self._memory_config,
             memory_search_enabled=self._memory.search_enabled(),
+            memory_tool_names=self._memory_tool_names,
             build_structured_recall=self._memory.build_structured_recall,
             maybe_compact=lambda messages: self._memory.maybe_compact(
                 messages,
@@ -1518,6 +1520,13 @@ class AgentLoop:
             ),
             tool_activator=self.tools.activate,
         )
+
+    def _memory_tool_names(self) -> set[str]:
+        return {
+            name
+            for name in self.tools.active_tool_names()
+            if name in ContextBuilder.MEMORY_TOOL_ORDER
+        }
 
     async def process_direct(
         self,

@@ -241,3 +241,33 @@ def test_memory_tools_prompt_contains_mandatory_policy(tmp_path) -> None:
     assert "Mandatory recall policy" in prompt
     assert "MUST call" in prompt
     assert "Do NOT guess or fabricate" in prompt
+
+
+def test_memory_tools_prompt_uses_actual_tool_names(tmp_path) -> None:
+    workspace = _make_workspace(tmp_path)
+
+    builder = ContextBuilder(workspace, group_workspace=workspace)
+    prompt = builder.build_system_prompt(
+        current_message="test",
+        has_memory_tools=True,
+        memory_tool_names={"memory_search"},
+    )
+
+    assert "You have `memory_search` tools available." in prompt
+    assert "structured_memory_search" not in prompt
+    assert "MUST call `memory_search` BEFORE answering" in prompt
+
+
+def test_memory_tools_prompt_supports_structured_only_tools(tmp_path) -> None:
+    workspace = _make_workspace(tmp_path)
+
+    builder = ContextBuilder(workspace, group_workspace=workspace)
+    prompt = builder.build_system_prompt(
+        current_message="test",
+        has_memory_tools=True,
+        memory_tool_names={"structured_memory_search"},
+    )
+
+    assert "You have `structured_memory_search` tools available." in prompt
+    assert "`memory_search`" not in prompt
+    assert "MUST call `structured_memory_search` BEFORE answering" in prompt

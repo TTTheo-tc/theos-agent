@@ -172,6 +172,17 @@ def test_coding_profile_initializes_subagents_for_agent_tool(tmp_path: Path):
     assert loop.tools.has("agent") is True
 
 
+def test_memory_prompt_names_use_active_tool_definitions(tmp_path: Path):
+    config = _make_test_config(tmp_path)
+    config.tools.profile = "coding"
+
+    loop = AgentLoop(bus=MessageBus(), provider=_make_provider(), config=config)
+
+    assert "memory_get" in loop.tools.tool_names
+    assert "memory_get" not in loop.tools.active_tool_names()
+    assert loop._memory_tool_names() == {"memory_search"}
+
+
 @pytest.mark.asyncio
 async def test_stop_does_not_create_subagents_when_none_exist(tmp_path: Path):
     """Stopping a default session should not instantiate subagent machinery."""

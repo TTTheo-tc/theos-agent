@@ -190,10 +190,17 @@ class ToolRegistry:
 
         In plan mode, only tools in ``PLAN_MODE_TOOLS`` are returned.
         """
-        tools = self._tools.values()
+        return [tool.to_schema() for tool in self._definition_tools()]
+
+    def active_tool_names(self) -> list[str]:
+        """Return tool names currently exposed to the model."""
+        return [tool.name for tool in self._definition_tools()]
+
+    def _definition_tools(self) -> list[Tool]:
+        tools = list(self._tools.values())
         if self._plan_mode:
-            tools = [t for t in tools if t.name in self.PLAN_MODE_TOOLS]
-        return [tool.to_schema() for tool in tools]
+            return [tool for tool in tools if tool.name in self.PLAN_MODE_TOOLS]
+        return tools
 
     @staticmethod
     def _assess_risk(tool: Tool, params: dict[str, Any]) -> str:

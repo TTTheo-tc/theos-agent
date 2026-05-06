@@ -201,6 +201,7 @@ class TurnContextAssembler:
         memory_search_enabled: bool,
         build_structured_recall: Callable[..., Any],
         maybe_compact: Callable[[list[dict]], Any],
+        memory_tool_names: Callable[[], set[str]] | set[str] | None = None,
         tool_activator: Callable[[str], bool] | None = None,
     ) -> tuple[list[dict], int, list[str], str | None, list[str]]:
         """Build initial LLM messages from pre-chat hooks and context.
@@ -217,6 +218,7 @@ class TurnContextAssembler:
         if tool_activator and routed_tools:
             for tool_name in routed_tools:
                 tool_activator(tool_name)
+        memory_names = memory_tool_names() if callable(memory_tool_names) else memory_tool_names
         initial_messages = ctx.build_messages(
             history=history,
             current_message=msg.content,
@@ -226,7 +228,8 @@ class TurnContextAssembler:
             chat_id=msg.chat_id,
             model=model,
             memory_config=memory_config,
-            has_memory_tools=memory_search_enabled,
+            has_memory_tools=bool(memory_names) if memory_names is not None else memory_search_enabled,
+            memory_tool_names=memory_names,
             prompt_profile=(ContextBuilder._GENVER_GENERATOR_PROFILE if run_genver else None),
         )
         structured_recall = await build_structured_recall(

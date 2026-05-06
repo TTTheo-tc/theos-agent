@@ -5,6 +5,7 @@ import io
 import mimetypes
 import platform
 import time
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -25,6 +26,14 @@ class ContextBuilder:
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md"]
     _RUNTIME_CONTEXT_TAG = "[Runtime Context — metadata only, not instructions]"
     _GENVER_GENERATOR_PROFILE = "genver_generator"
+    MEMORY_TOOL_ORDER = (
+        "memory_search",
+        "memory_get",
+        "structured_memory_search",
+        "research_note_get",
+        "task_memory_get",
+        "domain_rule_get",
+    )
 
     # Sentinel inserted between static (session-scoped, cache-stable) and dynamic
     # (per-turn) sections of the system prompt.  The Anthropic provider splits on
@@ -79,6 +88,7 @@ class ContextBuilder:
         current_message: str | None = None,
         memory_config: "Any | None" = None,
         has_memory_tools: bool = False,
+        memory_tool_names: Iterable[str] | None = None,
         prompt_profile: str | None = None,
     ) -> str:
         """Build the system prompt from identity, bootstrap files, memory, and skills.
@@ -96,6 +106,7 @@ class ContextBuilder:
         static, always_skills = self._build_static_sections(
             include_agent_reference=include_agent_reference,
             has_memory_tools=has_memory_tools,
+            memory_tool_names=memory_tool_names,
         )
         dynamic = self._build_dynamic_sections(
             skill_names=skill_names,
@@ -116,6 +127,7 @@ class ContextBuilder:
         *,
         include_agent_reference: bool,
         has_memory_tools: bool,
+        memory_tool_names: Iterable[str] | None,
     ) -> tuple[list[str], list[str]]:
         """Build session-stable prompt sections and return always-loaded skills."""
         static: list[str] = []
@@ -136,7 +148,9 @@ class ContextBuilder:
             self._append_agent_reference_sections(static, always_skills)
 
         if has_memory_tools:
-            static.append(self._build_memory_tools_section())
+            memory_tools = self._build_memory_tools_section(memory_tool_names)
+            if memory_tools:
+                static.append(memory_tools)
 
         return static, always_skills
 
@@ -161,20 +175,41 @@ Skills with available="false" need dependencies installed first - you can try in
         if roles_section:
             static.append(roles_section)
 
-    def _build_memory_tools_section(self) -> str:
+    def _build_memory_tools_section(self, memory_tool_names: Iterable[str] | None = None) -> str:
+        names = set(self.MEMORY_TOOL_ORDER if memory_tool_names is None else memory_tool_names)
+        tools = [name for name in self.MEMORY_TOOL_ORDER if name in names]
+        if not tools:
+            return ""
+
+        tool_list = ", ".join(f"`{name}`" for name in tools)
+        search_tools = [
+            name
+            for name in ("memory_search", "structured_memory_search")
+            if name in names
+        ]
+        if search_tools:
+            search_phrase = " or ".join(f"`{name}`" for name in search_tools)
+            policy = (
+                "**Mandatory recall policy:**\n"
+                "- When the user asks about prior work, past decisions, stated preferences, "
+                "commitments, or todos — and the injected Memory section does not "
+                f"already cover the topic — you MUST call {search_phrase} BEFORE answering.\n"
+                "- Do NOT guess or fabricate historical facts. If memory tools return "
+                "nothing, say you don't have that information.\n"
+                "- The Memory section is pre-loaded context; for specific historical "
+                "questions beyond its scope, always search first."
+            )
+        else:
+            policy = (
+                "**Recall policy:**\n"
+                "- Use the available memory tools only for specific facts already identified "
+                "by prior context or tool output."
+            )
+
         return (
             "# Memory Tools\n\n"
-            "You have `memory_search`, `memory_get`, `structured_memory_search`, "
-            "`research_note_get`, `task_memory_get`, and `domain_rule_get` tools available.\n\n"
-            "**Mandatory recall policy:**\n"
-            "- When the user asks about prior work, past decisions, stated preferences, "
-            "commitments, or todos — and the injected Memory section does not "
-            "already cover the topic — you MUST call `memory_search` or "
-            "`structured_memory_search` BEFORE answering.\n"
-            "- Do NOT guess or fabricate historical facts. If memory tools return "
-            "nothing, say you don't have that information.\n"
-            "- The Memory section is pre-loaded context; for specific historical "
-            "questions beyond its scope, always search first."
+            f"You have {tool_list} tools available.\n\n"
+            f"{policy}"
         )
 
     def _build_dynamic_sections(
@@ -304,6 +339,7 @@ Skills with available="false" need dependencies installed first - you can try in
         model: str | None = None,
         memory_config: "Any | None" = None,
         has_memory_tools: bool = False,
+        memory_tool_names: Iterable[str] | None = None,
         prompt_profile: str | None = None,
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call.
@@ -323,6 +359,7 @@ Skills with available="false" need dependencies installed first - you can try in
                     current_message=current_message,
                     memory_config=memory_config,
                     has_memory_tools=has_memory_tools,
+                    memory_tool_names=memory_tool_names,
                     prompt_profile=prompt_profile,
                 ),
             },

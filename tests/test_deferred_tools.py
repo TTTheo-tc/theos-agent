@@ -119,6 +119,21 @@ class TestRegistryContainment:
         assert "active_one" in names
         assert "deferred_one" in names
 
+    def test_active_tool_names_excludes_deferred_pool(self):
+        reg = ToolRegistry()
+        reg.register(_DummyTool("active_one"))
+        reg.register(_DummyTool("deferred_one"), deferred=True)
+
+        assert reg.active_tool_names() == ["active_one"]
+
+    def test_active_tool_names_respects_plan_mode_filter(self):
+        reg = ToolRegistry()
+        reg.register(_DummyTool("read_file"))
+        reg.register(_DummyTool("write_file"))
+        reg.enter_plan_mode()
+
+        assert reg.active_tool_names() == ["read_file"]
+
     def test_len_counts_both_pools(self):
         reg = ToolRegistry()
         reg.register(_DummyTool("a"))
@@ -302,6 +317,20 @@ class TestToolSearchTool:
         names = [d["function"]["name"] for d in defs]
         assert "pdf" in names
         assert "tts" in names
+
+    @pytest.mark.asyncio
+    async def test_select_memory_tool_returns_recall_policy(self):
+        from src.agent.tools.tool_search import ToolSearchTool
+
+        reg = ToolRegistry()
+        reg.register(_DummyTool("structured_memory_search", "Search structured memory."), deferred=True)
+        tool = ToolSearchTool(registry=reg)
+
+        result = await tool.execute(query="select:structured_memory_search")
+
+        assert "structured_memory_search" in result
+        assert "historical recall" in result
+        assert "`structured_memory_search` before answering" in result
 
 
 # ---------------------------------------------------------------------------

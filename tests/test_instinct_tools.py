@@ -123,3 +123,35 @@ class TestToolActivation:
         assert primary == "feishu/wiki"
         assert skills == []
         assert "[Ephemeral Context" in messages[-1]["content"]
+
+    @pytest.mark.asyncio
+    async def test_build_turn_messages_samples_memory_tools_after_routing(self, tmp_path: Path):
+        assembler = TurnContextAssembler(tmp_path)
+        hooks = AsyncMock()
+        hooks.run_pre_chat = AsyncMock(
+            return_value='<!-- instinct-routing:{"tools":["structured_memory_search"]} -->'
+        )
+        active_memory_tools: set[str] = set()
+
+        def _activate(name: str) -> bool:
+            active_memory_tools.add(name)
+            return True
+
+        messages, *_ = await assembler.build_turn_messages(
+            InboundMessage(channel="cli", sender_id="u1", chat_id="c1", content="recall"),
+            key="cli:c1",
+            run_genver=False,
+            task_workspace=tmp_path,
+            ctx=ContextBuilder(tmp_path),
+            history=[],
+            hooks=hooks,
+            model="test-model",
+            memory_config=None,
+            memory_search_enabled=False,
+            build_structured_recall=AsyncMock(return_value=""),
+            maybe_compact=AsyncMock(side_effect=lambda msgs: msgs),
+            memory_tool_names=lambda: active_memory_tools,
+            tool_activator=_activate,
+        )
+
+        assert "structured_memory_search" in messages[0]["content"]

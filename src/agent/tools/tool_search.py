@@ -9,6 +9,8 @@ from src.agent.tools.base import Tool
 if TYPE_CHECKING:
     from src.agent.tools.registry import ToolRegistry
 
+_MEMORY_SEARCH_TOOLS = {"memory_search", "structured_memory_search"}
+
 
 class ToolSearchTool(Tool):
     """Search the deferred tool pool and activate matched tools.
@@ -107,6 +109,13 @@ class ToolSearchTool(Tool):
         lines = [f"**Activated {len(activated)} tool(s):**\n"]
         for item in activated:
             lines.append(f"- **{item['name']}**: {item['description']}")
+        memory_search_tools = [item["name"] for item in activated if item["name"] in _MEMORY_SEARCH_TOOLS]
+        if memory_search_tools:
+            search_phrase = " or ".join(f"`{name}`" for name in memory_search_tools)
+            lines.append(
+                "\nFor historical recall questions not covered by injected memory, "
+                f"call {search_phrase} before answering."
+            )
         if not_found:
             lines.append(f"\nNot found: {', '.join(not_found)}")
         return "\n".join(lines)
