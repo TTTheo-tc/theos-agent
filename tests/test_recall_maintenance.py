@@ -119,6 +119,30 @@ class TestFoldRecallJournal:
         targets = json.loads(targets_path.read_text())
         assert targets["rule-x"]["recall_count"] == 1
 
+    def test_fold_discards_stale_targets_if_checkpoint_missing(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-fresh",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": 0.5,
+                },
+            ],
+        )
+        targets_path = tmp_path / "memory" / "instinct" / "recall_targets.json"
+        targets_path.write_text(json.dumps({"rule-stale": {"recall_count": 99}}))
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads(targets_path.read_text())
+        assert "rule-stale" not in targets
+        assert targets["rule-fresh"]["recall_count"] == 1
+
     def test_fold_recovers_from_corrupt_checkpoint(self, tmp_path):
         from src.memory.recall_maintenance import fold_recall_journal
 
@@ -142,6 +166,148 @@ class TestFoldRecallJournal:
         fold_recall_journal(tmp_path)
         targets = json.loads((tmp_path / "memory" / "instinct" / "recall_targets.json").read_text())
         assert targets["rule-y"]["recall_count"] == 1
+
+    def test_fold_discards_stale_targets_when_checkpoint_corrupt(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-fresh-corrupt",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": 0.6,
+                },
+            ],
+        )
+        instinct_dir = tmp_path / "memory" / "instinct"
+        (instinct_dir / "recall_targets.json").write_text(
+            json.dumps({"rule-stale": {"recall_count": 99}})
+        )
+        (instinct_dir / "recall_targets.checkpoint.json").write_text("NOT VALID JSON{{{")
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads((instinct_dir / "recall_targets.json").read_text())
+        assert "rule-stale" not in targets
+        assert targets["rule-fresh-corrupt"]["recall_count"] == 1
+
+    def test_fold_recovers_from_non_numeric_checkpoint_offset(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-bad-offset",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": 0.6,
+                },
+            ],
+        )
+        instinct_dir = tmp_path / "memory" / "instinct"
+        (instinct_dir / "recall_targets.json").write_text(
+            json.dumps({"rule-stale": {"recall_count": 10}})
+        )
+        (instinct_dir / "recall_targets.checkpoint.json").write_text(
+            json.dumps({"byte_offset": "not-an-int"})
+        )
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads((instinct_dir / "recall_targets.json").read_text())
+        assert "rule-stale" not in targets
+        assert targets["rule-bad-offset"]["recall_count"] == 1
+
+    def test_fold_discards_stale_targets_when_checkpoint_offset_missing(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-missing-offset",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": 0.6,
+                },
+            ],
+        )
+        instinct_dir = tmp_path / "memory" / "instinct"
+        (instinct_dir / "recall_targets.json").write_text(
+            json.dumps({"rule-stale": {"recall_count": 99}})
+        )
+        (instinct_dir / "recall_targets.checkpoint.json").write_text(json.dumps({}))
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads((instinct_dir / "recall_targets.json").read_text())
+        assert "rule-stale" not in targets
+        assert targets["rule-missing-offset"]["recall_count"] == 1
+
+    def test_fold_discards_stale_targets_when_checkpoint_offset_negative(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-negative-offset",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": 0.6,
+                },
+            ],
+        )
+        instinct_dir = tmp_path / "memory" / "instinct"
+        (instinct_dir / "recall_targets.json").write_text(
+            json.dumps({"rule-stale": {"recall_count": 99}})
+        )
+        (instinct_dir / "recall_targets.checkpoint.json").write_text(
+            json.dumps({"byte_offset": -1})
+        )
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads((instinct_dir / "recall_targets.json").read_text())
+        assert "rule-stale" not in targets
+        assert targets["rule-negative-offset"]["recall_count"] == 1
+
+    @pytest.mark.parametrize("offset", [1.5, True])
+    def test_fold_discards_stale_targets_when_checkpoint_offset_not_int(self, tmp_path, offset):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-non-int-offset",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": 0.6,
+                },
+            ],
+        )
+        instinct_dir = tmp_path / "memory" / "instinct"
+        (instinct_dir / "recall_targets.json").write_text(
+            json.dumps({"rule-stale": {"recall_count": 99}})
+        )
+        (instinct_dir / "recall_targets.checkpoint.json").write_text(
+            json.dumps({"byte_offset": offset})
+        )
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads((instinct_dir / "recall_targets.json").read_text())
+        assert "rule-stale" not in targets
+        assert targets["rule-non-int-offset"]["recall_count"] == 1
 
     def test_fold_recovers_from_missing_targets(self, tmp_path):
         """recall_targets.json deleted but checkpoint exists — rebuild from journal."""
@@ -201,6 +367,68 @@ class TestFoldRecallJournal:
         targets = json.loads((tmp_path / "memory" / "instinct" / "recall_targets.json").read_text())
         assert len(targets["rule-big"]["distinct_query_hashes"]) <= 32
         assert len(targets["rule-big"]["distinct_days"]) <= 16
+
+    def test_fold_ignores_non_numeric_scores(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-score",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": "high",
+                },
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-score",
+                    "query_hash": "h2",
+                    "day": "2026-04-15",
+                    "score": 0.7,
+                },
+            ],
+        )
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads((tmp_path / "memory" / "instinct" / "recall_targets.json").read_text())
+        target = targets["rule-score"]
+        assert target["recall_count"] == 2
+        assert target["max_score"] == 0.7
+        assert target["total_score"] == 0.7
+
+    def test_fold_ignores_non_finite_scores(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-finite",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": "nan",
+                },
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-finite",
+                    "query_hash": "h2",
+                    "day": "2026-04-15",
+                    "score": "inf",
+                },
+            ],
+        )
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads((tmp_path / "memory" / "instinct" / "recall_targets.json").read_text())
+        target = targets["rule-finite"]
+        assert target["recall_count"] == 2
+        assert target["max_score"] == 0.0
+        assert target["total_score"] == 0.0
 
     @pytest.mark.asyncio
     async def test_fold_accepts_real_structured_search_rule_entries(self, tmp_path):

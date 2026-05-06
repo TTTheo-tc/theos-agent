@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from loguru import logger
 
@@ -47,6 +49,128 @@ def _atomic_write(path: Path, content: str) -> None:
         except OSError:
             pass
         raise
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_json_object(path: Path) -> tuple[dict[str, Any], bool]:
+    if not path.exists():
+        return {}, False
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}, False
+    return (data, True) if isinstance(data, dict) else ({}, False)
+
+
+def _checkpoint_offset(path: Path, targets: dict[str, dict[str, Any]]) -> tuple[int, bool]:
+    if not path.exists() or not targets:
+        return 0, False
+
+    checkpoint, valid_json = _read_json_object(path)
+    if not valid_json:
+        return 0, False
+    if "byte_offset" not in checkpoint:
+        return 0, False
+    offset = checkpoint["byte_offset"]
+    if isinstance(offset, bool) or not isinstance(offset, int):
+        return 0, False
+    if offset < 0:
+        return 0, False
+    return offset, True
+
+
+def _iter_jsonl(handle: TextIO) -> Iterator[dict[str, Any]]:
+    for line in handle:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(entry, dict):
+            yield entry
+
+
+def _empty_recall_target() -> dict[str, Any]:
+    return {
+        "recall_count": 0,
+        "distinct_query_hashes": [],
+        "distinct_days": [],
+        "last_recalled_at": "",
+        "max_score": 0.0,
+        "total_score": 0.0,
+        "daily_count": 0,
+        "daily_counts": {},
+    }
+
+
+def _target_for(targets: dict[str, dict[str, Any]], target_id: str) -> dict[str, Any]:
+    target = targets.setdefault(target_id, _empty_recall_target())
+    target.setdefault("total_score", 0.0)
+    target.setdefault("daily_count", 0)
+    target.setdefault("daily_counts", {})
+    return target
+
+
+def _score_value(entry: dict[str, Any]) -> float | None:
+    score = entry.get("score")
+    if score is None:
+        return None
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def _append_capped_unique(values: list[str], value: str, limit: int) -> None:
+    if value and value not in values and len(values) < limit:
+        values.append(value)
+
+
+def _fold_recall_entry(
+    targets: dict[str, dict[str, Any]],
+    entry: dict[str, Any],
+) -> str | None:
+    target_id = entry.get("target_id")
+    kind = entry.get("target_kind", "")
+    if not target_id or kind not in ("kg_rule", "rule"):
+        return None
+
+    target_id = str(target_id)
+    target = _target_for(targets, target_id)
+    target["recall_count"] += 1
+    target["last_recalled_at"] = entry.get("timestamp", target["last_recalled_at"])
+
+    _append_capped_unique(
+        target["distinct_query_hashes"],
+        str(entry.get("query_hash") or ""),
+        _MAX_QUERY_HASHES,
+    )
+
+    day = str(entry.get("day") or "")
+    _append_capped_unique(target["distinct_days"], day, _MAX_DAYS)
+
+    score = _score_value(entry)
+    if score is not None and score > target["max_score"]:
+        target["max_score"] = score
+    target["total_score"] += score or 0
+
+    if day:
+        target["daily_counts"][day] = target["daily_counts"].get(day, 0) + 1
+        target["daily_count"] = max(target["daily_count"], target["daily_counts"][day])
+
+    return target_id
 
 
 def fold_recall_journal(workspace: Path) -> int:
@@ -85,92 +209,25 @@ def _fold_recall_journal_locked(workspace: Path) -> int:
     targets_path = workspace / _TARGETS_REL
     checkpoint_path = workspace / _CHECKPOINT_REL
 
-    # Load existing targets (or start fresh)
-    targets: dict[str, dict[str, Any]] = {}
-    if targets_path.exists():
-        try:
-            targets = json.loads(targets_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            targets = {}
+    targets = _load_json_object(targets_path)
+    offset, checkpoint_valid = _checkpoint_offset(checkpoint_path, targets)
+    if targets and not checkpoint_valid:
+        targets = {}
 
-    # Load checkpoint
-    offset = 0
-    if checkpoint_path.exists() and targets:
-        try:
-            cp = json.loads(checkpoint_path.read_text())
-            offset = cp.get("byte_offset", 0)
-        except (json.JSONDecodeError, OSError):
-            offset = 0
-            targets = {}  # checkpoint invalid → full rebuild
-
-    # Read journal from offset
     updated_ids: set[str] = set()
     try:
         with open(journal_path, "r") as f:
             f.seek(offset)
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                tid = entry.get("target_id")
-                kind = entry.get("target_kind", "")
-                if not tid or kind not in ("kg_rule", "rule"):
-                    continue
-
-                if tid not in targets:
-                    targets[tid] = {
-                        "recall_count": 0,
-                        "distinct_query_hashes": [],
-                        "distinct_days": [],
-                        "last_recalled_at": "",
-                        "max_score": 0.0,
-                        "total_score": 0.0,
-                        "daily_count": 0,
-                        "daily_counts": {},
-                    }
-
-                t = targets[tid]
-                # Backfill v2.1 fields for targets written by older schema.
-                t.setdefault("total_score", 0.0)
-                t.setdefault("daily_count", 0)
-                t.setdefault("daily_counts", {})
-
-                t["recall_count"] += 1
-                t["last_recalled_at"] = entry.get("timestamp", t["last_recalled_at"])
-
-                qh = entry.get("query_hash", "")
-                if qh and qh not in t["distinct_query_hashes"]:
-                    if len(t["distinct_query_hashes"]) < _MAX_QUERY_HASHES:
-                        t["distinct_query_hashes"].append(qh)
-
-                day = entry.get("day", "")
-                if day and day not in t["distinct_days"]:
-                    if len(t["distinct_days"]) < _MAX_DAYS:
-                        t["distinct_days"].append(day)
-
-                score = entry.get("score")
-                if score is not None and score > t["max_score"]:
-                    t["max_score"] = score
-
-                # v2.1: cumulative score + per-day consolidation signal.
-                t["total_score"] += score or 0
-                if day:
-                    t["daily_counts"][day] = t["daily_counts"].get(day, 0) + 1
-                    t["daily_count"] = max(t["daily_count"], t["daily_counts"][day])
-
-                updated_ids.add(tid)
+            for entry in _iter_jsonl(f):
+                target_id = _fold_recall_entry(targets, entry)
+                if target_id:
+                    updated_ids.add(target_id)
 
             new_offset = f.tell()
-    except OSError:
+    except (OSError, ValueError):
         logger.opt(exception=True).warning("Failed to read recall journal")
         return 0
 
-    # Write targets + checkpoint atomically (tmp + rename)
     try:
         targets_path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(targets_path, json.dumps(targets, indent=2, ensure_ascii=False) + "\n")
