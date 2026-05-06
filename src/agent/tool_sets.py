@@ -38,6 +38,15 @@ _FEISHU_TOOLS = {
 }
 
 
+@dataclass(frozen=True)
+class _FeishuRuntimeConfig:
+    app_id: str
+    app_secret: str
+    cache_dir: str
+    token_dir: str
+    allow_from: list[str]
+
+
 @dataclass
 class _RegistrationState:
     registry: ToolRegistry
@@ -504,8 +513,11 @@ def _register_feishu_tools(state: _RegistrationState) -> None:
         return
 
     config = state.config
-    app_id, app_secret, feishu_config = _resolve_feishu_credentials(config.channel_env)
-    if not app_id or not app_secret:
+    runtime = _resolve_feishu_runtime_config(
+        config.channel_env,
+        need_allow_from="feishu_create" in needed,
+    )
+    if not runtime.app_id or not runtime.app_secret:
         return
 
     import src.agent.tools.feishu as feishu_tools
@@ -514,59 +526,65 @@ def _register_feishu_tools(state: _RegistrationState) -> None:
         from src.feishu.client import FeishuClient
 
         client = FeishuClient(
-            app_id=app_id,
-            app_secret=app_secret,
-            cache_dir=(config.channel_env or {}).get("feishu_cache_dir", "~/.theos/feishu_cache"),
-            token_dir=(config.channel_env or {}).get("feishu_token_dir", "~/.theos/feishu_tokens"),
+            app_id=runtime.app_id,
+            app_secret=runtime.app_secret,
+            cache_dir=runtime.cache_dir,
+            token_dir=runtime.token_dir,
         )
-        allow_from = _resolve_feishu_allow_from(feishu_config)
 
         for tool_name in needed:
             tool_cls = getattr(feishu_tools, _FEISHU_TOOLS[tool_name])
             if tool_name == "feishu_create":
-                state.register(tool_cls(client=client, allow_from=allow_from))
+                state.register(tool_cls(client=client, allow_from=runtime.allow_from))
             else:
                 state.register(tool_cls(client=client))
 
     if auth_needed:
-        token_dir = (config.channel_env or {}).get("feishu_token_dir", "~/.theos/feishu_tokens")
         state.register(
             feishu_tools.FeishuAuthTool(
-                app_id=app_id,
-                app_secret=app_secret,
-                token_dir=token_dir,
+                app_id=runtime.app_id,
+                app_secret=runtime.app_secret,
+                token_dir=runtime.token_dir,
             )
         )
 
 
-def _resolve_feishu_credentials(channel_env: dict[str, str]) -> tuple[str, str, object | None]:
-    app_id = (channel_env or {}).get("feishu_app_id", "")
-    app_secret = (channel_env or {}).get("feishu_app_secret", "")
+def _resolve_feishu_runtime_config(
+    channel_env: dict[str, str],
+    *,
+    need_allow_from: bool,
+) -> _FeishuRuntimeConfig:
+    env = channel_env or {}
+    app_id = env.get("feishu_app_id", "")
+    app_secret = env.get("feishu_app_secret", "")
+    cache_dir = env.get("feishu_cache_dir", "~/.theos/feishu_cache")
+    token_dir = env.get("feishu_token_dir", "~/.theos/feishu_tokens")
+    allow_from: list[str] = []
     feishu_config = None
-    if not app_id or not app_secret:
+
+    if not app_id or not app_secret or need_allow_from:
         try:
             from src.config.loader import load_config
 
             feishu_config = load_config().channels.feishu
-            app_id = app_id or feishu_config.app_id
-            app_secret = app_secret or feishu_config.app_secret
         except Exception:
             pass
-    return app_id, app_secret, feishu_config
 
+    if feishu_config is not None:
+        app_id = app_id or feishu_config.app_id
+        app_secret = app_secret or feishu_config.app_secret
+        cache_dir = env.get("feishu_cache_dir") or feishu_config.cache_dir
+        token_dir = env.get("feishu_token_dir") or feishu_config.token_dir
+        if need_allow_from:
+            allow_from = list(feishu_config.allow_from)
 
-def _resolve_feishu_allow_from(feishu_config: object | None) -> list[str]:
-    try:
-        return list(feishu_config.allow_from)  # type: ignore[union-attr]
-    except Exception:
-        pass
-
-    try:
-        from src.config.loader import load_config
-
-        return list(load_config().channels.feishu.allow_from)
-    except Exception:
-        return []
+    return _FeishuRuntimeConfig(
+        app_id=app_id,
+        app_secret=app_secret,
+        cache_dir=cache_dir,
+        token_dir=token_dir,
+        allow_from=allow_from,
+    )
 
 
 def _register_session_tools(state: _RegistrationState) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -111,6 +112,68 @@ class TestFeishuToolReviewFixes:
             register_standard_tools(registry, config)
 
         assert "feishu_read" in registry.tool_names
+
+    def test_feishu_read_registration_uses_channel_env_without_loading_config(self, tmp_path):
+        from src.agent.tool_sets import register_standard_tools
+        from src.agent.tools.registration import ToolRegistrationConfig
+        from src.agent.tools.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        config = ToolRegistrationConfig(
+            workspace=tmp_path,
+            channel_env={"feishu_app_id": "id", "feishu_app_secret": "secret"},
+            allowed_tools={"feishu_read"},
+        )
+
+        with (
+            patch("src.config.loader.load_config") as load_config,
+            patch("src.feishu.client.make_client"),
+            patch("src.feishu.client.get_access_token"),
+        ):
+            register_standard_tools(registry, config)
+
+        assert "feishu_read" in registry.tool_names
+        load_config.assert_not_called()
+
+    def test_feishu_create_registration_uses_loaded_allowlist_and_paths(self, tmp_path):
+        from src.agent.tool_sets import register_standard_tools
+        from src.agent.tools.registration import ToolRegistrationConfig
+        from src.agent.tools.registry import ToolRegistry
+
+        feishu_config = SimpleNamespace(
+            app_id="cfg_id",
+            app_secret="cfg_secret",
+            cache_dir="/tmp/feishu-cache",
+            token_dir="/tmp/feishu-tokens",
+            allow_from=["ou_owner"],
+        )
+        registry = ToolRegistry()
+        config = ToolRegistrationConfig(
+            workspace=tmp_path,
+            allowed_tools={"feishu_create"},
+        )
+
+        with (
+            patch(
+                "src.config.loader.load_config",
+                return_value=SimpleNamespace(
+                    channels=SimpleNamespace(feishu=feishu_config),
+                ),
+            ) as load_config,
+            patch("src.feishu.client.FeishuClient") as feishu_client,
+        ):
+            register_standard_tools(registry, config)
+
+        tool = registry.get("feishu_create")
+        assert tool is not None
+        assert tool._allow_from == ["ou_owner"]
+        feishu_client.assert_called_once_with(
+            app_id="cfg_id",
+            app_secret="cfg_secret",
+            cache_dir="/tmp/feishu-cache",
+            token_dir="/tmp/feishu-tokens",
+        )
+        load_config.assert_called_once()
 
     def test_feishu_auth_registers_without_client_tool(self, tmp_path):
         from src.agent.tool_sets import register_standard_tools
