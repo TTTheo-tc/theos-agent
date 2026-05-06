@@ -201,28 +201,21 @@ class ReadFileTool(ContextAwareTool):
             assert fp is not None
             stat = fp.stat()
 
-            stream_range = False
-            if stat.st_size > self._max_size_bytes:
-                if not limit or limit < 0:
-                    return _size_limit_error(stat.st_size, self._max_size_bytes)
-                stream_range = True
-
-            file_hint = _special_file_hint(fp, offset, limit)
-            if file_hint:
-                return file_hint
-
-            if _appears_binary(fp):
-                return (
-                    f"Error: {target} appears to be a binary file. "
-                    f"Use an appropriate tool for this file type."
-                )
+            stream_range, size_error = self._stream_range_or_error(stat.st_size, limit)
+            if size_error:
+                return size_error
 
             resolved_str = str(fp)
-            if self._is_duplicate_read(session_key, resolved_str, stat.st_mtime, offset, limit):
-                return (
-                    "File unchanged since last read. "
-                    "The content from the earlier read is still current."
-                )
+            if preflight_error := self._read_preflight_error(
+                fp,
+                target=target,
+                session_key=session_key,
+                resolved_path=resolved_str,
+                mtime=stat.st_mtime,
+                offset=offset,
+                limit=limit,
+            ):
+                return preflight_error
 
             selected, start_line, truncated = _read_selected_lines(
                 fp,
@@ -249,6 +242,40 @@ class ReadFileTool(ContextAwareTool):
             return f"Error: {e}"
         except Exception as e:
             return f"Error reading file: {str(e)}"
+
+    def _read_preflight_error(
+        self,
+        fp: Path,
+        *,
+        target: str,
+        session_key: str | None,
+        resolved_path: str,
+        mtime: float,
+        offset: int | None,
+        limit: int | None,
+    ) -> str | None:
+        if file_hint := _special_file_hint(fp, offset, limit):
+            return file_hint
+
+        if _appears_binary(fp):
+            return (
+                f"Error: {target} appears to be a binary file. "
+                f"Use an appropriate tool for this file type."
+            )
+
+        if self._is_duplicate_read(session_key, resolved_path, mtime, offset, limit):
+            return (
+                "File unchanged since last read. "
+                "The content from the earlier read is still current."
+            )
+        return None
+
+    def _stream_range_or_error(self, file_size: int, limit: int | None) -> tuple[bool, str | None]:
+        if file_size <= self._max_size_bytes:
+            return False, None
+        if not limit or limit < 0:
+            return False, _size_limit_error(file_size, self._max_size_bytes)
+        return True, None
 
     def _resolve_file(self, target: str) -> tuple[Path | None, str | None]:
         raw_policy_error = policy_error(target, kind="File read")
