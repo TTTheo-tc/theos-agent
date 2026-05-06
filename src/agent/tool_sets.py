@@ -497,18 +497,9 @@ def _register_communication_tools(state: _RegistrationState) -> None:
         from src.agent.tools.message import MessageTool
 
         state.register(MessageTool(send_callback=config.bus_publish))
-    if config.subagent_manager is not None and state.should("agent"):
-        from src.agent.tools.spawn import AgentTool
-
-        state.register(AgentTool(manager=config.subagent_manager))
-    if config.executor is not None and state.should("subagent_wait"):
-        from src.agent.tools.subagent_wait import SubagentWaitTool
-
-        state.register(SubagentWaitTool(executor=config.executor))
-    if config.executor is not None and state.should("subagent_kill"):
-        from src.agent.tools.subagent_kill import SubagentKillTool
-
-        state.register(SubagentKillTool(executor=config.executor))
+    _register_agent_tool(state)
+    _register_subagent_wait_tool(state)
+    _register_subagent_kill_tool(state)
     if config.cron_service is not None and state.should("cron"):
         from src.agent.tools.cron import CronTool
 
@@ -520,22 +511,50 @@ def _register_nested_subagent_tools(state: _RegistrationState) -> None:
     if state.mode != "subagent" or config.executor is None:
         return
 
-    if state.should("agent") and config.subagent_manager is not None:
-        from src.agent.tools.spawn import AgentTool
+    _register_agent_tool(state)
+    _register_subagent_wait_tool(state)
+    _register_subagent_kill_tool(state)
+    _register_subagents_list_tool(state)
 
-        state.register(AgentTool(manager=config.subagent_manager))
-    if state.should("subagent_wait"):
-        from src.agent.tools.subagent_wait import SubagentWaitTool
 
-        state.register(SubagentWaitTool(executor=config.executor))
-    if state.should("subagent_kill"):
-        from src.agent.tools.subagent_kill import SubagentKillTool
+def _register_agent_tool(state: _RegistrationState) -> None:
+    config = state.config
+    if config.subagent_manager is None or not state.should("agent"):
+        return
 
-        state.register(SubagentKillTool(executor=config.executor))
-    if state.should("subagents_list") and config.subagent_manager is not None:
-        from src.agent.tools.sessions import SubagentsListTool
+    from src.agent.tools.spawn import AgentTool
 
-        state.register(SubagentsListTool(manager=config.subagent_manager))
+    state.register(AgentTool(manager=config.subagent_manager))
+
+
+def _register_subagent_wait_tool(state: _RegistrationState) -> None:
+    config = state.config
+    if config.executor is None or not state.should("subagent_wait"):
+        return
+
+    from src.agent.tools.subagent_wait import SubagentWaitTool
+
+    state.register(SubagentWaitTool(executor=config.executor))
+
+
+def _register_subagent_kill_tool(state: _RegistrationState) -> None:
+    config = state.config
+    if config.executor is None or not state.should("subagent_kill"):
+        return
+
+    from src.agent.tools.subagent_kill import SubagentKillTool
+
+    state.register(SubagentKillTool(executor=config.executor))
+
+
+def _register_subagents_list_tool(state: _RegistrationState) -> None:
+    config = state.config
+    if config.subagent_manager is None or not state.should("subagents_list"):
+        return
+
+    from src.agent.tools.sessions import SubagentsListTool
+
+    state.register(SubagentsListTool(manager=config.subagent_manager))
 
 
 def _register_feishu_tools(state: _RegistrationState) -> None:
@@ -650,7 +669,4 @@ def _register_session_tools(state: _RegistrationState) -> None:
         from src.agent.tools.sessions import SessionsSendTool
 
         state.register(SessionsSendTool(bus=config.bus))
-    if config.subagent_manager is not None and state.should("subagents_list"):
-        from src.agent.tools.sessions import SubagentsListTool
-
-        state.register(SubagentsListTool(manager=config.subagent_manager))
+    _register_subagents_list_tool(state)
