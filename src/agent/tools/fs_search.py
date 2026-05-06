@@ -107,6 +107,16 @@ def _normalize_rg_separators(lines: list[str]) -> list[str]:
     return normalized
 
 
+def _resolve_head_limit(kwargs: dict[str, Any]) -> int:
+    head_limit = kwargs.get("head_limit")
+    if head_limit is not None:
+        return head_limit
+    max_results = kwargs.get("max_results")
+    if max_results is not None:
+        return max_results
+    return 250
+
+
 class GlobTool(Tool):
     """Find files matching a glob pattern."""
 
@@ -252,8 +262,6 @@ class _GrepOptions:
     @classmethod
     def from_kwargs(cls, kwargs: dict[str, Any]) -> "_GrepOptions":
         both_ctx = kwargs.get("-C")
-        head_limit = kwargs.get("head_limit")
-        max_results = kwargs.get("max_results")
         return cls(
             pattern=kwargs.get("pattern", ""),
             path=kwargs.get("path"),
@@ -266,9 +274,7 @@ class _GrepOptions:
             after_ctx=kwargs.get("-A"),
             both_ctx=both_ctx if both_ctx is not None else kwargs.get("context"),
             multiline=kwargs.get("multiline", False),
-            head_limit=(
-                head_limit if head_limit is not None else max_results if max_results is not None else 250
-            ),
+            head_limit=_resolve_head_limit(kwargs),
             offset=kwargs.get("offset", 0),
         )
 
