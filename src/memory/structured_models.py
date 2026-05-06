@@ -40,6 +40,9 @@ _RULE_CONTEXTUAL_RE = re.compile(
     r"(你之前|刚才|这次|本次|现在就|今天|明天|昨天|这个|那个|下面|上面|此时|当前)",
     re.I,
 )
+_MIN_RULE_CHARS = 8
+_MAX_RULES_EXTRACTED = 5
+_MIN_REMEMBER_NOTE_CHARS = 6
 
 
 def first_sentence(text: str, *, max_chars: int = 240) -> str:
@@ -81,7 +84,7 @@ def extract_rules(text: str) -> list[str]:
     for pattern in _RULE_PATTERNS:
         for match in pattern.finditer(clean):
             rule = match.group(0).strip()[:150]
-            if len(rule) < 8:
+            if len(rule) < _MIN_RULE_CHARS:
                 continue
             if not is_transferable_rule_text(rule):
                 continue
@@ -90,14 +93,14 @@ def extract_rules(text: str) -> list[str]:
                 continue
             seen.add(normalized)
             rules.append(rule)
-            if len(rules) >= 5:
+            if len(rules) >= _MAX_RULES_EXTRACTED:
                 return rules
     return rules
 
 
 def is_transferable_rule_text(text: str) -> bool:
     clean = re.sub(r"\s+", " ", text or "").strip()
-    if len(clean) < 8 or is_noise_response(clean):
+    if len(clean) < _MIN_RULE_CHARS or is_noise_response(clean):
         return False
     if _RULE_CONTEXTUAL_RE.search(clean):
         return False
@@ -134,7 +137,7 @@ def derive_remembered_note(user_message: str, response: str) -> str | None:
         r"(?:还需要你|请你|你|我希望你)?(?:得|要)?记住(?:的是)?[：:，,\s]*", "", cleaned
     )
     cleaned = cleaned.strip("，,。；;:： ")
-    if len(cleaned) < 6:
+    if len(cleaned) < _MIN_REMEMBER_NOTE_CHARS:
         cleaned = original
 
     summary = first_sentence(response or "", max_chars=160)
