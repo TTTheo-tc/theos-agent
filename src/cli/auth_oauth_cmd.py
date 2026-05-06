@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 
 import typer
@@ -35,7 +36,7 @@ def detect_oauth_token(provider_name: str) -> str | None:
             from src.auth.types import OAuthCredential
 
             store = load_auth_store()
-            for _pid, cred in store.profiles.items():
+            for cred in store.profiles.values():
                 if isinstance(cred, OAuthCredential) and cred.provider == "github_copilot":
                     return "authenticated"
         except Exception:
@@ -181,10 +182,8 @@ def _login_openai_codex() -> None:
         from oauth_cli_kit import get_token, login_oauth_interactive
 
         token = None
-        try:
+        with suppress(Exception):
             token = get_token()
-        except Exception:
-            pass
         if not (token and token.access):
             console.print("[cyan]Starting interactive OAuth login...[/cyan]\n")
             token = login_oauth_interactive(

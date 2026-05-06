@@ -17,6 +17,7 @@ import warnings
 import typer
 
 from src import __logo__, __version__
+from src.cli.auth_cmd import auth_app, provider_app
 from src.cli.display import (
     THEOS_ACCENT,
     console,
@@ -49,6 +50,7 @@ def main(
     version: bool = typer.Option(None, "--version", "-v", callback=version_callback, is_eager=True),
 ):
     """TheOS - Personal AI Assistant."""
+    del version
     if ctx.invoked_subcommand is None:
         print_cli_home(__version__)
         raise typer.Exit()
@@ -57,9 +59,6 @@ def main(
 # ============================================================================
 # Register commands from sub-modules
 # ============================================================================
-
-from src.cli.auth_cmd import auth_app, provider_app  # noqa: E402
-
 
 @app.command()
 def agent(

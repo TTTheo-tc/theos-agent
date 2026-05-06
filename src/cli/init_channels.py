@@ -71,12 +71,11 @@ def _configure_feishu_remote_auth(config: Config) -> None:
         return
 
     config.channels.feishu.oauth_redirect_uri = redirect_uri
-    if config.gateway.host in {"127.0.0.1", "localhost", "::1"}:
-        if typer.confirm(
-            "  Gateway is bound to loopback only. Bind it to 0.0.0.0 for remote callback?",
-            default=True,
-        ):
-            config.gateway.host = "0.0.0.0"
+    if config.gateway.host in {"127.0.0.1", "localhost", "::1"} and typer.confirm(
+        "  Gateway is bound to loopback only. Bind it to 0.0.0.0 for remote callback?",
+        default=True,
+    ):
+        config.gateway.host = "0.0.0.0"
 
     console.print(f"  [green]\u2713[/green] Remote OAuth callback: [cyan]{redirect_uri}[/cyan]")
     console.print("  Register this exact URI in the Feishu developer console.")

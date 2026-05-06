@@ -176,6 +176,7 @@ def agent(
             cli_channel, cli_chat_id = "cli", session_id
 
         def _exit_on_sigint(signum, frame):
+            del signum, frame
             restore_terminal()
             console.print("\nGoodbye!")
             os._exit(0)
@@ -253,11 +254,20 @@ def agent(
                             is_tool_hint = msg.metadata.get("_tool_hint", False)
                             is_stream = msg.metadata.get("_progress_kind") == "stream"
                             ch = agent_loop.channels_config
-                            if ch and is_tool_hint and not ch.send_tool_hints:
-                                pass
-                            elif ch and not is_tool_hint and not is_stream and not ch.send_progress:
-                                pass
-                            elif is_stream:
+                            suppress_progress = bool(
+                                ch
+                                and (
+                                    (is_tool_hint and not ch.send_tool_hints)
+                                    or (
+                                        not is_tool_hint
+                                        and not is_stream
+                                        and not ch.send_progress
+                                    )
+                                )
+                            )
+                            if suppress_progress:
+                                continue
+                            if is_stream:
                                 # Streaming delta — print inline, suppress final duplicate
                                 console.print(_ANSI_RE.sub("", msg.content), end="")
                                 turn_streamed = True

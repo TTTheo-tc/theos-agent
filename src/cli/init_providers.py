@@ -205,12 +205,8 @@ def _fetch_openai_compatible(
 
     results: list[tuple[str, str]] = []
     for raw_id in raw_ids:
-        if provider_key == "custom":
-            model_id = raw_id
-        elif "/" in raw_id:
-            model_id = raw_id
-        else:
-            model_id = f"{prefix}/{raw_id}"
+        uses_raw_model_id = provider_key == "custom" or "/" in raw_id
+        model_id = raw_id if uses_raw_model_id else f"{prefix}/{raw_id}"
         results.append((model_id, _display_model_label(model_id)))
     return results
 

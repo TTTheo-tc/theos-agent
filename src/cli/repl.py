@@ -5,6 +5,7 @@ import os
 import select
 import sys
 import threading
+from contextlib import suppress
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
@@ -125,10 +126,8 @@ def _wait_for_escape_key_blocking(cancel_event: threading.Event) -> bool:
     except Exception:
         return False
     finally:
-        try:
+        with suppress(Exception):
             termios.tcsetattr(fd, termios.TCSADRAIN, original_attrs)
-        except Exception:
-            pass
 
 
 async def wait_for_escape_key(cancel_event: threading.Event) -> bool:
@@ -141,12 +140,10 @@ def restore_terminal() -> None:
     exit_terminal_page()
     if _SAVED_TERM_ATTRS is None:
         return
-    try:
+    with suppress(Exception):
         import termios
 
         termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, _SAVED_TERM_ATTRS)
-    except Exception:
-        pass
 
 
 def init_prompt_session() -> None:

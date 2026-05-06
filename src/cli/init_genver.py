@@ -36,7 +36,7 @@ GENVER_ROLE_PRESETS: dict[str, dict[str, str]] = {
 
 def configure_genver_interactive(
     configured_providers: list[str] | None = None,
-) -> "GenVerConfig | None":
+) -> GenVerConfig | None:
     """Interactive wizard to configure Generator-Verifier models.
 
     Returns a ``GenVerConfig`` with chosen models, or ``None`` if skipped.

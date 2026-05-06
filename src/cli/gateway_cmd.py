@@ -5,6 +5,7 @@ Managed as a launchd/systemd service via the ``src.daemon`` package.
 
 import asyncio
 import time
+from contextlib import suppress
 from pathlib import Path
 
 import typer
@@ -166,10 +167,11 @@ def _run_startup_checks(config) -> None:
     # 2. Check Feishu client importability only when that channel is enabled.
     if getattr(config.channels.feishu, "enabled", False):
         try:
-            from src.feishu.client import FeishuClient  # noqa: F401
+            module = __import__("src.feishu.client", fromlist=["FeishuClient"])
+            getattr(module, "FeishuClient")
 
             checks_passed += 1
-        except ImportError as e:
+        except (AttributeError, ImportError) as e:
             logger.warning("Startup check: cannot import FeishuClient: {}", e)
             checks_warned += 1
 
@@ -582,10 +584,9 @@ def gateway(
             logger.info("SIGHUP received — scheduling graceful restart")
             _request_restart()
 
-        try:
+        # Windows or restricted environments may not support signal handlers.
+        with suppress(NotImplementedError, OSError):
             loop.add_signal_handler(signal.SIGHUP, _on_sighup)
-        except (NotImplementedError, OSError):
-            pass  # Windows or restricted environment
 
         channels.set_restart_callback(_request_restart)
 
@@ -696,10 +697,8 @@ def gateway(
             channels.set_restart_callback(None)
             if restart_wait_task is not None and not restart_wait_task.done():
                 restart_wait_task.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await restart_wait_task
-                except asyncio.CancelledError:
-                    pass
 
     should_restart = asyncio.run(run())
 

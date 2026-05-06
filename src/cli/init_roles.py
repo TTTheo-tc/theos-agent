@@ -52,7 +52,7 @@ ROLE_PRESETS: dict[str, dict] = {
 
 def configure_roles_interactive(
     configured_providers: list[str] | None = None,
-) -> "dict[str, AgentRoleConfig] | None":
+) -> dict[str, AgentRoleConfig] | None:
     """Interactive wizard to configure team-mode roles.
 
     If *configured_providers* is ``None``, auto-detect from auth profiles.
