@@ -32,7 +32,7 @@ class HookRunner:
     PRE_CHAT = "pre-chat"
     POST_CHAT = "post-chat"
 
-    def __init__(self, hooks_dir: Path | None):
+    def __init__(self, hooks_dir: Path | None) -> None:
         self.hooks_dir = hooks_dir
 
     def _hook(self, name: str) -> Path | None:
