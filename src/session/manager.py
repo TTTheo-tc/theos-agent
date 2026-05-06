@@ -72,42 +72,47 @@ class Session:
         summary).  Only tool results are trimmed, using a head+tail strategy
         so the model still sees the start and end of long outputs.
         """
+        sliced = self._history_source_messages(exclude_turn_id)[-max_messages:]
+        return [self._history_entry(msg) for msg in self._align_to_user_turn(sliced)]
+
+    def _history_source_messages(self, exclude_turn_id: str | None) -> list[dict[str, Any]]:
         unconsolidated = self.messages[self.last_consolidated :]
-        if exclude_turn_id is not None:
-            unconsolidated = [
-                msg for msg in unconsolidated if msg.get("turn_id") != exclude_turn_id
-            ]
-        sliced = unconsolidated[-max_messages:]
+        if exclude_turn_id is None:
+            return unconsolidated
+        return [msg for msg in unconsolidated if msg.get("turn_id") != exclude_turn_id]
 
+    @staticmethod
+    def _align_to_user_turn(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # Drop leading non-user messages to avoid orphaned tool_result blocks
-        for i, m in enumerate(sliced):
-            if m.get("role") == "user":
-                sliced = sliced[i:]
-                break
+        for idx, msg in enumerate(messages):
+            if msg.get("role") == "user":
+                return messages[idx:]
+        return messages
 
-        out: list[dict[str, Any]] = []
-        for m in sliced:
-            entry: dict[str, Any] = {"role": m["role"], "content": m.get("content", "")}
-            for k in ("tool_calls", "tool_call_id", "name"):
-                if k in m:
-                    entry[k] = m[k]
-            if "tool_calls" in entry:
-                entry["tool_calls"] = truncate_tool_call_arguments(
-                    entry["tool_calls"], self._HISTORY_TOOL_CALL_ARGS_MAX_CHARS
-                )
-            # Soft-trim tool results: keep head + tail so the model sees
-            # structure without blowing up the context window.
-            if (
-                entry.get("role") == "tool"
-                and isinstance(entry.get("content"), str)
-                and len(entry["content"]) > self._TOOL_RESULT_TRIM_THRESHOLD
-            ):
-                name = entry.get("name", "tool")
-                head = entry["content"][: self._TOOL_RESULT_HEAD_CHARS]
-                tail = entry["content"][-self._TOOL_RESULT_TAIL_CHARS :]
-                entry["content"] = f"{head}\n\n... [{name} result trimmed] ...\n\n{tail}"
-            out.append(entry)
-        return out
+    def _history_entry(self, message: dict[str, Any]) -> dict[str, Any]:
+        entry: dict[str, Any] = {"role": message["role"], "content": message.get("content", "")}
+        for key in ("tool_calls", "tool_call_id", "name"):
+            if key in message:
+                entry[key] = message[key]
+        if "tool_calls" in entry:
+            entry["tool_calls"] = truncate_tool_call_arguments(
+                entry["tool_calls"], self._HISTORY_TOOL_CALL_ARGS_MAX_CHARS
+            )
+        return self._soft_trim_tool_result(entry)
+
+    def _soft_trim_tool_result(self, entry: dict[str, Any]) -> dict[str, Any]:
+        content = entry.get("content")
+        if (
+            entry.get("role") == "tool"
+            and isinstance(content, str)
+            and len(content) > self._TOOL_RESULT_TRIM_THRESHOLD
+        ):
+            name = entry.get("name", "tool")
+            head = content[: self._TOOL_RESULT_HEAD_CHARS]
+            tail = content[-self._TOOL_RESULT_TAIL_CHARS :]
+            entry["content"] = f"{head}\n\n... [{name} result trimmed] ...\n\n{tail}"
+        return entry
+
 
     def clear(self) -> None:
         """Clear all messages and reset session to initial state."""
