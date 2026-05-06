@@ -613,6 +613,7 @@ class ApplyPatchTool(Tool):
         return "medium"
 
     async def execute(self, patch: str = "", **kwargs: Any) -> str:
+        del kwargs
         if not patch.strip():
             return "Error: patch content is required."
 
@@ -640,12 +641,9 @@ class _PatchSummary:
 
     def format(self) -> str:
         lines = ["Patch applied successfully."]
-        for file_path in self.added:
-            lines.append(f"  A {file_path}")
-        for file_path in self.modified:
-            lines.append(f"  M {file_path}")
-        for file_path in self.deleted:
-            lines.append(f"  D {file_path}")
+        lines.extend(f"  A {file_path}" for file_path in self.added)
+        lines.extend(f"  M {file_path}" for file_path in self.modified)
+        lines.extend(f"  D {file_path}" for file_path in self.deleted)
         return "\n".join(lines)
 
 

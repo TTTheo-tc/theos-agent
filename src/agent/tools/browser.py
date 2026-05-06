@@ -12,6 +12,7 @@ import json
 import socket
 import time
 import urllib.parse
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -559,9 +560,12 @@ class BrowserTool(Tool):
             return f"Blocked: cannot resolve {host}"
 
         # Domain allowlist (empty = allow all)
-        if self._allowed_domains and host not in self._allowed_domains:
-            if not any(host.endswith("." + d) for d in self._allowed_domains):
-                return f"Blocked: {host} not in allowed_domains"
+        if (
+            self._allowed_domains
+            and host not in self._allowed_domains
+            and not any(host.endswith("." + d) for d in self._allowed_domains)
+        ):
+            return f"Blocked: {host} not in allowed_domains"
 
         return None
 
@@ -950,10 +954,8 @@ class BrowserTool(Tool):
         for i, page in enumerate(self._pages):
             title = ""
             if not page.is_closed():
-                try:
+                with suppress(Exception):
                     title = await page.title()
-                except Exception:
-                    pass
             tabs.append(
                 {
                     "index": i,
@@ -1256,7 +1258,7 @@ class BrowserTool(Tool):
 
     # -- Session persistence -------------------------------------------------
 
-    async def _action_save_state(self, session_name: str, **kw: Any) -> str:
+    async def _action_save_state(self, session_name: str) -> str:
         if not session_name:
             return json.dumps({"error": "session_name is required for 'save_state' action"})
 
@@ -1301,7 +1303,7 @@ class BrowserTool(Tool):
 
         return json.dumps({"status": "ok", "session_name": session_name})
 
-    async def _action_load_state(self, session_name: str, **kw: Any) -> str:
+    async def _action_load_state(self, session_name: str) -> str:
         if not session_name:
             return json.dumps({"error": "session_name is required for 'load_state' action"})
 
