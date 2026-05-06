@@ -54,33 +54,64 @@ class ResponseCache:
     async def get(self, key: str) -> str | None:
         await self.ensure_table()
         now = time.time()
-        if key in self._hot:
-            response, ts = self._hot[key]
-            if now - ts < self._ttl:
-                self._hot.move_to_end(key)
-                return response
-            else:
-                del self._hot[key]
+        hot_hit = self._get_hot(key, now)
+        if hot_hit is not None:
+            return hot_hit
+
+        warm_hit = await self._get_warm(key)
+        if warm_hit is None:
+            return None
+
+        self._hot[key] = (warm_hit, now)
+        self._evict_hot()
+        await self._touch_warm(key)
+        return warm_hit
+
+    def _get_hot(self, key: str, now: float) -> str | None:
+        if key not in self._hot:
+            return None
+
+        response, ts = self._hot[key]
+        if now - ts < self._ttl:
+            self._hot.move_to_end(key)
+            return response
+
+        del self._hot[key]
+        return None
+
+    async def _get_warm(self, key: str) -> str | None:
         row = await self._db.fetchone(
             "SELECT response, created_at FROM response_cache WHERE cache_key = ?",
             (key,),
         )
-        if row:
-            created = datetime.fromisoformat(str(row[1]))
-            age = (datetime.now(timezone.utc) - created).total_seconds()
-            if age < self._ttl:
-                response = row[0]
-                self._hot[key] = (response, now)
-                self._evict_hot()
-                await self._db.execute(
-                    "UPDATE response_cache SET hit_count = hit_count + 1, accessed_at = ?"
-                    " WHERE cache_key = ?",
-                    (datetime.now(timezone.utc).isoformat(), key),
-                )
-                return response
-            else:
-                await self._db.execute("DELETE FROM response_cache WHERE cache_key = ?", (key,))
-        return None
+        if row is None:
+            return None
+
+        if self._warm_expired(row[1]):
+            await self._delete_warm(key)
+            return None
+
+        return str(row[0])
+
+    def _warm_expired(self, created_at: Any) -> bool:
+        try:
+            created = datetime.fromisoformat(str(created_at))
+        except ValueError:
+            return True
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - created).total_seconds()
+        return age >= self._ttl
+
+    async def _touch_warm(self, key: str) -> None:
+        await self._db.execute(
+            "UPDATE response_cache SET hit_count = hit_count + 1, accessed_at = ?"
+            " WHERE cache_key = ?",
+            (datetime.now(timezone.utc).isoformat(), key),
+        )
+
+    async def _delete_warm(self, key: str) -> None:
+        await self._db.execute("DELETE FROM response_cache WHERE cache_key = ?", (key,))
 
     async def put(self, key: str, model: str, response: str, token_count: int = 0) -> None:
         await self.ensure_table()
@@ -97,14 +128,19 @@ class ResponseCache:
                    created_at = excluded.created_at, accessed_at = excluded.accessed_at""",
             (key, model, response, token_count, now_iso, now_iso),
         )
+        await self._trim_warm()
+
+    async def _trim_warm(self) -> None:
         count_row = await self._db.fetchone("SELECT COUNT(*) FROM response_cache")
-        if count_row and count_row[0] > self._max_db_entries:
-            delete_n = count_row[0] - self._max_db_entries + self._max_db_entries // 5
-            await self._db.execute(
-                "DELETE FROM response_cache WHERE cache_key IN "
-                "(SELECT cache_key FROM response_cache ORDER BY accessed_at ASC LIMIT ?)",
-                (delete_n,),
-            )
+        if not count_row or count_row[0] <= self._max_db_entries:
+            return
+
+        delete_n = count_row[0] - self._max_db_entries + self._max_db_entries // 5
+        await self._db.execute(
+            "DELETE FROM response_cache WHERE cache_key IN "
+            "(SELECT cache_key FROM response_cache ORDER BY accessed_at ASC LIMIT ?)",
+            (delete_n,),
+        )
 
     async def stats(self) -> dict[str, Any]:
         await self.ensure_table()
@@ -120,6 +156,7 @@ class ResponseCache:
         }
 
     async def clear(self) -> None:
+        await self.ensure_table()
         self._hot.clear()
         await self._db.execute("DELETE FROM response_cache")
 

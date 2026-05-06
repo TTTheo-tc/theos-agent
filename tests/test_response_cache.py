@@ -77,6 +77,48 @@ class TestGetPut:
         # Hot entry should have been cleaned up
         assert key not in cache._hot
 
+    async def test_warm_hit_increments_hit_count(self, cache):
+        key = ResponseCache.make_key("gpt-4", "sys", "warm-hit")
+        await cache.put(key, "gpt-4", "warm response", token_count=10)
+        cache._hot.clear()
+
+        result = await cache.get(key)
+
+        assert result == "warm response"
+        stats = await cache.stats()
+        assert stats["total_hits"] == 1
+
+    async def test_expired_warm_entry_is_deleted(self, cache):
+        key = ResponseCache.make_key("gpt-4", "sys", "warm-expire")
+        await cache.put(key, "gpt-4", "old response", token_count=10)
+        cache._hot.clear()
+        await cache._db.execute(
+            "UPDATE response_cache SET created_at = ? WHERE cache_key = ?",
+            ("2000-01-01T00:00:00+00:00", key),
+        )
+
+        result = await cache.get(key)
+
+        assert result is None
+        row = await cache._db.fetchone(
+            "SELECT cache_key FROM response_cache WHERE cache_key = ?",
+            (key,),
+        )
+        assert row is None
+
+    async def test_naive_warm_timestamp_is_treated_as_utc(self, cache):
+        key = ResponseCache.make_key("gpt-4", "sys", "warm-naive")
+        await cache.put(key, "gpt-4", "naive response", token_count=10)
+        cache._hot.clear()
+        await cache._db.execute(
+            "UPDATE response_cache SET created_at = ? WHERE cache_key = ?",
+            ("2999-01-01T00:00:00", key),
+        )
+
+        result = await cache.get(key)
+
+        assert result == "naive response"
+
 
 # ---------------------------------------------------------------------------
 # TestEviction
@@ -138,6 +180,17 @@ class TestStats:
 
 
 class TestClear:
+    async def test_clear_before_first_use_is_safe(self, tmp_path):
+        db = Database(tmp_path / "cache.db")
+        await db.connect()
+        cache = ResponseCache(db)
+        try:
+            await cache.clear()
+            stats = await cache.stats()
+            assert stats["warm_entries"] == 0
+        finally:
+            await db.close()
+
     async def test_clear_empties_both_tiers(self, cache):
         for i in range(3):
             await cache.put(f"clear-{i}", "model", f"resp-{i}")
