@@ -48,22 +48,18 @@ class MemoryIndex:
         text = memory_file.read_text(encoding="utf-8")
         sections = self._split_sections(text)
         if not sections:
+            await self._replace_source_entries("memory", [])
             return 0
 
-        # Clear old memory entries and re-insert
-        await self._db.execute("DELETE FROM memory_fts WHERE source = ?", ("memory",))
-        params = []
+        rows = []
         for title, body, ts in sections:
             if not body.strip():
                 continue
-            params.append(("memory", title, body.strip(), ts))
-        if params:
-            await self._db.execute_many(
-                "INSERT INTO memory_fts (source, section, content, timestamp) VALUES (?, ?, ?, ?)",
-                params,
-            )
-        logger.debug("memory_fts: synced {} memory sections", len(params))
-        return len(params)
+            rows.append((title, body.strip(), ts))
+
+        await self._replace_source_entries("memory", rows)
+        logger.debug("memory_fts: synced {} memory sections", len(rows))
+        return len(rows)
 
     async def sync_history(self, history_file: Path) -> int:
         """Re-index HISTORY.md entries. Returns number of entries indexed."""
@@ -72,21 +68,18 @@ class MemoryIndex:
         text = history_file.read_text(encoding="utf-8")
         entries = self._split_history(text)
         if not entries:
+            await self._replace_source_entries("history", [])
             return 0
 
-        await self._db.execute("DELETE FROM memory_fts WHERE source = ?", ("history",))
-        params = []
+        rows = []
         for ts, content in entries:
             if not content.strip():
                 continue
-            params.append(("history", "", content.strip(), ts))
-        if params:
-            await self._db.execute_many(
-                "INSERT INTO memory_fts (source, section, content, timestamp) VALUES (?, ?, ?, ?)",
-                params,
-            )
-        logger.debug("memory_fts: synced {} history entries", len(params))
-        return len(params)
+            rows.append(("", content.strip(), ts))
+
+        await self._replace_source_entries("history", rows)
+        logger.debug("memory_fts: synced {} history entries", len(rows))
+        return len(rows)
 
     async def sync_all(self, memory_dir: Path) -> None:
         """Full re-index of both MEMORY.md and HISTORY.md."""
@@ -155,6 +148,19 @@ class MemoryIndex:
         )
         return row[0] if row else None
 
+    async def _replace_source_entries(
+        self,
+        source: str,
+        rows: list[tuple[str, str, str]],
+    ) -> None:
+        await self._db.execute("DELETE FROM memory_fts WHERE source = ?", (source,))
+        if not rows:
+            return
+        await self._db.execute_many(
+            "INSERT INTO memory_fts (source, section, content, timestamp) VALUES (?, ?, ?, ?)",
+            [(source, section, content, timestamp) for section, content, timestamp in rows],
+        )
+
     # ------------------------------------------------------------------
     # Internal parsing
     # ------------------------------------------------------------------
@@ -164,7 +170,6 @@ class MemoryIndex:
         """Split MEMORY.md by ## headings. Returns [(title, body, timestamp)]."""
         sections: list[tuple[str, str, str]] = []
         for title, body in MemoryStore.split_sections(text):
-            # Extract timestamp from <!-- updated: YYYY-MM-DD --> comment
             ts_match = re.search(r"<!-- updated: ([\d-]+) -->", body)
             ts = ts_match.group(1) if ts_match else ""
             sections.append((title, body.strip(), ts))

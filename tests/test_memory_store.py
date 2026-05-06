@@ -292,3 +292,64 @@ async def test_memory_index_sync_search_and_get_section_roundtrip(tmp_path: Path
     assert any(result["section"] == "Decisions" for result in results)
     assert section is not None
     assert "postgres" in section
+
+
+@pytest.mark.asyncio
+async def test_memory_index_sync_memory_clears_stale_rows_when_file_parses_empty(
+    tmp_path: Path,
+) -> None:
+    from src.memory.index import MemoryIndex
+    from src.store.database import Database
+
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    memory_file = memory_dir / "MEMORY.md"
+    memory_file.write_text(
+        """# Long-term Memory
+
+## Decisions
+- use postgres for primary data
+""",
+        encoding="utf-8",
+    )
+    db = Database(tmp_path / "test.db")
+    await db.connect()
+    index = MemoryIndex(db)
+    await index.ensure_table()
+
+    try:
+        assert await index.sync_memory(memory_file) == 2
+        memory_file.write_text("   \n", encoding="utf-8")
+        assert await index.sync_memory(memory_file) == 0
+        section = await index.get_section("Decisions")
+    finally:
+        await db.close()
+
+    assert section is None
+
+
+@pytest.mark.asyncio
+async def test_memory_index_sync_history_clears_stale_rows_when_file_parses_empty(
+    tmp_path: Path,
+) -> None:
+    from src.memory.index import MemoryIndex
+    from src.store.database import Database
+
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    history_file = memory_dir / "HISTORY.md"
+    history_file.write_text("[2026-04-14 12:30] chose postgres\n", encoding="utf-8")
+    db = Database(tmp_path / "test.db")
+    await db.connect()
+    index = MemoryIndex(db)
+    await index.ensure_table()
+
+    try:
+        assert await index.sync_history(history_file) == 1
+        history_file.write_text("no timestamp entries\n", encoding="utf-8")
+        assert await index.sync_history(history_file) == 0
+        results = await index.search("postgres", source="history", max_results=5)
+    finally:
+        await db.close()
+
+    assert results == []
