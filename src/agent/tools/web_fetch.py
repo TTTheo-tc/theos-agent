@@ -70,7 +70,7 @@ class WebFetchTool(Tool):
         firecrawl_api_url: str = "https://api.firecrawl.dev/v1",
         allowed_domains: list[str] | None = None,
         blocked_domains: list[str] | None = None,
-    ):
+    ) -> None:
         self.max_chars = max_chars
         self._credential_injector = credential_injector or CredentialInjector(
             build_default_registry(),

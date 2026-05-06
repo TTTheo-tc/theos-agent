@@ -63,7 +63,7 @@ class WebSearchTool(Tool):
         provider: str = "duckduckgo",
         tavily_api_key: str | None = None,
         credential_injector: CredentialInjector | None = None,
-    ):
+    ) -> None:
         self._init_api_key = api_key
         self._init_tavily_api_key = tavily_api_key
         self.max_results = max_results
