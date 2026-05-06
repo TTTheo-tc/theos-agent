@@ -122,15 +122,18 @@ class CronTool(ContextAwareTool):
                 return "Error: tz can only be used with cron_expr"
             return f"Error: {exc}"
 
-        job = self._cron.add_job(
-            name=message[:30],
-            schedule=schedule,
-            message=message,
-            deliver=True,
-            channel=ctx.channel,
-            to=ctx.chat_id,
-            delete_after_run=delete_after,
-        )
+        try:
+            job = self._cron.add_job(
+                name=message[:30],
+                schedule=schedule,
+                message=message,
+                deliver=True,
+                channel=ctx.channel,
+                to=ctx.chat_id,
+                delete_after_run=delete_after,
+            )
+        except ValueError as exc:
+            return f"Error: {exc}"
 
         return f"Created job '{job.name}' (id: {job.id})"
 

@@ -1,16 +1,23 @@
 """Cron service for scheduling agent tasks."""
 
+from __future__ import annotations
+
 import asyncio
+import importlib.util
 import json
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Literal
+from typing import Any, Awaitable, Callable, Literal
 
 from loguru import logger
 
 from src.cron.types import CronJob, CronJobState, CronPayload, CronSchedule, CronStore
+
+_RECURRING_JOB_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+CronJobCallback = Callable[[CronJob], Awaitable[str | None]]
 
 
 def _now_ms() -> int:
@@ -47,10 +54,21 @@ def _compute_next_run(schedule: CronSchedule, now_ms: int) -> int | None:
     return None
 
 
-def _validate_schedule_for_add(schedule: CronSchedule) -> None:
+def _validate_schedule_for_add(schedule: CronSchedule, *, now_ms: int | None = None) -> None:
     """Validate schedule fields that would otherwise create non-runnable jobs."""
+    reference_ms = _now_ms() if now_ms is None else now_ms
     if schedule.tz and schedule.kind != "cron":
         raise ValueError("tz can only be used with cron schedules")
+
+    if schedule.kind == "at":
+        if not schedule.at_ms or schedule.at_ms <= reference_ms:
+            raise ValueError("at schedule must be in the future")
+        return
+
+    if schedule.kind == "every":
+        if not schedule.every_ms or schedule.every_ms <= 0:
+            raise ValueError("every schedule requires every_ms > 0")
+        return
 
     if schedule.kind == "cron" and schedule.tz:
         try:
@@ -59,6 +77,12 @@ def _validate_schedule_for_add(schedule: CronSchedule) -> None:
             ZoneInfo(schedule.tz)
         except Exception:
             raise ValueError(f"unknown timezone '{schedule.tz}'") from None
+    if schedule.kind == "cron" and not schedule.expr:
+        raise ValueError("cron schedule requires expr")
+    if importlib.util.find_spec("croniter") is None:
+        raise ValueError("cron schedules require croniter; install the gateway extra")
+    if schedule.kind == "cron" and _compute_next_run(schedule, reference_ms) is None:
+        raise ValueError("cron schedule could not compute next run")
 
 
 def build_schedule(
@@ -74,7 +98,7 @@ def build_schedule(
     """
     if tz and not cron_expr:
         raise ValueError("tz can only be used with cron schedules")
-    if every_seconds:
+    if every_seconds is not None:
         return CronSchedule(kind="every", every_ms=every_seconds * 1000), False
     if cron_expr:
         schedule = CronSchedule(kind="cron", expr=cron_expr, tz=tz)
@@ -92,7 +116,7 @@ class CronService:
     def __init__(
         self,
         store_path: Path,
-        on_job: Callable[[CronJob], Coroutine[Any, Any, str | None]] | None = None,
+        on_job: CronJobCallback | None = None,
     ) -> None:
         self.store_path = store_path
         self.on_job = on_job  # Callback to execute job, returns response text
@@ -292,12 +316,11 @@ class CronService:
     ) -> CronJob:
         """Add a new job."""
         store = self._load_store()
-        _validate_schedule_for_add(schedule)
         now = _now_ms()
+        _validate_schedule_for_add(schedule, now_ms=now)
 
         # Recurring jobs auto-expire after 30 days
-        thirty_days_ms = 30 * 24 * 60 * 60 * 1000
-        expires_at = now + thirty_days_ms if schedule.kind != "at" else None
+        expires_at = now + _RECURRING_JOB_TTL_MS if schedule.kind != "at" else None
 
         job = CronJob(
             id=str(uuid.uuid4())[:8],

@@ -85,3 +85,13 @@ def test_write_ops_503_standalone(standalone_client):
         json={"name": "x", "schedule": {"kind": "every", "everyMs": 1000}, "message": "y"},
     )
     assert resp.status_code == 503
+
+
+def test_create_job_returns_400_for_invalid_schedule(client):
+    resp = client.post(
+        "/api/cron/jobs",
+        json={"name": "bad", "schedule": {"kind": "every", "everyMs": 0}, "message": "hello"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "every schedule requires every_ms > 0"

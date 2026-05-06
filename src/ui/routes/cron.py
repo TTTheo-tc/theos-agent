@@ -41,15 +41,18 @@ async def cron_job_create(request: Request) -> JSONResponse:
     body = await request.json()
     from src.cron.types import CronSchedule
 
-    job = svc.add_job(
-        name=body["name"],
-        schedule=CronSchedule.model_validate(body["schedule"]),
-        message=body.get("message", ""),
-        kind=body.get("kind", "agent_turn"),
-        deliver=body.get("deliver", False),
-        channel=body.get("channel"),
-        to=body.get("to"),
-    )
+    try:
+        job = svc.add_job(
+            name=body["name"],
+            schedule=CronSchedule.model_validate(body["schedule"]),
+            message=body.get("message", ""),
+            kind=body.get("kind", "agent_turn"),
+            deliver=body.get("deliver", False),
+            channel=body.get("channel"),
+            to=body.get("to"),
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
     return JSONResponse(job.model_dump(by_alias=True), status_code=201)
 
 
