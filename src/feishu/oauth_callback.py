@@ -168,7 +168,7 @@ def create_oauth_app(
     app_secret: str,
     token_dir: str,
     redirect_uri: str,
-    bus: "MessageBus | None" = None,
+    bus: MessageBus | None = None,
     notify_chat_id: str | None = None,
 ) -> web.Application:
     """Create an aiohttp app with the ``/feishu/oauth/callback`` route.
@@ -190,13 +190,13 @@ def create_oauth_app(
     """
     app = web.Application()
 
-    _csp = "default-src 'none'; style-src 'unsafe-inline'"
+    csp = "default-src 'none'; style-src 'unsafe-inline'"
 
     def error_response(error: object, *, status: int = 400) -> web.Response:
         return web.Response(
             text=_ERROR_HTML.format(error=html.escape(str(error))),
             content_type="text/html",
-            headers={"Content-Security-Policy": _csp},
+            headers={"Content-Security-Policy": csp},
             status=status,
         )
 
@@ -264,7 +264,7 @@ def create_oauth_app(
             return web.Response(
                 text=_SUCCESS_HTML,
                 content_type="text/html",
-                headers={"Content-Security-Policy": _csp},
+                headers={"Content-Security-Policy": csp},
             )
         else:
             error = result["error"]

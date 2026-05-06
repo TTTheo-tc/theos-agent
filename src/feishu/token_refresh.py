@@ -7,11 +7,14 @@ Provides:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 
 from filelock import FileLock
 from loguru import logger
+
+_reauth_tasks: set[asyncio.Task[None]] = set()
 
 
 def refresh_feishu_token(
@@ -173,8 +176,6 @@ def _send_reauth_expired(config, bus) -> None:
 
 def _send_reauth_message(config, bus, msg: str, log_label: str) -> None:
     """Publish a Feishu re-auth message to the configured owner, if available."""
-    import asyncio
-
     from src.bus.events import OutboundMessage
 
     owner = config.channels.owner_ids[0] if config.channels.owner_ids else None
@@ -183,8 +184,10 @@ def _send_reauth_message(config, bus, msg: str, log_label: str) -> None:
 
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(
-            bus.publish_outbound(OutboundMessage(channel="feishu", chat_id=owner, content=msg))
+        task = loop.create_task(
+            bus.publish_outbound(OutboundMessage(channel="feishu", chat_id=owner, content=msg)),
         )
+        _reauth_tasks.add(task)
+        task.add_done_callback(_reauth_tasks.discard)
     except RuntimeError:
         logger.warning("Cannot send {}: no running event loop", log_label)

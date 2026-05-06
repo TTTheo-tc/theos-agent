@@ -124,8 +124,6 @@ def exchange_auth_code(
     Returns ``{"ok": True, "access_token_ttl": ..., "refresh_token_ttl": ...}``
     on success, or ``{"ok": False, "error": "..."}`` on failure.
     """
-    import httpx
-
     from src.feishu.token import save_access_token, save_refresh_token
 
     token_url = "https://open.feishu.cn/open-apis/authen/v2/oauth/token"

@@ -14,12 +14,11 @@ def _find_affected_blocks(
 ) -> list[dict]:
     """Find all annotated blocks whose line ranges overlap the edit region."""
     blocks = annotations.get("blocks", [])
-    affected = []
-    for b in blocks:
-        # Overlap check: block range [md_start_line, md_end_line) vs edit range [edit_start_line, edit_end_line)
-        if b["md_start_line"] < edit_end_line and b["md_end_line"] > edit_start_line:
-            affected.append(b)
-    return affected
+    return [
+        b
+        for b in blocks
+        if b["md_start_line"] < edit_end_line and b["md_end_line"] > edit_start_line
+    ]
 
 
 def _strip_table_merge_info(blocks: list[dict]) -> list[dict]:
