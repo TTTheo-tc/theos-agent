@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 if TYPE_CHECKING:
-    from src.config.schema import MemoryConfig
     from src.memory.index import MemoryIndex
     from src.memory.scope import MemoryScopeResolver
     from src.memory.store import MemoryStore
@@ -146,10 +145,8 @@ class MemoryConsolidationService:
         self,
         *,
         scope: "MemoryScopeResolver",
-        memory_config: "MemoryConfig | None" = None,
     ):
         self._scope = scope
-        self._memory_config = memory_config
 
     @staticmethod
     def _gather_recent_history(store: "MemoryStore", max_entries: int = 10) -> str:

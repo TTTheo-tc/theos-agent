@@ -325,9 +325,7 @@ class MemoryHandler:
         self._orchestrator_config = orchestrator_config
         self._structured_memory_enabled = structured_memory_enabled
         self._recall = MemoryRecallService(scope=self._scope, memory_config=memory_config)
-        self._consolidation = MemoryConsolidationService(
-            scope=self._scope, memory_config=memory_config
-        )
+        self._consolidation = MemoryConsolidationService(scope=self._scope)
 
         # Three-tier memory (lazy init when memory_tiers.enabled)
         self._memory_tiers: MemoryTierManager | None = None
