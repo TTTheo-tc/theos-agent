@@ -278,6 +278,35 @@ def _prompt_cache_key(messages: list[dict[str, Any]]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _output_text_from_item(item: dict[str, Any]) -> str:
+    if item.get("type") != "message":
+        return ""
+    for block in item.get("content") or []:
+        if block.get("type") == "output_text" and block.get("text"):
+            return block["text"]
+    return ""
+
+
+def _usage_from_response(resp_usage: dict[str, Any]) -> dict[str, int]:
+    if not resp_usage:
+        return {}
+    input_tokens = resp_usage.get("input_tokens", 0)
+    output_tokens = resp_usage.get("output_tokens", 0)
+    return {
+        "prompt_tokens": input_tokens,
+        "completion_tokens": output_tokens,
+        "total_tokens": resp_usage.get("total_tokens", 0) or input_tokens + output_tokens,
+    }
+
+
+def _parse_function_call_arguments(args_raw: str) -> dict[str, Any]:
+    try:
+        args = json.loads(args_raw)
+    except Exception:
+        return {"raw": args_raw}
+    return args if isinstance(args, dict) else {"raw": args_raw}
+
+
 async def _iter_sse(response: httpx.Response) -> AsyncGenerator[dict[str, Any], None]:
     buffer: list[str] = []
     async for line in response.aiter_lines():
@@ -338,45 +367,26 @@ async def _consume_sse(
                     continue
                 buf = tool_call_buffers.get(call_id) or {}
                 args_raw = buf.get("arguments") or item.get("arguments") or "{}"
-                try:
-                    args = json.loads(args_raw)
-                except Exception:
-                    args = {"raw": args_raw}
                 tool_calls.append(
                     ToolCallRequest(
                         id=f"{call_id}|{buf.get('id') or item.get('id') or 'fc_0'}",
                         name=buf.get("name") or item.get("name"),
-                        arguments=args,
+                        arguments=_parse_function_call_arguments(args_raw),
                     )
                 )
             elif item.get("type") == "message" and not content:
-                for block in item.get("content") or []:
-                    if block.get("type") == "output_text" and block.get("text"):
-                        content = block["text"]
-                        break
+                content = _output_text_from_item(item)
         elif event_type == "response.completed":
             resp_obj = event.get("response") or {}
             status = resp_obj.get("status")
             finish_reason = _map_finish_reason(status)
             if not content:
                 for output_item in resp_obj.get("output") or []:
-                    if output_item.get("type") != "message":
-                        continue
-                    for block in output_item.get("content") or []:
-                        if block.get("type") == "output_text" and block.get("text"):
-                            content = block["text"]
-                            break
+                    content = _output_text_from_item(output_item)
                     if content:
                         break
             # Extract token usage from the response object
-            resp_usage = resp_obj.get("usage") or {}
-            if resp_usage:
-                usage = {
-                    "prompt_tokens": resp_usage.get("input_tokens", 0),
-                    "completion_tokens": resp_usage.get("output_tokens", 0),
-                    "total_tokens": resp_usage.get("total_tokens", 0)
-                    or resp_usage.get("input_tokens", 0) + resp_usage.get("output_tokens", 0),
-                }
+            usage = _usage_from_response(resp_obj.get("usage") or {})
         elif event_type in {"error", "response.failed"}:
             err = event.get("error") or {}
             message = err.get("message") or event.get("message") or "Codex response failed"

@@ -1,7 +1,9 @@
+import json
+
 import pytest
 
 from src.providers.base import LLMResponse
-from src.providers.openai_codex_provider import OpenAICodexProvider, _consume_sse
+from src.providers.openai_codex_provider import OpenAICodexProvider, _consume_sse, _iter_sse
 
 
 @pytest.mark.asyncio
@@ -49,6 +51,132 @@ async def test_consume_sse_extracts_text_from_completed_output_fallback():
     assert tool_calls == []
     assert finish_reason == "stop"
     assert usage == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        ('{"path":"/tmp/a.txt"}', {"path": "/tmp/a.txt"}),
+        ('["not", "an", "object"]', {"raw": '["not", "an", "object"]'}),
+        ("not json", {"raw": "not json"}),
+    ],
+)
+async def test_consume_sse_function_call_arguments_are_objects(arguments, expected):
+    class _FakeResponse:
+        async def aiter_lines(self):
+            event = {
+                "type": "response.output_item.done",
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "id": "fc_1",
+                    "name": "read_file",
+                    "arguments": arguments,
+                },
+            }
+            yield f"data: {json.dumps(event)}"
+            yield ""
+            yield 'data: {"type":"response.completed","response":{"status":"completed"}}'
+            yield ""
+
+    _, tool_calls, _, _ = await _consume_sse(_FakeResponse())
+
+    assert len(tool_calls) == 1
+    assert tool_calls[0].id == "call_1|fc_1"
+    assert tool_calls[0].name == "read_file"
+    assert tool_calls[0].arguments == expected
+
+
+@pytest.mark.asyncio
+async def test_consume_sse_streamed_function_call_arguments():
+    class _FakeResponse:
+        async def aiter_lines(self):
+            events = [
+                {
+                    "type": "response.output_item.added",
+                    "item": {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "id": "fc_1",
+                        "name": "read_file",
+                    },
+                },
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "call_id": "call_1",
+                    "delta": '{"path":',
+                },
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "call_id": "call_1",
+                    "delta": '"/tmp/a.txt"}',
+                },
+                {
+                    "type": "response.output_item.done",
+                    "item": {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "id": "fc_1",
+                    },
+                },
+                {"type": "response.completed", "response": {"status": "completed"}},
+            ]
+            for event in events:
+                yield f"data: {json.dumps(event)}"
+                yield ""
+
+    _, tool_calls, _, _ = await _consume_sse(_FakeResponse())
+
+    assert len(tool_calls) == 1
+    assert tool_calls[0].id == "call_1|fc_1"
+    assert tool_calls[0].name == "read_file"
+    assert tool_calls[0].arguments == {"path": "/tmp/a.txt"}
+
+
+@pytest.mark.asyncio
+async def test_consume_sse_extracts_usage_from_completed_response():
+    class _FakeResponse:
+        async def aiter_lines(self):
+            yield (
+                'data: {"type":"response.completed","response":{"status":"completed",'
+                '"usage":{"input_tokens":7,"output_tokens":5}}}'
+            )
+            yield ""
+
+    _, _, _, usage = await _consume_sse(_FakeResponse())
+
+    assert usage == {"prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 12}
+
+
+@pytest.mark.asyncio
+async def test_consume_sse_preserves_explicit_total_tokens():
+    class _FakeResponse:
+        async def aiter_lines(self):
+            yield (
+                'data: {"type":"response.completed","response":{"status":"completed",'
+                '"usage":{"input_tokens":7,"output_tokens":5,"total_tokens":99}}}'
+            )
+            yield ""
+
+    _, _, _, usage = await _consume_sse(_FakeResponse())
+
+    assert usage == {"prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 99}
+
+
+@pytest.mark.asyncio
+async def test_iter_sse_handles_multiline_data_and_done_marker():
+    class _FakeResponse:
+        async def aiter_lines(self):
+            yield 'data: {"type":'
+            yield 'data: "custom.event"}'
+            yield ""
+            yield "data: [DONE]"
+            yield ""
+
+    events = [event async for event in _iter_sse(_FakeResponse())]
+
+    assert events == [{"type": "custom.event"}]
 
 
 @pytest.mark.asyncio
