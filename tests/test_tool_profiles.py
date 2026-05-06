@@ -400,3 +400,50 @@ def test_register_standard_tools_deferred_still_respects_should(tmp_path: Path):
     deferred_names = {s["name"] for s in deferred_summary}
     assert "http_request" not in deferred_names
     assert "image_search" not in deferred_names
+
+
+def test_register_standard_tools_deny_tools_expands_groups(tmp_path: Path):
+    registry = ToolRegistry()
+    register_standard_tools(
+        registry,
+        ToolRegistrationConfig(
+            workspace=tmp_path,
+            mode="single",
+            deny_tools={"group:web"},
+        ),
+    )
+
+    names = set(registry.tool_names)
+    assert names.isdisjoint(TOOL_GROUPS["group:web"])
+    assert "read_file" in names
+
+
+def test_register_standard_tools_verifier_respects_group_denies(tmp_path: Path):
+    registry = ToolRegistry()
+    register_standard_tools(
+        registry,
+        ToolRegistrationConfig(
+            workspace=tmp_path,
+            mode="verifier",
+            deny_tools={"group:fs"},
+        ),
+    )
+
+    names = set(registry.tool_names)
+    assert names.isdisjoint(TOOL_GROUPS["group:fs"])
+    assert names == {"bash"}
+
+
+def test_register_standard_tools_verifier_keeps_fixed_tools_with_profile(tmp_path: Path):
+    registry = ToolRegistry()
+    register_standard_tools(
+        registry,
+        ToolRegistrationConfig(
+            workspace=tmp_path,
+            mode="verifier",
+            profile="readonly",
+            allowed_tools={"group:fs"},
+        ),
+    )
+
+    assert set(registry.tool_names) == {"bash", "read_file", "glob", "grep", "list_dir"}

@@ -57,7 +57,7 @@ class _RegistrationState:
             exec_config=config.exec_config or ExecToolConfig(),
             profile_set=resolve_profile(config.profile) if config.profile is not None else None,
             expanded_allowed=expand_groups(config.allowed_tools),
-            deny_tools=config.deny_tools or set(),
+            deny_tools=expand_groups(config.deny_tools) or set(),
         )
 
     @property
@@ -76,6 +76,9 @@ class _RegistrationState:
         if self.expanded_allowed is not None and name not in self.expanded_allowed:
             return False
         return True
+
+    def should_register_verifier_tool(self, name: str) -> bool:
+        return name not in self.deny_tools
 
     def register(self, tool: "Tool") -> None:
         self.registry.register(tool, deferred=tool.name not in ALWAYS_ON_TOOLS)
@@ -102,6 +105,8 @@ def register_standard_tools(
         * ``allowed_tools`` — When *mode* is ``"subagent"``, only tools whose
           names are in this set are registered.  ``None`` means register all
           applicable tools.  Supports group references (e.g. ``"group:fs"``).
+        * ``deny_tools`` — Tool names or group references to exclude after
+          profile and allowed-tool filtering.
     """
     state = _RegistrationState.build(registry, config)
     if state.mode == "verifier":
@@ -130,13 +135,20 @@ def _register_verifier_tools(state: _RegistrationState) -> None:
     from src.agent.tools.shell import ExecTool
 
     config = state.config
-    state.register_always(ExecTool(working_dir=str(config.workspace), timeout=300))
-    state.register_always(
-        ReadFileTool(workspace=config.workspace, allowed_dir=config.allowed_dir)
-    )
-    state.register_always(GlobTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
-    state.register_always(GrepTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
-    state.register_always(ListDirTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+    if state.should_register_verifier_tool("bash"):
+        state.register_always(ExecTool(working_dir=str(config.workspace), timeout=300))
+    if state.should_register_verifier_tool("read_file"):
+        state.register_always(
+            ReadFileTool(workspace=config.workspace, allowed_dir=config.allowed_dir)
+        )
+    if state.should_register_verifier_tool("glob"):
+        state.register_always(GlobTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+    if state.should_register_verifier_tool("grep"):
+        state.register_always(GrepTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+    if state.should_register_verifier_tool("list_dir"):
+        state.register_always(
+            ListDirTool(workspace=config.workspace, allowed_dir=config.allowed_dir)
+        )
 
 
 def _register_filesystem_tools(state: _RegistrationState) -> None:
