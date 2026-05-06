@@ -219,6 +219,7 @@ class PdfTool(Tool):
         max_tokens: int = 4096,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         # ---- collect and dedupe sources ----
         sources = collect_sources(pdf, pdfs)
 

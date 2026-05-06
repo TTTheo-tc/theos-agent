@@ -115,6 +115,7 @@ class ImageAnalyzeTool(Tool):
         max_tokens: int = 4096,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         sources = collect_sources(image, images)
 
         if not sources:

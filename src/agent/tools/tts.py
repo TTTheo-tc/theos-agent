@@ -195,6 +195,7 @@ class TtsTool(Tool):
         backend: str | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         if not text or not text.strip():
             return "Error: 'text' is required and must not be empty."
 

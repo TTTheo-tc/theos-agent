@@ -243,6 +243,7 @@ class VendorStudyTool(Tool):
         topic: str | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         guide_or_err = self._load_guide()
         if isinstance(guide_or_err, str):
             return guide_or_err
@@ -349,12 +350,10 @@ class VendorStudyTool(Tool):
         lines.append("")
         lines.append("## Sources\n")
         lines.append("### Vendor")
-        for rel in tcfg.vendor_paths:
-            lines.append(f"- {vendor_root}/{rel}")
+        lines.extend(f"- {vendor_root}/{rel}" for rel in tcfg.vendor_paths)
         lines.append("")
         lines.append("### TheOS")
-        for rel in tcfg.source_paths:
-            lines.append(f"- {rel}")
+        lines.extend(f"- {rel}" for rel in tcfg.source_paths)
         lines.append("")
 
         lines.append("## Vendor Code\n")

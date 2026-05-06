@@ -61,6 +61,7 @@ class StockAnalysisTool(Tool):
         market_review: bool = False,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         if not _DSA_DIR.is_dir():
             return "Error: daily_stock_analysis not found. Run: git submodule update --init"
 
