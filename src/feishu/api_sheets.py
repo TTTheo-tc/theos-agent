@@ -66,7 +66,7 @@ def parse_sheet_url(url: str) -> dict:
     Returns:
         ``{"spreadsheet_token": str, "sheet_id": str | None}``
     """
-    from urllib.parse import parse_qs, urlparse  # noqa: PLC0415
+    from urllib.parse import parse_qs, urlparse
 
     parsed = urlparse(url)
     path_parts = parsed.path.split("/")

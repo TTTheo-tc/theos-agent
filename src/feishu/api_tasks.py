@@ -143,7 +143,7 @@ def create_task(
     if origin:
         ob = Origin.builder()
         if origin.get("platform_i18n_name"):
-            from lark_oapi.api.task.v2 import I18nText  # noqa: PLC0415
+            from lark_oapi.api.task.v2 import I18nText
 
             i18n = origin["platform_i18n_name"]
             if isinstance(i18n, str):
@@ -171,7 +171,7 @@ def complete_task(client: lark.Client, task_guid: str) -> bool:
     Returns:
         ``True`` on success.
     """
-    import time  # noqa: PLC0415
+    import time
 
     option = _request_option()
 

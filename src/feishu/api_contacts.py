@@ -22,9 +22,19 @@ from src.feishu.api import (
     _check,
     _request_option,
     _unmarshal,
-    search_users,  # noqa: F401 — re-export
+    search_users,
 )
-from src.feishu.api import info_user as get_user  # noqa: F401 — re-export
+from src.feishu.api import info_user as get_user
+
+__all__ = [
+    "get_department",
+    "get_user",
+    "get_user_by_email",
+    "get_user_by_phone",
+    "list_department_users",
+    "list_departments",
+    "search_users",
+]
 
 # ---------------------------------------------------------------------------
 # Department operations
