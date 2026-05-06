@@ -6,7 +6,7 @@ import subprocess
 from contextlib import suppress
 from pathlib import Path
 
-from src.daemon.base import GatewayService
+from src.daemon.base import DaemonStatus, GatewayService
 
 _DEFAULT_UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
 
@@ -68,7 +68,12 @@ WantedBy=default.target
                 ) from exc
             return subprocess.CompletedProcess(cmd, 127, "", str(exc))
 
-    def install(self, program_args, env, working_dir):
+    def install(
+        self,
+        program_args: list[str],
+        env: dict[str, str],
+        working_dir: str,
+    ) -> None:
         self._unit_path.parent.mkdir(parents=True, exist_ok=True)
         unit_text = self._build_unit(program_args, env, working_dir)
         was_running = self.is_loaded()
@@ -81,16 +86,16 @@ WantedBy=default.target
         else:
             self._systemctl("enable", "--now", self.UNIT_NAME, check=True)
 
-    def uninstall(self):
+    def uninstall(self) -> None:
         self._systemctl("disable", "--now", self.UNIT_NAME)
         if self._unit_path.exists():
             self._unit_path.unlink()
         self._systemctl("daemon-reload")
 
-    def stop(self):
+    def stop(self) -> None:
         self._systemctl("stop", self.UNIT_NAME)
 
-    def restart(self):
+    def restart(self) -> None:
         # Prefer SIGHUP for graceful restart
         if self._try_sighup_restart():
             return
@@ -101,7 +106,7 @@ WantedBy=default.target
         result = self._systemctl("is-enabled", self.UNIT_NAME)
         return result.returncode == 0
 
-    def status(self) -> dict:
+    def status(self) -> DaemonStatus:
         result = self._systemctl("show", self.UNIT_NAME, "--property=MainPID,ActiveState")
         if result.returncode != 0:
             return {"pid": None, "state": "not_installed", "loaded": False}

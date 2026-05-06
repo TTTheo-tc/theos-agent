@@ -5,6 +5,15 @@ from __future__ import annotations
 import os
 import signal
 from abc import ABC, abstractmethod
+from typing import TypedDict
+
+
+class DaemonStatus(TypedDict):
+    """Normalized service status returned by daemon backends."""
+
+    pid: int | None
+    state: str
+    loaded: bool
 
 
 def send_sighup(pid: int | None) -> bool:
@@ -23,7 +32,7 @@ class GatewayService(ABC):
 
     def _try_sighup_restart(self) -> bool:
         """Try graceful restart for the currently reported service PID."""
-        return send_sighup(self.status().get("pid"))
+        return send_sighup(self.status()["pid"])
 
     @abstractmethod
     def install(
@@ -51,5 +60,5 @@ class GatewayService(ABC):
         """Return True if the service is registered with the OS."""
 
     @abstractmethod
-    def status(self) -> dict:
+    def status(self) -> DaemonStatus:
         """Return {"pid": int|None, "state": str, "loaded": bool}."""

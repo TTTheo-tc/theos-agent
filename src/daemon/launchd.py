@@ -8,7 +8,7 @@ import subprocess
 from contextlib import suppress
 from pathlib import Path
 
-from src.daemon.base import GatewayService
+from src.daemon.base import DaemonStatus, GatewayService
 
 _DEFAULT_PLIST_DIR = Path.home() / "Library" / "LaunchAgents"
 _DEFAULT_LOG_DIR = Path.home() / ".theos" / "logs"
@@ -36,7 +36,7 @@ class LaunchdService(GatewayService):
         program_args: list[str],
         env: dict[str, str],
         working_dir: str,
-    ) -> dict:
+    ) -> dict[str, object]:
         log_dir = str(self._log_dir)
         return {
             "Label": self.LABEL,
@@ -50,7 +50,12 @@ class LaunchdService(GatewayService):
             "StandardErrorPath": f"{log_dir}/gateway-stderr.log",
         }
 
-    def install(self, program_args, env, working_dir):
+    def install(
+        self,
+        program_args: list[str],
+        env: dict[str, str],
+        working_dir: str,
+    ) -> None:
         self._log_dir.mkdir(parents=True, exist_ok=True)
         self._plist_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -69,18 +74,18 @@ class LaunchdService(GatewayService):
             check=True,
         )
 
-    def uninstall(self):
+    def uninstall(self) -> None:
         self.stop()
         if self._plist_path.exists():
             self._plist_path.unlink()
 
-    def stop(self):
+    def stop(self) -> None:
         subprocess.run(
             ["launchctl", "bootout", self._service_target],
             capture_output=True,
         )
 
-    def restart(self):
+    def restart(self) -> None:
         # Prefer SIGHUP for graceful restart
         if self._try_sighup_restart():
             return
@@ -100,7 +105,7 @@ class LaunchdService(GatewayService):
         )
         return result.returncode == 0
 
-    def status(self) -> dict:
+    def status(self) -> DaemonStatus:
         if not self.is_loaded():
             return {"pid": None, "state": "not_installed", "loaded": False}
         result = subprocess.run(
