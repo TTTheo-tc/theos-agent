@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -106,7 +107,7 @@ class TestDreamRunnerRun:
         assert result.narrative_path.exists()
 
     @pytest.mark.asyncio
-    async def test_run_writes_review(self, tmp_path):
+    async def test_run_writes_review(self, tmp_path: Path) -> None:
         runner = DreamRunner(
             workspace=tmp_path,
             topic="test",
@@ -116,6 +117,9 @@ class TestDreamRunnerRun:
         result = await runner.run()
         assert result.review_path is not None
         assert result.review_path.exists()
+        review = result.review_path.read_text()
+        assert "Found interesting patterns" in review
+        assert "[Dream hypothesis] The architecture uses event sourcing" in review
 
     @pytest.mark.asyncio
     async def test_run_writes_dream_index(self, tmp_path):

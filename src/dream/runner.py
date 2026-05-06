@@ -181,6 +181,8 @@ class DreamRunner:
             eval_data=self._eval,
             topic=self.topic,
             artifacts=self.artifacts.entries,
+            findings=findings,
+            insights=insights,
         )
 
         self.artifacts.write_manifest()
