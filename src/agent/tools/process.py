@@ -12,6 +12,7 @@ import os
 import re
 import signal
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -77,36 +78,34 @@ class ProcessSession:
 
     # --- output helpers ---
 
+    def _append_stream(self, buffer: bytearray, cursor_name: str, data: bytes) -> None:
+        buffer.extend(data)
+        if len(buffer) <= _MAX_BUFFER:
+            return
+        excess = len(buffer) - _MAX_BUFFER
+        del buffer[:excess]
+        setattr(self, cursor_name, max(0, getattr(self, cursor_name) - excess))
+
     def _append_stdout(self, data: bytes) -> None:
-        self._stdout_buf.extend(data)
-        if len(self._stdout_buf) > _MAX_BUFFER:
-            excess = len(self._stdout_buf) - _MAX_BUFFER
-            del self._stdout_buf[:excess]
-            self._stdout_cursor = max(0, self._stdout_cursor - excess)
+        self._append_stream(self._stdout_buf, "_stdout_cursor", data)
 
     def _append_stderr(self, data: bytes) -> None:
-        self._stderr_buf.extend(data)
-        if len(self._stderr_buf) > _MAX_BUFFER:
-            excess = len(self._stderr_buf) - _MAX_BUFFER
-            del self._stderr_buf[:excess]
-            self._stderr_cursor = max(0, self._stderr_cursor - excess)
+        self._append_stream(self._stderr_buf, "_stderr_cursor", data)
 
     def drain(self) -> str:
         """Return new output since last drain, then advance cursors."""
-        out = bytes(self._stdout_buf[self._stdout_cursor :]).decode("utf-8", errors="replace")
-        err = bytes(self._stderr_buf[self._stderr_cursor :]).decode("utf-8", errors="replace")
+        output = _combined_output(
+            self._stdout_buf[self._stdout_cursor :],
+            self._stderr_buf[self._stderr_cursor :],
+        )
         self._stdout_cursor = len(self._stdout_buf)
         self._stderr_cursor = len(self._stderr_buf)
-        parts = [_clean_ansi(out).rstrip(), _clean_ansi(err).rstrip()]
-        return "\n".join(p for p in parts if p)
+        return output
 
     @property
     def aggregated(self) -> str:
         """Full accumulated output."""
-        out = bytes(self._stdout_buf).decode("utf-8", errors="replace")
-        err = bytes(self._stderr_buf).decode("utf-8", errors="replace")
-        parts = [_clean_ansi(out).rstrip(), _clean_ansi(err).rstrip()]
-        return "\n".join(p for p in parts if p)
+        return _combined_output(self._stdout_buf, self._stderr_buf)
 
     def tail(self, n: int = _DEFAULT_TAIL_LINES) -> str:
         """Last *n* lines of aggregated output."""
@@ -129,6 +128,15 @@ class ProcessSession:
             self.exit_code = rc
 
 
+def _stream_text(data: bytes | bytearray) -> str:
+    return _clean_ansi(bytes(data).decode("utf-8", errors="replace")).rstrip()
+
+
+def _combined_output(stdout: bytes | bytearray, stderr: bytes | bytearray) -> str:
+    parts = [_stream_text(stdout), _stream_text(stderr)]
+    return "\n".join(part for part in parts if part)
+
+
 # ---------------------------------------------------------------------------
 # Global process registry
 # ---------------------------------------------------------------------------
@@ -140,6 +148,29 @@ def _gen_id() -> str:
     global _next_id
     _next_id += 1
     return f"bg_{_next_id}"
+
+
+async def _read_stream(
+    stream: asyncio.StreamReader | None,
+    append_fn: Callable[[bytes], None],
+) -> None:
+    if stream is None:
+        return
+    while True:
+        data = await stream.read(4096)
+        if not data:
+            break
+        append_fn(data)
+
+
+async def _wait_for_exit(session: ProcessSession, proc: asyncio.subprocess.Process) -> None:
+    await proc.wait()
+    for reader in session._readers:
+        try:
+            await asyncio.wait_for(reader, timeout=2.0)
+        except (asyncio.TimeoutError, Exception):
+            pass
+    await session._mark_exited()
 
 
 class ProcessRegistry:
@@ -198,19 +229,6 @@ class ProcessRegistry:
             process=proc,
         )
 
-        # Background reader tasks
-        async def _read_stream(
-            stream: asyncio.StreamReader | None,
-            append_fn: Any,
-        ) -> None:
-            if stream is None:
-                return
-            while True:
-                data = await stream.read(4096)
-                if not data:
-                    break
-                append_fn(data)
-
         loop = asyncio.get_running_loop()
         if proc.stdout:
             t1 = loop.create_task(_read_stream(proc.stdout, session._append_stdout))
@@ -219,18 +237,7 @@ class ProcessRegistry:
             t2 = loop.create_task(_read_stream(proc.stderr, session._append_stderr))
             session._readers.append(t2)
 
-        # Waiter task: mark exited when process ends
-        async def _wait() -> None:
-            await proc.wait()
-            # Wait for readers to finish draining
-            for r in session._readers:
-                try:
-                    await asyncio.wait_for(r, timeout=2.0)
-                except (asyncio.TimeoutError, Exception):
-                    pass
-            await session._mark_exited()
-
-        loop.create_task(_wait())
+        loop.create_task(_wait_for_exit(session, proc))
 
         self._sessions[sid] = session
         return session
@@ -388,21 +395,7 @@ class ProcessTool(Tool):
                 await asyncio.sleep(min(0.25, deadline - time.monotonic()))
 
         output = session.drain()
-
-        if session.running:
-            if output:
-                return output + "\n\nProcess still running."
-            return "(no new output)\n\nProcess still running."
-
-        # Process exited
-        exit_info = (
-            f"signal {session.exit_signal}"
-            if session.exit_signal and session.exit_code is not None and session.exit_code < 0
-            else f"code {session.exit_code}"
-        )
-        if output:
-            return output + f"\n\nProcess exited with {exit_info}."
-        return f"(no new output)\n\nProcess exited with {exit_info}."
+        return _format_poll_result(session, output)
 
     async def _send_input(self, registry: ProcessRegistry, kwargs: dict[str, Any]) -> str:
         session_id = kwargs.get("session_id", "")
@@ -444,27 +437,11 @@ class ProcessTool(Tool):
 
         pid = session.pid
         try:
-            # Try SIGTERM on the process group first
-            if pid:
-                try:
-                    os.killpg(os.getpgid(pid), signal.SIGTERM)
-                except (ProcessLookupError, PermissionError):
-                    session.process.terminate()
-            else:
-                session.process.terminate()
-
-            # Wait briefly for graceful exit
+            _send_signal(session, signal.SIGTERM)
             try:
                 await asyncio.wait_for(session.process.wait(), timeout=3.0)
             except asyncio.TimeoutError:
-                # Force kill
-                if pid:
-                    try:
-                        os.killpg(os.getpgid(pid), signal.SIGKILL)
-                    except (ProcessLookupError, PermissionError):
-                        session.process.kill()
-                else:
-                    session.process.kill()
+                _send_signal(session, signal.SIGKILL)
                 try:
                     await asyncio.wait_for(session.process.wait(), timeout=2.0)
                 except asyncio.TimeoutError:
@@ -474,3 +451,35 @@ class ProcessTool(Tool):
 
         registry.remove(session_id)
         return f"Terminated process '{session_id}' (pid {pid})."
+
+
+def _format_poll_result(session: ProcessSession, output: str) -> str:
+    body = output or "(no new output)"
+    if session.running:
+        return body + "\n\nProcess still running."
+    return body + f"\n\nProcess exited with {_exit_info(session)}."
+
+
+def _exit_info(session: ProcessSession) -> str:
+    if session.exit_signal and session.exit_code is not None and session.exit_code < 0:
+        return f"signal {session.exit_signal}"
+    return f"code {session.exit_code}"
+
+
+def _send_signal(session: ProcessSession, sig: signal.Signals) -> None:
+    pid = session.pid
+    if not pid:
+        _send_process_signal(session, sig)
+        return
+
+    try:
+        os.killpg(os.getpgid(pid), sig)
+    except (ProcessLookupError, PermissionError):
+        _send_process_signal(session, sig)
+
+
+def _send_process_signal(session: ProcessSession, sig: signal.Signals) -> None:
+    if sig == signal.SIGTERM:
+        session.process.terminate()
+    elif sig == signal.SIGKILL:
+        session.process.kill()

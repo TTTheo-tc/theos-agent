@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from src.agent.tools.process import ProcessRegistry, ProcessTool
+from src.agent.tools.process import _MAX_BUFFER, ProcessRegistry, ProcessSession, ProcessTool
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -87,6 +87,36 @@ class TestProcessRegistry:
 
 
 class TestProcessSession:
+    def test_buffer_truncation_preserves_incremental_cursor(self):
+        process = type("_FakeProcess", (), {"pid": 1, "returncode": None})()
+        session = ProcessSession(
+            session_id="test",
+            command="fake",
+            cwd="/tmp",
+            process=process,
+        )
+        session._append_stdout(b"a" * _MAX_BUFFER)
+        session.drain()
+
+        session._append_stdout(b"b" * 10)
+
+        assert session.drain() == "b" * 10
+
+    def test_stderr_buffer_truncation_preserves_incremental_cursor(self):
+        process = type("_FakeProcess", (), {"pid": 1, "returncode": None})()
+        session = ProcessSession(
+            session_id="test",
+            command="fake",
+            cwd="/tmp",
+            process=process,
+        )
+        session._append_stderr(b"a" * _MAX_BUFFER)
+        session.drain()
+
+        session._append_stderr(b"b" * 10)
+
+        assert session.drain() == "b" * 10
+
     @pytest.mark.asyncio
     async def test_drain_output(self):
         reg = ProcessRegistry.get()
