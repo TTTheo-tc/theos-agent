@@ -13,6 +13,7 @@ import re
 import signal
 import time
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -166,10 +167,8 @@ async def _read_stream(
 async def _wait_for_exit(session: ProcessSession, proc: asyncio.subprocess.Process) -> None:
     await proc.wait()
     for reader in session._readers:
-        try:
+        with suppress(asyncio.TimeoutError, Exception):
             await asyncio.wait_for(reader, timeout=2.0)
-        except (asyncio.TimeoutError, Exception):
-            pass
     await session._mark_exited()
 
 
@@ -193,10 +192,8 @@ class ProcessRegistry:
         if cls._instance is not None:
             for s in cls._instance._sessions.values():
                 if s.running:
-                    try:
+                    with suppress(ProcessLookupError):
                         s.process.kill()
-                    except ProcessLookupError:
-                        pass
             cls._instance._sessions.clear()
         cls._instance = None
 
@@ -433,18 +430,14 @@ class ProcessTool(Tool):
             return f"Process '{session_id}' already exited (code {session.exit_code}). Removed."
 
         pid = session.pid
-        try:
+        with suppress(ProcessLookupError):
             _send_signal(session, signal.SIGTERM)
             try:
                 await asyncio.wait_for(session.process.wait(), timeout=3.0)
             except asyncio.TimeoutError:
                 _send_signal(session, signal.SIGKILL)
-                try:
+                with suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(session.process.wait(), timeout=2.0)
-                except asyncio.TimeoutError:
-                    pass
-        except ProcessLookupError:
-            pass
 
         registry.remove(session_id)
         return f"Terminated process '{session_id}' (pid {pid})."

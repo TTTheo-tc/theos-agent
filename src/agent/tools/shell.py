@@ -13,6 +13,7 @@ import signal
 import subprocess
 import tempfile
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
@@ -301,20 +302,20 @@ class _ShellState:
 
         # Restore cwd
         try:
-            new_cwd = open(cwd_file).read().strip()
+            with open(cwd_file, encoding="utf-8") as fh:
+                new_cwd = fh.read().strip()
             if new_cwd and os.path.isdir(new_cwd):
                 self.cwd = new_cwd
         except Exception:
             pass
         finally:
-            try:
+            with suppress(OSError):
                 os.unlink(cwd_file)
-            except OSError:
-                pass
 
         # Restore env (null-delimited KEY=VALUE pairs)
         try:
-            raw = open(env_file, "rb").read()
+            with open(env_file, "rb") as fh:
+                raw = fh.read()
             for entry in raw.split(b"\x00"):
                 if b"=" in entry:
                     k, v = entry.decode("utf-8", "replace").split("=", 1)
@@ -323,10 +324,8 @@ class _ShellState:
         except Exception:
             pass
         finally:
-            try:
+            with suppress(OSError):
                 os.unlink(env_file)
-            except OSError:
-                pass
 
         return output, returncode
 
@@ -517,6 +516,7 @@ class ExecTool(Tool):
         run_in_background: bool = False,
         **kwargs: Any,
     ) -> str:
+        del description, kwargs
         state = self._get_state()
 
         # Legacy working_dir param: override state cwd for this call
@@ -562,9 +562,8 @@ class ExecTool(Tool):
                 if re.search(pattern, target):
                     return "Error: Command blocked by safety guard (dangerous pattern detected)"
 
-        if self.allow_patterns:
-            if not any(re.search(p, lower) for p in self.allow_patterns):
-                return "Error: Command blocked by safety guard (not in allowlist)"
+        if self.allow_patterns and not any(re.search(p, lower) for p in self.allow_patterns):
+            return "Error: Command blocked by safety guard (not in allowlist)"
 
         if self.restrict_to_workspace:
             if "..\\" in cmd or "../" in cmd:
