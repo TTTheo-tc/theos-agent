@@ -64,7 +64,7 @@ class ContextBuilder:
         roles: "dict[str, AgentRoleConfig] | None" = None,
         recall_service: "Any | None" = None,
         learning_enabled: bool = False,
-    ):
+    ) -> None:
         self.workspace = workspace  # global workspace (skills, templates)
         self.group_workspace = group_workspace or workspace  # per-group (memory, bootstrap)
         self._recall_service = (

@@ -54,7 +54,7 @@ class SkillsLoader:
         workspace: Path,
         builtin_skills_dir: Path | None = None,
         instinct_domains_dir: Path | None = None,
-    ):
+    ) -> None:
         self.workspace = workspace
         self.workspace_skills = workspace / "skills"
         self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
