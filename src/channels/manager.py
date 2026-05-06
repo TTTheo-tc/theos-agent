@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Callable
 
 from loguru import logger
@@ -26,12 +27,13 @@ class ChannelManager:
     - Route outbound messages
     """
 
-    def __init__(self, config: Config, bus: MessageBus, dashboard: "DashboardWriter | None" = None):
+    def __init__(self, config: Config, bus: MessageBus, dashboard: DashboardWriter | None = None):
         self.config = config
         self.bus = bus
         self.dashboard = dashboard
         self.channels: dict[str, BaseChannel] = {}
         self._dispatch_task: asyncio.Task | None = None
+        self._dashboard_tasks: set[asyncio.Task] = set()
         self._restart_cb: Callable[[], None] | None = None
         self._inflight_sends = 0
 
@@ -82,7 +84,9 @@ class ChannelManager:
         # Mark channels online in dashboard
         if self.dashboard:
             for name in self.channels:
-                asyncio.ensure_future(self.dashboard.upsert_channel_stat(name, online=True))
+                self._track_dashboard_task(
+                    self.dashboard.upsert_channel_stat(name, online=True)
+                )
 
         # Start outbound dispatcher
         self._dispatch_task = asyncio.create_task(self._dispatch_outbound())
@@ -102,17 +106,17 @@ class ChannelManager:
         # Mark channels offline in dashboard
         if self.dashboard:
             for name in self.channels:
-                asyncio.ensure_future(self.dashboard.upsert_channel_stat(name, online=False))
+                self._track_dashboard_task(
+                    self.dashboard.upsert_channel_stat(name, online=False)
+                )
 
         logger.info("Stopping all channels...")
 
         # Stop dispatcher
         if self._dispatch_task:
             self._dispatch_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._dispatch_task
-            except asyncio.CancelledError:
-                pass
 
         # Stop all channels
         for name, channel in self.channels.items():
@@ -167,6 +171,12 @@ class ChannelManager:
                 continue
             except asyncio.CancelledError:
                 break
+
+    def _track_dashboard_task(self, awaitable: Any) -> None:
+        """Track non-blocking dashboard telemetry writes until they finish."""
+        task = asyncio.create_task(awaitable)
+        self._dashboard_tasks.add(task)
+        task.add_done_callback(self._dashboard_tasks.discard)
 
     def _prepare_outbound_message(
         self,

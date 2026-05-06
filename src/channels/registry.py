@@ -20,7 +20,7 @@ class ChannelSpec:
     extra_kwargs: tuple[tuple[str, str], ...] = ()  # (kwarg_name, config_dotpath) pairs
 
 
-def _resolve_dotpath(config: "Config", dotpath: str) -> Any:
+def _resolve_dotpath(config: Config, dotpath: str) -> Any:
     """Resolve a dot-separated path like 'providers.groq.api_key' on a config object."""
     from src.security.secret_refs import resolve_data_secret_refs
 

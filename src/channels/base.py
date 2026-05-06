@@ -58,12 +58,10 @@ class BaseChannel(ABC):
         2. Listens for incoming messages
         3. Forwards messages to the bus via _handle_message()
         """
-        pass
 
     @abstractmethod
     async def stop(self) -> None:
         """Stop the channel and clean up resources."""
-        pass
 
     @abstractmethod
     async def send(self, msg: OutboundMessage) -> None:
@@ -73,7 +71,6 @@ class BaseChannel(ABC):
         Args:
             msg: The message to send.
         """
-        pass
 
     def is_allowed(self, sender_id: str) -> bool:
         """
