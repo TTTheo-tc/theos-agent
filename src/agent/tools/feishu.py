@@ -75,12 +75,29 @@ async def _run(func, *args, **kwargs) -> str:
         return f"Error ({error_type}): {e}{hint}"
 
 
+class _FeishuClientTool(Tool):
+    """Base for Feishu tools that only need the shared client."""
+
+    def __init__(self, client: Any):
+        self._client = client
+
+
+def _missing(field: str, context: str, *, plural: bool = False) -> str:
+    quoted = field if "'" in field else f"'{field}'"
+    verb = "are" if plural else "is"
+    return f"Error: {quoted} {verb} required for {context}"
+
+
+def _unknown(kind: str, value: str, choices: str) -> str:
+    return f"Error: unknown {kind} '{value}'. Use {choices}."
+
+
 # ---------------------------------------------------------------------------
 # P1 — Knowledge tools (read / search / list)
 # ---------------------------------------------------------------------------
 
 
-class FeishuReadTool(Tool):
+class FeishuReadTool(_FeishuClientTool):
     """Read a Feishu page as Markdown.
 
     Maps to ``FeishuClient.read_page_as_markdown()``.
@@ -114,9 +131,6 @@ class FeishuReadTool(Tool):
         "required": ["url"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self, url: str, max_age: int | None = None, force_refresh: bool = False, **kw: Any
     ) -> str:
@@ -125,7 +139,7 @@ class FeishuReadTool(Tool):
         )
 
 
-class FeishuSearchTool(Tool):
+class FeishuSearchTool(_FeishuClientTool):
     """Search Feishu wiki pages by keyword."""
 
     name = "feishu_search"
@@ -159,9 +173,6 @@ class FeishuSearchTool(Tool):
         "required": ["query"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         query: str,
@@ -180,7 +191,7 @@ class FeishuSearchTool(Tool):
         return await _run(self._client.search_wiki, query, space=space, node=node)
 
 
-class FeishuListTool(Tool):
+class FeishuListTool(_FeishuClientTool):
     """List child pages of a Feishu wiki page or space."""
 
     name = "feishu_list"
@@ -196,22 +207,16 @@ class FeishuListTool(Tool):
         "required": ["url"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(self, url: str, **kw: Any) -> str:
         return await _run(self._client.list_pages, url)
 
 
-class FeishuSpacesTool(Tool):
+class FeishuSpacesTool(_FeishuClientTool):
     """List all accessible Feishu knowledge spaces."""
 
     name = "feishu_spaces"
     description = "List all accessible Feishu/Lark knowledge spaces (wikis)."
     parameters = {"type": "object", "properties": {}, "required": []}
-
-    def __init__(self, client: Any):
-        self._client = client
 
     async def execute(self, **kw: Any) -> str:
         return await _run(self._client.list_spaces)
@@ -222,7 +227,7 @@ class FeishuSpacesTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class FeishuCalendarTool(Tool):
+class FeishuCalendarTool(_FeishuClientTool):
     """Manage Feishu calendar events: list, get, create, delete, freebusy."""
 
     name = "feishu_calendar"
@@ -286,9 +291,6 @@ class FeishuCalendarTool(Tool):
         "required": ["action"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     @property
     def risk_level(self) -> str:
         return "medium"
@@ -324,9 +326,9 @@ class FeishuCalendarTool(Tool):
 
         if action == "create":
             if not summary:
-                return "Error: 'summary' is required for create action"
+                return _missing("summary", "create action")
             if not start_resolved or not end_resolved:
-                return "Error: 'start_time' and 'end_time' are required for create action"
+                return _missing("'start_time' and 'end_time'", "create action", plural=True)
             att_dicts = (
                 [{"type": "user", "user_id": uid} for uid in attendees] if attendees else None
             )
@@ -343,7 +345,7 @@ class FeishuCalendarTool(Tool):
 
         if action == "delete":
             if not event_id:
-                return "Error: 'event_id' is required for delete action"
+                return _missing("event_id", "delete action")
             return await _run(
                 self._client.calendar_delete_event,
                 event_id=event_id,
@@ -352,9 +354,9 @@ class FeishuCalendarTool(Tool):
 
         if action == "freebusy":
             if not user_ids:
-                return "Error: 'user_ids' is required for freebusy action"
+                return _missing("user_ids", "freebusy action")
             if not start_resolved or not end_resolved:
-                return "Error: 'start_time' and 'end_time' are required for freebusy action"
+                return _missing("'start_time' and 'end_time'", "freebusy action", plural=True)
             return await _run(
                 self._client.calendar_freebusy,
                 user_ids=user_ids,
@@ -362,7 +364,7 @@ class FeishuCalendarTool(Tool):
                 end_time=end_resolved,
             )
 
-        return f"Error: unknown action '{action}'. Use list, events, create, delete, or freebusy."
+        return _unknown("action", action, "list, events, create, delete, or freebusy")
 
 
 def _resolve_natural_date(value: str, *, is_end: bool = False) -> str:
@@ -409,7 +411,7 @@ def _resolve_natural_date(value: str, *, is_end: bool = False) -> str:
 # ---------------------------------------------------------------------------
 
 
-class FeishuEditTool(Tool):
+class FeishuEditTool(_FeishuClientTool):
     """Edit a Feishu document."""
 
     name = "feishu_edit"
@@ -453,9 +455,6 @@ class FeishuEditTool(Tool):
     def risk_level(self) -> str:
         return "medium"
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         url: str,
@@ -488,7 +487,7 @@ class FeishuEditTool(Tool):
         return result
 
 
-class FeishuCreateTool(Tool):
+class FeishuCreateTool(_FeishuClientTool):
     """Create a new Feishu wiki page."""
 
     name = "feishu_create"
@@ -527,7 +526,7 @@ class FeishuCreateTool(Tool):
         return "medium"
 
     def __init__(self, client: Any, allow_from: list[str] | None = None):
-        self._client = client
+        super().__init__(client)
         self._allow_from = allow_from or []
 
     async def execute(
@@ -560,7 +559,7 @@ class FeishuCreateTool(Tool):
         return result
 
 
-class FeishuSendTool(Tool):
+class FeishuSendTool(_FeishuClientTool):
     """Send a message to a Feishu user or chat."""
 
     name = "feishu_send"
@@ -611,9 +610,6 @@ class FeishuSendTool(Tool):
     def risk_level(self) -> str:
         return "medium"
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         user: str,
@@ -627,32 +623,32 @@ class FeishuSendTool(Tool):
     ) -> str:
         if msg_type == "text":
             if not message:
-                return "Error: 'message' is required for text messages"
+                return _missing("message", "text messages")
             return await _run(self._client.send_message, user, message)
 
         if msg_type == "card":
             if not message:
-                return "Error: 'message' is required for card messages (markdown body)"
+                return _missing("message", "card messages (markdown body)")
             return await _run(self._client.send_card, user, title or "", message, buttons=buttons)
 
         if msg_type == "image":
             if not image_key:
-                return "Error: 'image_key' is required for image messages"
+                return _missing("image_key", "image messages")
             return await _run(self._client.send_image, user, image_key)
 
         if msg_type == "file":
             if not file_key:
-                return "Error: 'file_key' is required for file messages"
+                return _missing("file_key", "file messages")
             return await _run(self._client.send_file, user, file_key)
 
         if msg_type == "post":
             if not message:
-                return "Error: 'message' is required for post messages"
+                return _missing("message", "post messages")
             # Convert simple text to post format: one line with one text element
             post_content = [[{"tag": "text", "text": message}]]
             return await _run(self._client.send_post, user, title or "", post_content)
 
-        return f"Error: unknown msg_type '{msg_type}'. Use text, card, image, file, or post."
+        return _unknown("msg_type", msg_type, "text, card, image, file, or post")
 
 
 # ---------------------------------------------------------------------------
@@ -660,7 +656,7 @@ class FeishuSendTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class FeishuCommentsTool(Tool):
+class FeishuCommentsTool(_FeishuClientTool):
     """Read, add, reply, resolve, or delete comments on a Feishu page."""
 
     name = "feishu_comments"
@@ -697,9 +693,6 @@ class FeishuCommentsTool(Tool):
     def risk_level(self) -> str:
         return "medium"
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         url: str,
@@ -713,30 +706,30 @@ class FeishuCommentsTool(Tool):
 
         if action == "add":
             if not content:
-                return "Error: 'content' is required for add action"
+                return _missing("content", "add action")
             return await _run(self._client.add_comment, url, content)
 
         if action == "reply":
             if not comment_id:
-                return "Error: 'comment_id' is required for reply action"
+                return _missing("comment_id", "reply action")
             if not content:
-                return "Error: 'content' is required for reply action"
+                return _missing("content", "reply action")
             return await _run(self._client.add_comment, url, content, reply_id=comment_id)
 
         if action == "resolve":
             if not comment_id:
-                return "Error: 'comment_id' is required for resolve action"
+                return _missing("comment_id", "resolve action")
             return await _run(self._client.resolve_comment, url, comment_id)
 
         if action == "delete":
             if not comment_id:
-                return "Error: 'comment_id' is required for delete action"
+                return _missing("comment_id", "delete action")
             return await _run(self._client.delete_comment, url, comment_id)
 
-        return f"Error: unknown action '{action}'. Use read, add, reply, resolve, or delete."
+        return _unknown("action", action, "read, add, reply, resolve, or delete")
 
 
-class FeishuDownloadTool(Tool):
+class FeishuDownloadTool(_FeishuClientTool):
     """Download files from Feishu Drive."""
 
     name = "feishu_download"
@@ -766,9 +759,6 @@ class FeishuDownloadTool(Tool):
         "required": ["url"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         url: str,
@@ -788,7 +778,7 @@ class FeishuDownloadTool(Tool):
         )
 
 
-class FeishuInfoTool(Tool):
+class FeishuInfoTool(_FeishuClientTool):
     """Get metadata about a Feishu page."""
 
     name = "feishu_info"
@@ -803,9 +793,6 @@ class FeishuInfoTool(Tool):
         "required": ["url"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self, url: str, max_age: int | None = None, force_refresh: bool = False, **kw: Any
     ) -> str:
@@ -817,7 +804,7 @@ class FeishuInfoTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class FeishuPermTool(Tool):
+class FeishuPermTool(_FeishuClientTool):
     """Manage document permissions: list, add, update, remove, transfer ownership."""
 
     name = "feishu_perm"
@@ -864,9 +851,6 @@ class FeishuPermTool(Tool):
     def risk_level(self) -> str:
         return "medium"
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         action: str,
@@ -881,30 +865,30 @@ class FeishuPermTool(Tool):
 
         if action == "add":
             if not member_id:
-                return "Error: 'member_id' is required for add action"
+                return _missing("member_id", "add action")
             return await _run(self._client.perm_add, url, member_id, perm=perm or "full_access")
 
         if action == "update":
             if not member_id:
-                return "Error: 'member_id' is required for update action"
+                return _missing("member_id", "update action")
             if not perm:
-                return "Error: 'perm' is required for update action"
+                return _missing("perm", "update action")
             return await _run(self._client.perm_update, url, member_id, perm)
 
         if action == "remove":
             if not member_id:
-                return "Error: 'member_id' is required for remove action"
+                return _missing("member_id", "remove action")
             return await _run(self._client.perm_remove, url, member_id)
 
         if action == "transfer":
             if not new_owner:
-                return "Error: 'new_owner' is required for transfer action"
+                return _missing("new_owner", "transfer action")
             return await _run(self._client.perm_transfer, url, new_owner)
 
-        return f"Error: unknown action '{action}'. Use list, add, update, remove, or transfer."
+        return _unknown("action", action, "list, add, update, remove, or transfer")
 
 
-class FeishuChatTool(Tool):
+class FeishuChatTool(_FeishuClientTool):
     """Manage Feishu chats/groups: create, info, update, members, messages, pin, react."""
 
     name = "feishu_chat"
@@ -967,9 +951,6 @@ class FeishuChatTool(Tool):
     def risk_level(self) -> str:
         return "medium"
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         action: str,
@@ -983,7 +964,7 @@ class FeishuChatTool(Tool):
     ) -> str:
         if action == "create":
             if not name:
-                return "Error: 'name' is required for create action"
+                return _missing("name", "create action")
             return await _run(
                 self._client.chat_create,
                 name,
@@ -993,61 +974,62 @@ class FeishuChatTool(Tool):
 
         if action == "info":
             if not chat_id:
-                return "Error: 'chat_id' is required for info action"
+                return _missing("chat_id", "info action")
             return await _run(self._client.chat_info, chat_id)
 
         if action == "update":
             if not chat_id:
-                return "Error: 'chat_id' is required for update action"
+                return _missing("chat_id", "update action")
             return await _run(self._client.chat_update, chat_id, name=name, description=description)
 
         if action == "members":
             if not chat_id:
-                return "Error: 'chat_id' is required for members action"
+                return _missing("chat_id", "members action")
             return await _run(self._client.chat_members, chat_id)
 
         if action == "add_members":
             if not chat_id:
-                return "Error: 'chat_id' is required for add_members action"
+                return _missing("chat_id", "add_members action")
             if not user_ids:
-                return "Error: 'user_ids' is required for add_members action"
+                return _missing("user_ids", "add_members action")
             return await _run(self._client.chat_add_members, chat_id, user_ids)
 
         if action == "remove_members":
             if not chat_id:
-                return "Error: 'chat_id' is required for remove_members action"
+                return _missing("chat_id", "remove_members action")
             if not user_ids:
-                return "Error: 'user_ids' is required for remove_members action"
+                return _missing("user_ids", "remove_members action")
             return await _run(self._client.chat_remove_members, chat_id, user_ids)
 
         if action == "messages":
             if not chat_id:
-                return "Error: 'chat_id' is required for messages action"
+                return _missing("chat_id", "messages action")
             return await _run(self._client.chat_messages, chat_id)
 
         if action == "pin":
             if not message_id:
-                return "Error: 'message_id' is required for pin action"
+                return _missing("message_id", "pin action")
             from src.feishu import api_chat  # noqa: PLC0415
 
             return await _run(api_chat.pin_message, self._client._client, message_id)
 
         if action == "react":
             if not message_id:
-                return "Error: 'message_id' is required for react action"
+                return _missing("message_id", "react action")
             if not emoji:
-                return "Error: 'emoji' is required for react action"
+                return _missing("emoji", "react action")
             from src.feishu import api_chat  # noqa: PLC0415
 
             return await _run(api_chat.add_reaction, self._client._client, message_id, emoji)
 
-        return (
-            f"Error: unknown action '{action}'. Use create, info, update, members, "
-            "add_members, remove_members, messages, pin, or react."
+        return _unknown(
+            "action",
+            action,
+            "create, info, update, members, add_members, remove_members, messages, pin, or react",
         )
 
 
-class FeishuSheetTool(Tool):
+class FeishuSheetTool(_FeishuClientTool):
     """Read and write Feishu spreadsheet data."""
 
     name = "feishu_sheet"
@@ -1092,9 +1074,6 @@ class FeishuSheetTool(Tool):
         "required": ["action", "url"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     @property
     def risk_level(self) -> str:
         # Dynamically determined in execute, but schema needs a static default
@@ -1114,15 +1093,15 @@ class FeishuSheetTool(Tool):
             return await _run(self._client.sheet_info, url)
         if action == "write":
             if not range:
-                return "Error: 'range' is required for write action (e.g. 'A1:C3')"
+                return _missing("range", "write action (e.g. 'A1:C3')")
             if not values:
-                return "Error: 'values' is required for write action"
+                return _missing("values", "write action")
             return await _run(self._client.write_sheet, url, range, values)
         if action == "append":
             if not values:
-                return "Error: 'values' is required for append action"
+                return _missing("values", "append action")
             return await _run(self._client.append_sheet, url, values)
-        return f"Error: unknown action '{action}'. Use read, write, append, or info."
+        return _unknown("action", action, "read, write, append, or info")
 
 
 # ---------------------------------------------------------------------------
@@ -1130,7 +1109,7 @@ class FeishuSheetTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class FeishuTaskTool(Tool):
+class FeishuTaskTool(_FeishuClientTool):
     """Manage Feishu tasks: list, get, create, complete, delete, subtask."""
 
     name = "feishu_task"
@@ -1184,9 +1163,6 @@ class FeishuTaskTool(Tool):
         "required": ["action"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     @property
     def risk_level(self) -> str:
         return "medium"
@@ -1207,12 +1183,12 @@ class FeishuTaskTool(Tool):
 
         if action == "get":
             if not task_id:
-                return "Error: 'task_id' is required for get action"
+                return _missing("task_id", "get action")
             return await _run(self._client.task_get, task_id)
 
         if action == "create":
             if not summary:
-                return "Error: 'summary' is required for create action"
+                return _missing("summary", "create action")
             due_resolved = _resolve_due_date(due) if due else None
             return await _run(
                 self._client.task_create,
@@ -1224,25 +1200,22 @@ class FeishuTaskTool(Tool):
 
         if action == "complete":
             if not task_id:
-                return "Error: 'task_id' is required for complete action"
+                return _missing("task_id", "complete action")
             return await _run(self._client.task_complete, task_id)
 
         if action == "delete":
             if not task_id:
-                return "Error: 'task_id' is required for delete action"
+                return _missing("task_id", "delete action")
             return await _run(self._client.task_delete, task_id)
 
         if action == "subtask":
             if not task_id:
-                return "Error: 'task_id' is required for subtask action"
+                return _missing("task_id", "subtask action")
             if not summary:
-                return "Error: 'summary' is required for subtask action"
+                return _missing("summary", "subtask action")
             return await _run(self._client.task_add_subtask, task_id, summary)
 
-        return (
-            f"Error: unknown action '{action}'. "
-            "Use list, get, create, complete, delete, or subtask."
-        )
+        return _unknown("action", action, "list, get, create, complete, delete, or subtask")
 
 
 # ---------------------------------------------------------------------------
@@ -1250,7 +1223,7 @@ class FeishuTaskTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class FeishuFileTool(Tool):
+class FeishuFileTool(_FeishuClientTool):
     """Manage files on Feishu Drive: list, upload, create folder, move, copy, delete."""
 
     name = "feishu_file"
@@ -1314,9 +1287,6 @@ class FeishuFileTool(Tool):
     def risk_level(self) -> str:
         return "medium"
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         action: str,
@@ -1332,38 +1302,38 @@ class FeishuFileTool(Tool):
     ) -> str:
         if action == "list":
             if not folder_token:
-                return "Error: 'folder_token' is required for list action"
+                return _missing("folder_token", "list action")
             return await _run(self._client.file_list, folder_token)
 
         if action == "create_folder":
             if not folder_token:
-                return "Error: 'folder_token' is required for create_folder action"
+                return _missing("folder_token", "create_folder action")
             if not name:
-                return "Error: 'name' is required for create_folder action"
+                return _missing("name", "create_folder action")
             return await _run(self._client.file_create_folder, folder_token, name)
 
         if action == "upload":
             if not folder_token:
-                return "Error: 'folder_token' is required for upload action"
+                return _missing("folder_token", "upload action")
             if not path:
-                return "Error: 'path' is required for upload action"
+                return _missing("path", "upload action")
             display_name = name or path.rsplit("/", 1)[-1]
             return await _run(self._client.file_upload, display_name, path, folder_token)
 
         if action == "move":
             if not file_token:
-                return "Error: 'file_token' is required for move action"
+                return _missing("file_token", "move action")
             if not dest_folder:
-                return "Error: 'dest_folder' is required for move action"
+                return _missing("dest_folder", "move action")
             return await _run(
                 self._client.file_move, file_token, dest_folder, file_type=file_type or ""
             )
 
         if action == "copy":
             if not file_token:
-                return "Error: 'file_token' is required for copy action"
+                return _missing("file_token", "copy action")
             if not dest_folder:
-                return "Error: 'dest_folder' is required for copy action"
+                return _missing("dest_folder", "copy action")
             return await _run(
                 self._client.file_copy,
                 file_token,
@@ -1374,14 +1344,14 @@ class FeishuFileTool(Tool):
 
         if action == "delete":
             if not file_token:
-                return "Error: 'file_token' is required for delete action"
+                return _missing("file_token", "delete action")
             if not file_type:
-                return "Error: 'file_type' is required for delete action"
+                return _missing("file_type", "delete action")
             return await _run(self._client.file_delete, file_token, file_type)
 
         if action == "import":
             if not path:
-                return "Error: 'path' is required for import action"
+                return _missing("path", "import action")
             return await _run(
                 self._client.import_file,
                 path,
@@ -1390,9 +1360,10 @@ class FeishuFileTool(Tool):
                 wiki_parent_url=wiki_parent_url,
             )
 
-        return (
-            f"Error: unknown action '{action}'. "
-            "Use list, upload, create_folder, move, copy, delete, or import."
+        return _unknown(
+            "action",
+            action,
+            "list, upload, create_folder, move, copy, delete, or import",
         )
 
 
@@ -1401,7 +1372,7 @@ class FeishuFileTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-class FeishuContactTool(Tool):
+class FeishuContactTool(_FeishuClientTool):
     """Query Feishu users and departments."""
 
     name = "feishu_contact"
@@ -1453,9 +1424,6 @@ class FeishuContactTool(Tool):
         "required": ["action"],
     }
 
-    def __init__(self, client: Any):
-        self._client = client
-
     async def execute(
         self,
         action: str,
@@ -1468,12 +1436,12 @@ class FeishuContactTool(Tool):
     ) -> str:
         if action == "user":
             if not user_id:
-                return "Error: 'user_id' is required for user action"
+                return _missing("user_id", "user action")
             return await _run(self._client.info_user, user_id)
 
         if action == "search":
             if not query:
-                return "Error: 'query' is required for search action"
+                return _missing("query", "search action")
             return await _run(self._client.search_users, query)
 
         if action == "departments":
@@ -1482,22 +1450,23 @@ class FeishuContactTool(Tool):
 
         if action == "department_users":
             if not department_id:
-                return "Error: 'department_id' is required for department_users action"
+                return _missing("department_id", "department_users action")
             return await _run(self._client.contact_department_users, department_id)
 
         if action == "find_by_email":
             if not email:
-                return "Error: 'email' is required for find_by_email action"
+                return _missing("email", "find_by_email action")
             return await _run(self._client.contact_find_by_email, email)
 
         if action == "find_by_phone":
             if not phone:
-                return "Error: 'phone' is required for find_by_phone action"
+                return _missing("phone", "find_by_phone action")
             return await _run(self._client.contact_find_by_phone, phone)
 
-        return (
-            f"Error: unknown action '{action}'. "
-            "Use user, search, departments, department_users, find_by_email, or find_by_phone."
+        return _unknown(
+            "action",
+            action,
+            "user, search, departments, department_users, find_by_email, or find_by_phone",
         )
 
 
@@ -1608,10 +1577,10 @@ class FeishuAuthTool(Tool):
 
         if action == "exchange":
             if not code:
-                return "Error: 'code' is required for exchange action"
+                return _missing("code", "exchange action")
             return await self._exchange_code(code)
 
-        return f"Error: unknown action '{action}'. Use status, start, or exchange."
+        return _unknown("action", action, "status, start, or exchange")
 
     def _check_status(self) -> str:
         """Check current token status."""
