@@ -54,6 +54,37 @@ class SkillsLoader:
         self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
         self.instinct_domains = instinct_domains_dir or _resolve_instinct_domains_dir()
 
+    def _discover_skill_infos(self) -> list[dict[str, str]]:
+        """Return skill entries with workspace definitions taking precedence."""
+        skills: list[dict[str, str]] = []
+        seen_names: set[str] = set()
+
+        for root, source in (
+            (self.workspace_skills, "workspace"),
+            (self.builtin_skills, "builtin"),
+        ):
+            if not root or not root.exists():
+                continue
+            for skill_dir in root.iterdir():
+                skill_file = skill_dir / "SKILL.md"
+                if not skill_dir.is_dir() or not skill_file.exists():
+                    continue
+                if skill_dir.name in seen_names:
+                    continue
+                seen_names.add(skill_dir.name)
+                skills.append({"name": skill_dir.name, "path": str(skill_file), "source": source})
+        return skills
+
+    def _find_skill_file(self, name: str) -> Path | None:
+        """Find a skill file by name, preferring workspace skills."""
+        for root in (self.workspace_skills, self.builtin_skills):
+            if not root:
+                continue
+            skill_file = root / name / "SKILL.md"
+            if skill_file.exists():
+                return skill_file
+        return None
+
     def list_skills(self, filter_unavailable: bool = True) -> list[dict[str, str]]:
         """
         List all available skills.
@@ -64,33 +95,7 @@ class SkillsLoader:
         Returns:
             List of skill info dicts with 'name', 'path', 'source'.
         """
-        skills = []
-
-        seen_names: set[str] = set()
-
-        # Workspace skills (highest priority)
-        if self.workspace_skills.exists():
-            for skill_dir in self.workspace_skills.iterdir():
-                if skill_dir.is_dir():
-                    skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists():
-                        seen_names.add(skill_dir.name)
-                        skills.append(
-                            {"name": skill_dir.name, "path": str(skill_file), "source": "workspace"}
-                        )
-
-        # Built-in skills
-        if self.builtin_skills and self.builtin_skills.exists():
-            for skill_dir in self.builtin_skills.iterdir():
-                if skill_dir.is_dir():
-                    skill_file = skill_dir / "SKILL.md"
-                    if skill_file.exists() and skill_dir.name not in seen_names:
-                        seen_names.add(skill_dir.name)
-                        skills.append(
-                            {"name": skill_dir.name, "path": str(skill_file), "source": "builtin"}
-                        )
-
-        # Filter by requirements
+        skills = self._discover_skill_infos()
         if filter_unavailable:
             return [s for s in skills if self._check_requirements(self._get_skill_meta(s["name"]))]
         return skills
@@ -105,18 +110,8 @@ class SkillsLoader:
         Returns:
             Skill content or None if not found.
         """
-        # Check workspace first
-        workspace_skill = self.workspace_skills / name / "SKILL.md"
-        if workspace_skill.exists():
-            return workspace_skill.read_text(encoding="utf-8")
-
-        # Check built-in
-        if self.builtin_skills:
-            builtin_skill = self.builtin_skills / name / "SKILL.md"
-            if builtin_skill.exists():
-                return builtin_skill.read_text(encoding="utf-8")
-
-        return None
+        skill_file = self._find_skill_file(name)
+        return skill_file.read_text(encoding="utf-8") if skill_file else None
 
     def load_skills_for_context(self, skill_names: list[str]) -> str:
         """
@@ -147,17 +142,16 @@ class SkillsLoader:
         Returns:
             XML-formatted skills summary.
         """
-        all_skills = self.list_skills(filter_unavailable=False)
+        all_skills = self.build_skill_catalog(filter_unavailable=False)
         if not all_skills:
             return ""
 
         lines = ["<skills>"]
-        for s in all_skills:
-            name = html.escape(s["name"])
-            path = s["path"]
-            desc = html.escape(self._get_skill_description(s["name"]))
-            skill_meta = self._get_skill_meta(s["name"])
-            available = self._check_requirements(skill_meta)
+        for skill in all_skills:
+            name = html.escape(skill["name"])
+            path = skill["path"]
+            desc = html.escape(skill["description"])
+            available = skill["available"]
 
             lines.append(f'  <skill available="{str(available).lower()}">')
             lines.append(f"    <name>{name}</name>")
@@ -165,10 +159,9 @@ class SkillsLoader:
             lines.append(f"    <location>{path}</location>")
 
             # Show missing requirements for unavailable skills
-            if not available:
-                missing = self._get_missing_requirements(skill_meta)
-                if missing:
-                    lines.append(f"    <requires>{html.escape(missing)}</requires>")
+            if not available and skill["missing_requirements"]:
+                missing_requirements = html.escape(skill["missing_requirements"])
+                lines.append(f"    <requires>{missing_requirements}</requires>")
 
             lines.append("  </skill>")
         lines.append("</skills>")
@@ -179,24 +172,24 @@ class SkillsLoader:
         """Build a richer skill catalog used by discovery/search tools."""
         catalog: list[dict[str, Any]] = []
         for skill in self.list_skills(filter_unavailable=False):
-            meta = self.get_skill_metadata(skill["name"]) or {}
-            skill_meta = self._get_skill_meta(skill["name"])
-            available = self._check_requirements(skill_meta)
-            if filter_unavailable and not available:
+            entry = self._skill_catalog_entry(skill)
+            if filter_unavailable and not entry["available"]:
                 continue
-            catalog.append(
-                {
-                    **skill,
-                    "description": meta.get("description") or skill["name"],
-                    "metadata": meta,
-                    "skill_metadata": skill_meta,
-                    "available": available,
-                    "missing_requirements": (
-                        "" if available else self._get_missing_requirements(skill_meta)
-                    ),
-                }
-            )
+            catalog.append(entry)
         return catalog
+
+    def _skill_catalog_entry(self, skill: dict[str, str]) -> dict[str, Any]:
+        meta = self.get_skill_metadata(skill["name"]) or {}
+        skill_meta = self._parse_skill_metadata(meta.get("metadata", ""))
+        available = self._check_requirements(skill_meta)
+        return {
+            **skill,
+            "description": meta.get("description") or skill["name"],
+            "metadata": meta,
+            "skill_metadata": skill_meta,
+            "available": available,
+            "missing_requirements": "" if available else self._get_missing_requirements(skill_meta),
+        }
 
     def get_domain_skill_map(self) -> dict[str, list[str]]:
         """Parse instinct domain files into a ``category/domain -> skills`` map."""
@@ -266,63 +259,25 @@ class SkillsLoader:
         domain_labels = self.resolve_domain_labels(domain) if domain else []
 
         if domain and not domain_labels:
-            return {
-                "query": query,
-                "domain": domain,
-                "resolved_domains": [],
-                "count": 0,
-                "matches": [],
-                "error": f"Unknown domain: {domain}",
-                "available_domains": sorted(domain_map),
-            }
+            return self._unknown_domain_result(query, domain, domain_map)
 
-        allowed_names: set[str] | None = None
-        if domain_labels:
-            allowed_names = set()
-            for label in domain_labels:
-                allowed_names.update(domain_map.get(label, []))
-
-        matched: list[dict[str, Any]] = []
+        allowed_names = self._allowed_skill_names(domain_labels, domain_map)
         tokenized = self._tokenize(query)
-
-        for skill in catalog:
-            if allowed_names is not None and skill["name"] not in allowed_names:
-                continue
-            score, reasons = self._score_skill_match(skill, query=query, tokens=tokenized)
-            if query and score <= 0:
-                continue
-            matched.append(
-                {
-                    "score": score,
-                    "skill": skill,
-                    "reasons": reasons,
-                }
-            )
+        matched = self._match_catalog_skills(
+            catalog,
+            allowed_names=allowed_names,
+            query=query,
+            tokenized=tokenized,
+        )
 
         # Include domain-referenced skills even when not installed or unavailable.
         if allowed_names is not None and include_unavailable:
-            seen = {item["skill"]["name"] for item in matched}
-            for skill_name in sorted(allowed_names):
-                if skill_name in seen:
-                    continue
-                if query and not self._query_matches_name(skill_name, query, tokenized):
-                    continue
-                matched.append(
-                    {
-                        "score": 0,
-                        "skill": {
-                            "name": skill_name,
-                            "path": None,
-                            "source": "instinct-domain",
-                            "description": skill_name,
-                            "metadata": {},
-                            "skill_metadata": {},
-                            "available": False,
-                            "missing_requirements": "Skill referenced by instinct domain but not installed.",
-                        },
-                        "reasons": ["listed in instinct domain"],
-                    }
-                )
+            self._add_domain_reference_matches(
+                matched,
+                allowed_names=allowed_names,
+                query=query,
+                tokenized=tokenized,
+            )
 
         matched.sort(
             key=lambda item: (
@@ -333,21 +288,10 @@ class SkillsLoader:
         )
 
         skill_domains = self._invert_domain_skill_map(domain_map)
-        results = []
-        for item in matched[: max(1, int(limit))]:
-            skill = item["skill"]
-            results.append(
-                {
-                    "name": skill["name"],
-                    "description": skill["description"],
-                    "source": skill["source"],
-                    "path": skill["path"],
-                    "available": skill["available"],
-                    "missing_requirements": skill["missing_requirements"] or None,
-                    "domains": skill_domains.get(skill["name"], []),
-                    "match_reasons": item["reasons"],
-                }
-            )
+        results = [
+            self._public_search_match(item, skill_domains)
+            for item in matched[: max(1, int(limit))]
+        ]
 
         return {
             "query": query,
@@ -355,6 +299,102 @@ class SkillsLoader:
             "resolved_domains": domain_labels,
             "count": len(results),
             "matches": results,
+        }
+
+    def _unknown_domain_result(
+        self,
+        query: str,
+        domain: str,
+        domain_map: dict[str, list[str]],
+    ) -> dict[str, Any]:
+        return {
+            "query": query,
+            "domain": domain,
+            "resolved_domains": [],
+            "count": 0,
+            "matches": [],
+            "error": f"Unknown domain: {domain}",
+            "available_domains": sorted(domain_map),
+        }
+
+    def _allowed_skill_names(
+        self,
+        domain_labels: list[str],
+        domain_map: dict[str, list[str]],
+    ) -> set[str] | None:
+        if not domain_labels:
+            return None
+
+        allowed_names: set[str] = set()
+        for label in domain_labels:
+            allowed_names.update(domain_map.get(label, []))
+        return allowed_names
+
+    def _match_catalog_skills(
+        self,
+        catalog: list[dict[str, Any]],
+        *,
+        allowed_names: set[str] | None,
+        query: str,
+        tokenized: list[str],
+    ) -> list[dict[str, Any]]:
+        matches: list[dict[str, Any]] = []
+        for skill in catalog:
+            if allowed_names is not None and skill["name"] not in allowed_names:
+                continue
+            score, reasons = self._score_skill_match(skill, query=query, tokens=tokenized)
+            if query and score <= 0:
+                continue
+            matches.append({"score": score, "skill": skill, "reasons": reasons})
+        return matches
+
+    def _add_domain_reference_matches(
+        self,
+        matches: list[dict[str, Any]],
+        *,
+        allowed_names: set[str],
+        query: str,
+        tokenized: list[str],
+    ) -> None:
+        seen = {item["skill"]["name"] for item in matches}
+        for skill_name in sorted(allowed_names):
+            if skill_name in seen:
+                continue
+            if query and not self._query_matches_name(skill_name, query, tokenized):
+                continue
+            matches.append(self._domain_reference_match(skill_name))
+
+    def _domain_reference_match(self, skill_name: str) -> dict[str, Any]:
+        return {
+            "score": 0,
+            "skill": {
+                "name": skill_name,
+                "path": None,
+                "source": "instinct-domain",
+                "description": skill_name,
+                "metadata": {},
+                "skill_metadata": {},
+                "available": False,
+                "missing_requirements": "Skill referenced by instinct domain but not installed.",
+            },
+            "reasons": ["listed in instinct domain"],
+        }
+
+    def _public_search_match(
+        self,
+        item: dict[str, Any],
+        skill_domains: dict[str, list[str]],
+    ) -> dict[str, Any]:
+        skill = item["skill"]
+        return {
+            "name": skill["name"],
+            "description": skill["description"],
+            "source": skill["source"],
+            "path": skill["path"],
+            "available": skill["available"],
+            "missing_requirements": skill["missing_requirements"] or None,
+            "domains": skill_domains.get(skill["name"], []),
+            "match_reasons": item["reasons"],
         }
 
     def _get_missing_requirements(self, skill_meta: dict) -> str:
@@ -368,13 +408,6 @@ class SkillsLoader:
             if not os.environ.get(env):
                 missing.append(f"ENV: {env}")
         return ", ".join(missing)
-
-    def _get_skill_description(self, name: str) -> str:
-        """Get the description of a skill from its frontmatter."""
-        meta = self.get_skill_metadata(name)
-        if meta and meta.get("description"):
-            return meta["description"]
-        return name  # Fallback to skill name
 
     def _strip_frontmatter(self, content: str) -> str:
         """Remove YAML frontmatter from markdown content."""
@@ -413,18 +446,19 @@ class SkillsLoader:
     def get_always_skills(self) -> list[str]:
         """Get skills marked as always=true that meet requirements."""
         result = []
-        for s in self.list_skills(filter_unavailable=True):
-            meta = self.get_skill_metadata(s["name"]) or {}
-            skill_meta = self._parse_skill_metadata(meta.get("metadata", ""))
+        for skill in self.build_skill_catalog(filter_unavailable=True):
+            meta = skill["metadata"]
+            skill_meta = skill["skill_metadata"]
             if skill_meta.get("always") or meta.get("always"):
-                result.append(s["name"])
+                result.append(skill["name"])
         return result
 
     def get_skill_metadata(self, name: str) -> dict | None:
         """Get metadata from a skill's YAML frontmatter."""
-        content = self.load_skill(name)
-        if not content:
+        skill_file = self._find_skill_file(name)
+        if not skill_file:
             return None
+        content = skill_file.read_text(encoding="utf-8")
 
         if content.startswith("---"):
             match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
@@ -441,16 +475,7 @@ class SkillsLoader:
     def _extract_domain_tools(self, path: Path) -> list[str]:
         """Extract deferred tool names from an instinct domain ``## Tools`` section."""
         raw = self._extract_domain_section(path, "Tools")
-        if not raw:
-            return []
-        tools: list[str] = []
-        seen: set[str] = set()
-        for item in raw.replace("\n", ",").split(","):
-            name = item.strip().lower()
-            if name and name not in seen:
-                seen.add(name)
-                tools.append(name)
-        return tools
+        return self._split_unique_csv(raw)
 
     def _extract_domain_skills(self, path: Path) -> list[str]:
         """Extract skill names from an instinct domain markdown file."""
@@ -469,16 +494,17 @@ class SkillsLoader:
     def _extract_domain_keywords(self, path: Path) -> list[str]:
         """Extract normalized keywords from an instinct domain markdown file."""
         raw = self._extract_domain_section(path, "Keywords")
-        if not raw:
-            return []
-        keywords: list[str] = []
+        return self._split_unique_csv(raw)
+
+    def _split_unique_csv(self, raw: str) -> list[str]:
+        values: list[str] = []
         seen: set[str] = set()
         for item in raw.replace("\n", ",").split(","):
-            keyword = item.strip().lower()
-            if keyword and keyword not in seen:
-                seen.add(keyword)
-                keywords.append(keyword)
-        return keywords
+            value = item.strip().lower()
+            if value and value not in seen:
+                seen.add(value)
+                values.append(value)
+        return values
 
     def _extract_domain_section(self, path: Path, heading: str) -> str:
         """Extract the body of a ``## <heading>`` section from a domain file."""

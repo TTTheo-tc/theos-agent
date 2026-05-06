@@ -84,6 +84,67 @@ def test_domain_skill_map_and_resolution(tmp_path: Path) -> None:
     assert loader.resolve_domain_labels("github") == ["coding/github"]
 
 
+def test_workspace_skill_overrides_builtin(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    builtin = tmp_path / "builtin_skills"
+    instinct = tmp_path / "instinct" / "domains"
+    workspace_skills = workspace / "skills"
+    workspace_skills.mkdir(parents=True)
+    builtin.mkdir(parents=True)
+    instinct.mkdir(parents=True)
+
+    _write_skill(builtin, "github", "Builtin GitHub helper")
+    _write_skill(workspace_skills, "github", "Workspace GitHub helper")
+
+    loader = SkillsLoader(workspace, builtin_skills_dir=builtin, instinct_domains_dir=instinct)
+
+    skills = loader.list_skills(filter_unavailable=False)
+    assert skills == [
+        {
+            "name": "github",
+            "path": str(workspace_skills / "github" / "SKILL.md"),
+            "source": "workspace",
+        }
+    ]
+    assert "Workspace GitHub helper" in (loader.load_skill("github") or "")
+
+
+def test_domain_catalog_dedupes_tools_and_keywords(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    builtin = tmp_path / "builtin_skills"
+    instinct = tmp_path / "instinct" / "domains"
+    domain_dir = instinct / "coding"
+    workspace.mkdir(parents=True)
+    builtin.mkdir(parents=True)
+    domain_dir.mkdir(parents=True)
+    (domain_dir / "github.md").write_text(
+        "\n".join(
+            [
+                "# GitHub",
+                "",
+                "## Keywords",
+                "PR, ci",
+                "pr",
+                "",
+                "## Skills",
+                "- github: helper",
+                "",
+                "## Tools",
+                "read_file, grep",
+                "READ_FILE",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    loader = SkillsLoader(workspace, builtin_skills_dir=builtin, instinct_domains_dir=instinct)
+
+    catalog = loader.get_domain_catalog()
+
+    assert catalog["coding/github"]["keywords"] == ["pr", "ci"]
+    assert catalog["coding/github"]["tools"] == ["read_file", "grep"]
+
+
 @pytest.mark.asyncio
 async def test_skill_search_tool_filters_by_exact_domain(tmp_path: Path) -> None:
     loader = _make_loader(tmp_path)
