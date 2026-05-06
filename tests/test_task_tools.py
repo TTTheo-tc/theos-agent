@@ -17,6 +17,28 @@ def test_task_tools_remain_importable_from_todo_module() -> None:
 
 
 @pytest.mark.asyncio
+async def test_todo_tool_read_write_add_and_done(tmp_path: Path) -> None:
+    from src.agent.tools.todo import TodoTool
+
+    tool = TodoTool(tmp_path)
+
+    assert await tool.execute(action="read", ignored="ok") == "TODO list is empty."
+
+    written = await tool.execute(action="write", content="# TODO\n\n- [ ] first\n")
+    assert written == "TODO list updated (20 bytes)."
+
+    added = await tool.execute(action="add", content="second")
+    assert added == "Added task: second"
+
+    marked = await tool.execute(action="done", index=2)
+    assert marked == "Marked task 2 as done."
+
+    content = await tool.execute(action="read")
+    assert "- [ ] first" in content
+    assert "- [x] second" in content
+
+
+@pytest.mark.asyncio
 async def test_task_create_get_update_list_and_delete(tmp_path: Path) -> None:
     create = TaskCreateTool(tmp_path)
     get = TaskGetTool(tmp_path)

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class EnterPlanModeTool(Tool):
     """Switch the tool registry to plan (read-only) mode."""
 
-    def __init__(self, registry: "ToolRegistry") -> None:
+    def __init__(self, registry: ToolRegistry) -> None:
         self._registry = registry
 
     @property
@@ -36,6 +36,7 @@ class EnterPlanModeTool(Tool):
         return True
 
     async def execute(self, **kwargs: Any) -> str:
+        del kwargs
         if self._registry.plan_mode:
             return "Already in plan mode."
         self._registry.enter_plan_mode()
@@ -48,7 +49,7 @@ class EnterPlanModeTool(Tool):
 class ExitPlanModeTool(Tool):
     """Exit plan mode and restore full tool access."""
 
-    def __init__(self, registry: "ToolRegistry") -> None:
+    def __init__(self, registry: ToolRegistry) -> None:
         self._registry = registry
 
     @property
@@ -68,6 +69,7 @@ class ExitPlanModeTool(Tool):
         return True
 
     async def execute(self, **kwargs: Any) -> str:
+        del kwargs
         if not self._registry.plan_mode:
             return "Not in plan mode."
         self._registry.exit_plan_mode()

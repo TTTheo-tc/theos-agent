@@ -99,6 +99,7 @@ class TaskCreateTool(Tool):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         if not subject:
             return "Error: subject is required"
         if not description:
@@ -149,6 +150,7 @@ class TaskListTool(Tool):
         return True
 
     async def execute(self, **kwargs: Any) -> str:
+        del kwargs
         tasks = _load_tasks(self._workspace)
         if not tasks:
             return "No tasks."
@@ -240,6 +242,7 @@ class TaskUpdateTool(Tool):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         if not task_id:
             return "Error: task_id is required"
 
@@ -315,6 +318,7 @@ class TaskGetTool(Tool):
         return True
 
     async def execute(self, task_id: str = "", **kwargs: Any) -> str:
+        del kwargs
         if not task_id:
             return "Error: task_id is required"
 

@@ -63,6 +63,7 @@ class TodoTool(Tool):
     async def execute(
         self, action: str, content: str | None = None, index: int | None = None, **kwargs: Any
     ) -> str:
+        del kwargs
         todo_path = self._todo_path()
 
         if action == "read":
