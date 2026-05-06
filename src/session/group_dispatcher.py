@@ -44,7 +44,7 @@ class PerGroupDispatcher:
         """
         self._process = process_fn
         self._queues: defaultdict[str, asyncio.Queue[InboundMessage]] = defaultdict(asyncio.Queue)
-        self._workers: dict[str, asyncio.Task] = {}
+        self._workers: dict[str, asyncio.Task[None]] = {}
 
     async def dispatch(self, msg: InboundMessage) -> None:
         """Enqueue *msg* for its group and start a worker if none is running."""

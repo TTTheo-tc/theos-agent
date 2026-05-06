@@ -130,7 +130,7 @@ class SessionManager:
     _MAX_CACHE_SIZE = 500
     _COMPACT_THRESHOLD = 500  # Compact after this many appended messages
 
-    def __init__(self, workspace: Path, config: Any = None):
+    def __init__(self, workspace: Path, config: object | None = None) -> None:
         self.workspace = workspace
         self.sessions_dir = ensure_dir(self.workspace / "sessions")
         self.legacy_sessions_dir = Path.home() / ".theos" / "sessions"
@@ -222,8 +222,8 @@ class SessionManager:
             return None
 
         try:
-            messages = []
-            metadata = {}
+            messages: list[dict[str, Any]] = []
+            metadata: dict[str, Any] = {}
             created_at = None
             updated_at = None
             last_consolidated = 0
@@ -267,7 +267,7 @@ class SessionManager:
             logger.warning("Failed to load session {}: {}", key, e)
             return None
 
-    def _scrub_message_for_persist(self, msg: dict) -> dict:
+    def _scrub_message_for_persist(self, msg: dict[str, Any]) -> dict[str, Any]:
         """Scrub credentials from message before disk persistence.
 
         Creates new dicts for modified structures — does NOT mutate the
@@ -279,7 +279,7 @@ class SessionManager:
 
         out = dict(msg)
         if "tool_calls" in out:
-            scrubbed_tcs = []
+            scrubbed_tcs: list[Any] = []
             for tc in out["tool_calls"]:
                 if "function" in tc:
                     scrubbed_tcs.append(
