@@ -96,32 +96,60 @@ class Tool(ABC):
         if t in self._TYPE_MAP and not self._matches_json_type(val, t):
             return [f"{label} should be {t}"]
 
+        errors = self._validate_common(val, schema, label)
+        if t in ("integer", "number"):
+            errors.extend(self._validate_number(val, schema, label))
+        if t == "string":
+            errors.extend(self._validate_string(val, schema, label))
+        if t == "object":
+            errors.extend(self._validate_object(val, schema, path))
+        if t == "array":
+            errors.extend(self._validate_array(val, schema, path))
+        return errors
+
+    @staticmethod
+    def _validate_common(val: Any, schema: dict[str, Any], label: str) -> list[str]:
         errors = []
         if "enum" in schema and val not in schema["enum"]:
             errors.append(f"{label} must be one of {schema['enum']}")
-        if t in ("integer", "number"):
-            if "minimum" in schema and val < schema["minimum"]:
-                errors.append(f"{label} must be >= {schema['minimum']}")
-            if "maximum" in schema and val > schema["maximum"]:
-                errors.append(f"{label} must be <= {schema['maximum']}")
-        if t == "string":
-            if "minLength" in schema and len(val) < schema["minLength"]:
-                errors.append(f"{label} must be at least {schema['minLength']} chars")
-            if "maxLength" in schema and len(val) > schema["maxLength"]:
-                errors.append(f"{label} must be at most {schema['maxLength']} chars")
-        if t == "object":
-            props = schema.get("properties", {})
-            for k in schema.get("required", []):
-                if k not in val:
-                    errors.append(f"missing required {path + '.' + k if path else k}")
-            for k, v in val.items():
-                if k in props:
-                    errors.extend(self._validate(v, props[k], path + "." + k if path else k))
-        if t == "array" and "items" in schema:
-            for i, item in enumerate(val):
-                errors.extend(
-                    self._validate(item, schema["items"], f"{path}[{i}]" if path else f"[{i}]")
-                )
+        return errors
+
+    @staticmethod
+    def _validate_number(val: Any, schema: dict[str, Any], label: str) -> list[str]:
+        errors = []
+        if "minimum" in schema and val < schema["minimum"]:
+            errors.append(f"{label} must be >= {schema['minimum']}")
+        if "maximum" in schema and val > schema["maximum"]:
+            errors.append(f"{label} must be <= {schema['maximum']}")
+        return errors
+
+    @staticmethod
+    def _validate_string(val: Any, schema: dict[str, Any], label: str) -> list[str]:
+        errors = []
+        if "minLength" in schema and len(val) < schema["minLength"]:
+            errors.append(f"{label} must be at least {schema['minLength']} chars")
+        if "maxLength" in schema and len(val) > schema["maxLength"]:
+            errors.append(f"{label} must be at most {schema['maxLength']} chars")
+        return errors
+
+    def _validate_object(self, val: Any, schema: dict[str, Any], path: str) -> list[str]:
+        errors = []
+        props = schema.get("properties", {})
+        for k in schema.get("required", []):
+            if k not in val:
+                errors.append(f"missing required {self._child_path(path, k)}")
+        for k, v in val.items():
+            if k in props:
+                errors.extend(self._validate(v, props[k], self._child_path(path, k)))
+        return errors
+
+    def _validate_array(self, val: Any, schema: dict[str, Any], path: str) -> list[str]:
+        errors = []
+        item_schema = schema.get("items")
+        if not item_schema:
+            return errors
+        for i, item in enumerate(val):
+            errors.extend(self._validate(item, item_schema, self._index_path(path, i)))
         return errors
 
     @classmethod
@@ -129,6 +157,14 @@ class Tool(ABC):
         if type_name in ("integer", "number") and isinstance(val, bool):
             return False
         return isinstance(val, cls._TYPE_MAP[type_name])
+
+    @staticmethod
+    def _child_path(path: str, key: str) -> str:
+        return f"{path}.{key}" if path else key
+
+    @staticmethod
+    def _index_path(path: str, index: int) -> str:
+        return f"{path}[{index}]" if path else f"[{index}]"
 
     def to_schema(self) -> dict[str, Any]:
         """Convert tool to OpenAI function schema format."""
