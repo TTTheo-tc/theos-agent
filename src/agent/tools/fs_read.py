@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,6 +26,101 @@ _BINARY_PROBE_SIZE = 8192
 # Extensions that are allowed even if they contain null bytes (handled by
 # dedicated tools).
 _BINARY_ALLOW_EXTENSIONS = frozenset({".pdf"})
+_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
+
+
+def _line_window(offset: int | None, limit: int | None) -> tuple[int, int | None]:
+    start = max((offset or 1) - 1, 0)
+    end = start + limit if limit else None
+    return start, end
+
+
+def _truncate_text(text: str, max_bytes: int | None) -> tuple[str, bool]:
+    if max_bytes is None:
+        return text, False
+    encoded = text.encode("utf-8", errors="replace")
+    if len(encoded) <= max_bytes:
+        return text, False
+    return encoded[:max_bytes].decode("utf-8", errors="ignore"), True
+
+
+def _format_numbered_lines(
+    lines: list[str],
+    *,
+    start_line: int,
+    truncated: bool = False,
+    max_output_bytes: int | None = None,
+) -> str:
+    if not lines:
+        return "(empty file)"
+    result = "\n".join(f"{i:>6}\t{line}" for i, line in enumerate(lines, start=start_line))
+    result, output_truncated = _truncate_text(result, max_output_bytes)
+    truncated = truncated or output_truncated
+    if truncated:
+        result += "\n... (truncated at read byte limit)"
+    return result
+
+
+def _read_selected_lines(
+    fp: Path,
+    *,
+    offset: int | None,
+    limit: int | None,
+    stream: bool,
+    max_output_bytes: int | None = None,
+) -> tuple[list[str], int, bool]:
+    start, end = _line_window(offset, limit)
+    if not stream:
+        lines = fp.read_text(encoding="utf-8").splitlines()
+        return lines[start:end], start + 1, False
+
+    selected: list[str] = []
+    total_bytes = 0
+    truncated = False
+    with fp.open("r", encoding="utf-8") as fh:
+        for line_no, line in enumerate(fh, start=1):
+            if line_no <= start:
+                continue
+            if end is not None and line_no > end:
+                break
+            clean_line = line.rstrip("\r\n")
+            line_bytes = len(clean_line.encode("utf-8", errors="replace"))
+            if max_output_bytes is not None and total_bytes + line_bytes > max_output_bytes:
+                remaining = max(max_output_bytes - total_bytes, 0)
+                if remaining > 0:
+                    selected.append(clean_line.encode("utf-8")[:remaining].decode("utf-8", "ignore"))
+                truncated = True
+                break
+            selected.append(clean_line)
+            total_bytes += line_bytes
+    return selected, start + 1, truncated
+
+
+def _size_limit_error(file_size: int, max_size_bytes: int) -> str:
+    return (
+        f"Error: File is {file_size:,} bytes which exceeds the "
+        f"{max_size_bytes:,} byte limit. "
+        f"Use the offset and limit parameters to read a specific range."
+    )
+
+
+def _special_file_hint(fp: Path, offset: int | None, limit: int | None) -> str | None:
+    suffix = fp.suffix.lower()
+    if suffix == ".pdf" and offset is None and limit is None:
+        return (
+            "This is a PDF file. Use the `pdf` tool to extract text, "
+            "or specify `offset` and `limit` to read raw content."
+        )
+    if suffix in _IMAGE_EXTENSIONS:
+        return f"This is an image file ({suffix}). Use the `image_analyze` tool to analyze its contents."
+    return None
+
+
+def _appears_binary(fp: Path) -> bool:
+    if fp.suffix.lower() in _BINARY_ALLOW_EXTENSIONS:
+        return False
+    with open(fp, "rb") as fh:
+        return b"\x00" in fh.read(_BINARY_PROBE_SIZE)
 
 
 class ReadFileTool(ContextAwareTool):
@@ -97,103 +191,115 @@ class ReadFileTool(ContextAwareTool):
         **kwargs: Any,
     ) -> str:
         session_key = _context.session_key if _context else None
-        # Accept both file_path (Claude Code style) and path (legacy)
         target = file_path or path
         if not target:
             return "Error: file_path is required"
         try:
-            # --- policy checks (raw + resolved) ---
-            raw_policy_error = policy_error(target, kind="File read")
-            if raw_policy_error:
-                return raw_policy_error
+            fp, error = self._resolve_file(target)
+            if error:
+                return error
+            assert fp is not None
+            stat = fp.stat()
 
-            # --- device / system file blocking ---
-            if _BLOCKED_PATH_RE.search(target):
-                return f"Error: Cannot read device/system file: {target}"
+            stream_range = False
+            if stat.st_size > self._max_size_bytes:
+                if not limit or limit < 0:
+                    return _size_limit_error(stat.st_size, self._max_size_bytes)
+                stream_range = True
 
-            fp = _resolve_path(target, self._workspace, self._allowed_dir)
+            file_hint = _special_file_hint(fp, offset, limit)
+            if file_hint:
+                return file_hint
 
-            # Check resolved path against blocked patterns too (handles symlinks).
+            if _appears_binary(fp):
+                return (
+                    f"Error: {target} appears to be a binary file. "
+                    f"Use an appropriate tool for this file type."
+                )
+
             resolved_str = str(fp)
-            if _BLOCKED_PATH_RE.search(resolved_str):
-                return f"Error: Cannot read device/system file: {target}"
-
-            resolved_policy_error = policy_error(resolved_str, kind="File read")
-            if resolved_policy_error:
-                return resolved_policy_error
-
-            if not fp.exists():
-                return f"Error: File not found: {target}"
-            if not fp.is_file():
-                return f"Error: Not a file: {target}"
-
-            # --- size limit ---
-            file_size = fp.stat().st_size
-            if file_size > self._max_size_bytes:
+            if self._is_duplicate_read(session_key, resolved_str, stat.st_mtime, offset, limit):
                 return (
-                    f"Error: File is {file_size:,} bytes which exceeds the "
-                    f"{self._max_size_bytes:,} byte limit. "
-                    f"Use the offset and limit parameters to read a specific range."
+                    "File unchanged since last read. "
+                    "The content from the earlier read is still current."
                 )
 
-            # --- special file type hints (before binary detection) ---
-            suffix_lower = fp.suffix.lower()
-            if suffix_lower == ".pdf" and offset is None and limit is None:
-                return (
-                    "This is a PDF file. Use the `pdf` tool to extract text, "
-                    "or specify `offset` and `limit` to read raw content."
-                )
-            image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-            if suffix_lower in image_extensions:
-                return (
-                    f"This is an image file ({suffix_lower}). "
-                    "Use the `image_analyze` tool to analyze its contents."
-                )
-
-            # --- binary detection (first 8 KB) ---
-            if fp.suffix.lower() not in _BINARY_ALLOW_EXTENSIONS:
-                with open(fp, "rb") as fh:
-                    probe = fh.read(_BINARY_PROBE_SIZE)
-                if b"\x00" in probe:
-                    return (
-                        f"Error: {target} appears to be a binary file. "
-                        f"Use an appropriate tool for this file type."
-                    )
-
-            # --- read dedup (per-session) ---
-            mtime = os.path.getmtime(fp)
-            cache_key = resolved_str
-            session_state = self._read_state.setdefault(session_key, {})
-            prev = session_state.get(cache_key)
-            if prev is not None:
-                prev_mtime, prev_offset, prev_limit = prev
-                if prev_mtime == mtime and prev_offset == offset and prev_limit == limit:
-                    return (
-                        "File unchanged since last read. "
-                        "The content from the earlier read is still current."
-                    )
-            # Record this read.
-            session_state[cache_key] = (mtime, offset, limit)
-            WriteFileTool.record_read(session_key, resolved_str, mtime)
-
-            # --- read & format ---
-            content = fp.read_text(encoding="utf-8")
-            lines = content.splitlines()
-
-            # Apply offset/limit
-            start = max((offset or 1) - 1, 0)
-            end = start + limit if limit else len(lines)
-            selected = lines[start:end]
-
-            # Format with line numbers (cat -n style)
-            numbered = []
-            for i, line in enumerate(selected, start=start + 1):
-                numbered.append(f"{i:>6}\t{line}")
-            return "\n".join(numbered) if numbered else "(empty file)"
+            selected, start_line, truncated = _read_selected_lines(
+                fp,
+                offset=offset,
+                limit=limit,
+                stream=stream_range,
+                max_output_bytes=self._max_size_bytes if stream_range else None,
+            )
+            self._record_successful_read(
+                session_key,
+                resolved_str,
+                stat.st_mtime,
+                offset,
+                limit,
+                mark_writable=not stream_range,
+            )
+            return _format_numbered_lines(
+                selected,
+                start_line=start_line,
+                truncated=truncated,
+                max_output_bytes=self._max_size_bytes if stream_range else None,
+            )
         except PermissionError as e:
             return f"Error: {e}"
         except Exception as e:
             return f"Error reading file: {str(e)}"
+
+    def _resolve_file(self, target: str) -> tuple[Path | None, str | None]:
+        raw_policy_error = policy_error(target, kind="File read")
+        if raw_policy_error:
+            return None, raw_policy_error
+        if _BLOCKED_PATH_RE.search(target):
+            return None, f"Error: Cannot read device/system file: {target}"
+
+        try:
+            fp = _resolve_path(target, self._workspace, self._allowed_dir)
+        except PermissionError as e:
+            return None, f"Error: {e}"
+        resolved_str = str(fp)
+        if _BLOCKED_PATH_RE.search(resolved_str):
+            return None, f"Error: Cannot read device/system file: {target}"
+
+        resolved_policy_error = policy_error(resolved_str, kind="File read")
+        if resolved_policy_error:
+            return None, resolved_policy_error
+        if not fp.exists():
+            return None, f"Error: File not found: {target}"
+        if not fp.is_file():
+            return None, f"Error: Not a file: {target}"
+        return fp, None
+
+    @classmethod
+    def _is_duplicate_read(
+        cls,
+        session_key: str | None,
+        resolved_path: str,
+        mtime: float,
+        offset: int | None,
+        limit: int | None,
+    ) -> bool:
+        prev = cls._read_state.setdefault(session_key, {}).get(resolved_path)
+        return prev == (mtime, offset, limit)
+
+    @classmethod
+    def _record_successful_read(
+        cls,
+        session_key: str | None,
+        resolved_path: str,
+        mtime: float,
+        offset: int | None,
+        limit: int | None,
+        *,
+        mark_writable: bool = True,
+    ) -> None:
+        cls._read_state.setdefault(session_key, {})[resolved_path] = (mtime, offset, limit)
+        if mark_writable:
+            WriteFileTool.record_read(session_key, resolved_path, mtime)
 
     # -- Session management ---------------------------------------------------
 
