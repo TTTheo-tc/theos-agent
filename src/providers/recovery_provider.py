@@ -126,8 +126,7 @@ class RecoveryProvider(LLMProvider):
                             )
                             if action is RecoveryAction.RETRY:
                                 attempt += 1
-                                delay = _backoff_delay(attempt)
-                                await asyncio.sleep(delay)
+                                await _sleep_before_retry(provider, attempt)
                                 break  # retry inner while
                             elif action is RecoveryAction.FAILOVER:
                                 break  # next provider
@@ -155,8 +154,7 @@ class RecoveryProvider(LLMProvider):
                     )
                     if action is RecoveryAction.RETRY:
                         attempt += 1
-                        delay = _backoff_delay(attempt)
-                        await asyncio.sleep(delay)
+                        await _sleep_before_retry(provider, attempt)
                         continue  # retry inner while
                     elif action is RecoveryAction.FAILOVER:
                         break  # next provider
