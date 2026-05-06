@@ -10,6 +10,8 @@ from src.auth.store import (
     get_api_key_for_provider,
     get_oauth_credential_for_provider,
     get_static_credential_for_provider,
+    remove_profile,
+    set_default_profile,
 )
 from src.auth.types import (
     ApiKeyCredential,
@@ -239,3 +241,58 @@ def test_add_oauth_profile() -> None:
     assert saved_store.last_good["google"] == "google:work"
     assert "google:work" in saved_store.usage_stats
     assert isinstance(saved_store.usage_stats["google:work"], ProfileUsageStats)
+
+
+def test_remove_profile_resolves_canonical_input_to_legacy_hyphenated_profile_id() -> None:
+    fake_store = AuthProfileStore(
+        profiles={
+            "github-copilot:manual": OAuthCredential(
+                provider="github-copilot",
+                access="legacy-copilot-token",
+                refresh="legacy-github-token",
+                expires=9999999999999,
+            ),
+        },
+        last_good={"github-copilot": "github-copilot:manual"},
+    )
+
+    with (
+        patch("src.auth.store.load_auth_store", return_value=fake_store),
+        patch("src.auth.store.save_auth_store") as mock_save,
+    ):
+        removed = remove_profile("github_copilot:manual")
+
+    assert removed is True
+    saved_store: AuthProfileStore = mock_save.call_args[0][0]
+    assert saved_store.profiles == {}
+    assert saved_store.last_good == {}
+
+
+def test_set_default_profile_resolves_canonical_input_to_legacy_hyphenated_profile_id() -> None:
+    fake_store = AuthProfileStore(
+        profiles={
+            "github-copilot:old": OAuthCredential(
+                provider="github-copilot",
+                access="old-copilot-token",
+                refresh="old-github-token",
+                expires=9999999999999,
+            ),
+            "github-copilot:manual": OAuthCredential(
+                provider="github-copilot",
+                access="legacy-copilot-token",
+                refresh="legacy-github-token",
+                expires=9999999999999,
+            ),
+        },
+        last_good={"github-copilot": "github-copilot:old"},
+    )
+
+    with (
+        patch("src.auth.store.load_auth_store", return_value=fake_store),
+        patch("src.auth.store.save_auth_store") as mock_save,
+    ):
+        updated = set_default_profile("github_copilot:manual")
+
+    assert updated is True
+    saved_store: AuthProfileStore = mock_save.call_args[0][0]
+    assert saved_store.last_good == {"github_copilot": "github-copilot:manual"}

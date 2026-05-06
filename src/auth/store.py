@@ -47,6 +47,26 @@ def _normalize_profile_id(profile_id: str) -> str:
     return f"{_normalize_provider(provider)}:{name}"
 
 
+def _legacy_profile_id(profile_id: str) -> str:
+    """Return the hyphenated provider variant of ``provider:name``."""
+    if ":" not in profile_id:
+        return profile_id
+    provider, name = profile_id.split(":", 1)
+    return f"{_normalize_provider(provider).replace('_', '-')}:{name}"
+
+
+def _resolve_existing_profile_id(store: AuthProfileStore, profile_id: str) -> str | None:
+    """Return the canonical or legacy profile ID present in *store*."""
+    for candidate in (
+        _normalize_profile_id(profile_id),
+        profile_id,
+        _legacy_profile_id(profile_id),
+    ):
+        if candidate in store.profiles:
+            return candidate
+    return None
+
+
 def _preferred_profile_id(store: AuthProfileStore, provider: str) -> str | None:
     """Return last_good for normalized or legacy hyphenated provider keys."""
     legacy_provider = provider.replace("_", "-")
@@ -233,7 +253,11 @@ def _lookup_profile(
 
 
 def _mark_profile_default(store: AuthProfileStore, provider: str, profile_id: str) -> None:
+    provider = _normalize_provider(provider)
     store.last_good[provider] = profile_id
+    legacy_provider = provider.replace("_", "-")
+    if legacy_provider != provider:
+        store.last_good.pop(legacy_provider, None)
     store.usage_stats.setdefault(profile_id, ProfileUsageStats())
 
 
@@ -326,9 +350,9 @@ def add_oauth_profile(
 
 def remove_profile(profile_id: str) -> bool:
     """Remove a profile by ID. Returns True if it existed."""
-    profile_id = _normalize_profile_id(profile_id)
     store = load_auth_store()
-    if profile_id not in store.profiles:
+    profile_id = _resolve_existing_profile_id(store, profile_id)
+    if profile_id is None:
         return False
 
     cred = store.profiles.pop(profile_id)
@@ -338,7 +362,11 @@ def remove_profile(profile_id: str) -> bool:
     for provider, pid in list(store.last_good.items()):
         if pid == profile_id:
             fallback = next(
-                (p for p, c in store.profiles.items() if c.provider == cred.provider),
+                (
+                    p
+                    for p, c in store.profiles.items()
+                    if _normalize_provider(c.provider) == _normalize_provider(cred.provider)
+                ),
                 None,
             )
             if fallback:
@@ -352,10 +380,10 @@ def remove_profile(profile_id: str) -> bool:
 
 def set_default_profile(profile_id: str) -> bool:
     """Set *profile_id* as the default for its provider. Returns False if not found."""
-    profile_id = _normalize_profile_id(profile_id)
     store = load_auth_store()
-    if profile_id not in store.profiles:
+    profile_id = _resolve_existing_profile_id(store, profile_id)
+    if profile_id is None:
         return False
-    store.last_good[store.profiles[profile_id].provider] = profile_id
+    _mark_profile_default(store, store.profiles[profile_id].provider, profile_id)
     save_auth_store(store)
     return True
