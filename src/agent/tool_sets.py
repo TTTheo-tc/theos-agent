@@ -50,14 +50,14 @@ class _FeishuRuntimeConfig:
 @dataclass
 class _RegistrationState:
     registry: ToolRegistry
-    config: "ToolRegistrationConfig"
+    config: ToolRegistrationConfig
     exec_config: object
     profile_set: set[str] | None
     expanded_allowed: set[str] | None
     deny_tools: set[str]
 
     @classmethod
-    def build(cls, registry: ToolRegistry, config: "ToolRegistrationConfig") -> "_RegistrationState":
+    def build(cls, registry: ToolRegistry, config: ToolRegistrationConfig) -> _RegistrationState:
         from src.config.schema import ExecToolConfig
 
         return cls(
@@ -82,23 +82,21 @@ class _RegistrationState:
             return False
         if self.profile_set is not None and name not in self.profile_set:
             return False
-        if self.expanded_allowed is not None and name not in self.expanded_allowed:
-            return False
-        return True
+        return self.expanded_allowed is None or name in self.expanded_allowed
 
     def should_register_verifier_tool(self, name: str) -> bool:
         return name not in self.deny_tools
 
-    def register(self, tool: "Tool") -> None:
+    def register(self, tool: Tool) -> None:
         self.registry.register(tool, deferred=tool.name not in ALWAYS_ON_TOOLS)
 
-    def register_always(self, tool: "Tool") -> None:
+    def register_always(self, tool: Tool) -> None:
         self.registry.register(tool)
 
 
 def register_standard_tools(
     registry: ToolRegistry,
-    config: "ToolRegistrationConfig",
+    config: ToolRegistrationConfig,
 ) -> None:
     """Register the standard tool set on *registry*.
 
@@ -436,18 +434,22 @@ def _register_memory_tools(state: _RegistrationState) -> None:
 def _register_analysis_tools(state: _RegistrationState) -> None:
     config = state.config
 
-    if state.mode in ("single", "team") and state.should("stock_analysis"):
-        if config.stock_config and config.stock_config.enabled:
-            from src.agent.tools.stock import StockAnalysisTool
+    if (
+        state.mode in ("single", "team")
+        and state.should("stock_analysis")
+        and config.stock_config
+        and config.stock_config.enabled
+    ):
+        from src.agent.tools.stock import StockAnalysisTool
 
-            state.register(
-                StockAnalysisTool(
-                    stock_config=config.stock_config,
-                    provider_keys=config.provider_keys or {},
-                    brave_api_key=config.brave_api_key,
-                    channel_env=config.channel_env,
-                )
+        state.register(
+            StockAnalysisTool(
+                stock_config=config.stock_config,
+                provider_keys=config.provider_keys or {},
+                brave_api_key=config.brave_api_key,
+                channel_env=config.channel_env,
             )
+        )
 
     if state.mode in ("single", "team") and state.should("vendor_study"):
         from src.agent.tools.vendor_study import VendorStudyTool
