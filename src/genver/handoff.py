@@ -79,6 +79,10 @@ HANDOFF_TOOL = {
                     "enum": ["low", "medium", "high"],
                     "description": "Self-assessed risk level of the changes",
                 },
+                "target_commit_hash": {
+                    "type": "string",
+                    "description": "Optional commit hash or revision target for the verifier",
+                },
                 "test_commands": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -106,6 +110,7 @@ def parse_handoff(tool_args: dict) -> HandoffPayload:
         risk_assessment=tool_args["risk_assessment"],
         vulnerability_focus=tool_args.get("vulnerability_focus", []),
         diff_summary=tool_args.get("diff_summary", ""),
+        target_commit_hash=tool_args.get("target_commit_hash"),
         test_commands=tool_args.get("test_commands", []),
         dev_log=tool_args.get("dev_log", []),
     )

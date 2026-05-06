@@ -1010,10 +1010,12 @@ def test_parse_handoff_extracts_dev_log():
             "intent_summary": "test",
             "files_changed": ["a.py"],
             "risk_assessment": "low",
+            "target_commit_hash": "abc123",
             "dev_log": ["ran pytest: 3 passed", "ran ruff: clean"],
         }
     )
     assert h.dev_log == ["ran pytest: 3 passed", "ran ruff: clean"]
+    assert h.target_commit_hash == "abc123"
 
 
 def test_parse_handoff_dev_log_absent():

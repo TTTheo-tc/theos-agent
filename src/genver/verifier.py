@@ -10,7 +10,7 @@ import re
 import subprocess
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from loguru import logger
 
@@ -53,6 +53,24 @@ class Verifier:
         self.last_review_report: dict[str, Any] | None = None
         self.last_review_report_name: str | None = None
 
+    def _make_tools(
+        self,
+        mode: Literal["verifier", "subagent"],
+        *,
+        allowed_tools: set[str] | None = None,
+    ) -> ToolRegistry:
+        """Create a verifier-scoped tool registry."""
+        tools = ToolRegistry()
+        register_standard_tools(
+            tools,
+            ToolRegistrationConfig(
+                workspace=self.workspace,
+                mode=mode,
+                allowed_tools=allowed_tools,
+            ),
+        )
+        return tools
+
     @staticmethod
     def is_provider_error_content(content: str | None) -> bool:
         """Detect provider-level error strings returned as normal content."""
@@ -78,10 +96,7 @@ class Verifier:
         Returns: {"passed": bool, "errors": list[str], "commands": list[dict],
                   "suggestions": list[str], "usage": dict}
         """
-        tools = ToolRegistry()
-        register_standard_tools(
-            tools, ToolRegistrationConfig(workspace=self.workspace, mode="verifier")
-        )
+        tools = self._make_tools("verifier")
 
         total_usage: dict[str, int] = {
             "prompt_tokens": 0,
@@ -231,23 +246,18 @@ class Verifier:
         handoff: HandoffPayload | None,
     ) -> dict[str, Any]:
         """Let the verifier directly patch remaining blocking issues."""
-        tools = ToolRegistry()
-        register_standard_tools(
-            tools,
-            ToolRegistrationConfig(
-                workspace=self.workspace,
-                mode="subagent",
-                allowed_tools={
-                    "bash",
-                    "read_file",
-                    "write_file",
-                    "edit_file",
-                    "multi_edit",
-                    "list_dir",
-                    "glob",
-                    "grep",
-                },
-            ),
+        tools = self._make_tools(
+            "subagent",
+            allowed_tools={
+                "bash",
+                "read_file",
+                "write_file",
+                "edit_file",
+                "multi_edit",
+                "list_dir",
+                "glob",
+                "grep",
+            },
         )
 
         total_usage: dict[str, int] = {

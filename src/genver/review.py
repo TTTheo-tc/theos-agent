@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from loguru import logger
 
@@ -95,25 +95,14 @@ class PhaseReviewProtocol:
         self._gen_tools = gen_tools
         self._ver_tools = ver_tools
 
-    def _make_read_tools(self) -> ToolRegistry:
-        """Create a minimal read-only tool registry for review steps."""
+    def _make_tools(self, mode: Literal["verifier", "subagent"]) -> ToolRegistry:
+        """Create a tool registry for a review actor."""
         from src.agent.tool_sets import register_standard_tools
         from src.agent.tools.registration import ToolRegistrationConfig
         from src.agent.tools.registry import ToolRegistry
 
         registry = ToolRegistry()
-        config = ToolRegistrationConfig(workspace=self.workspace, mode="verifier")
-        register_standard_tools(registry, config)
-        return registry
-
-    def _make_write_tools(self) -> ToolRegistry:
-        """Create a tool registry with write access for reviewers who can edit."""
-        from src.agent.tool_sets import register_standard_tools
-        from src.agent.tools.registration import ToolRegistrationConfig
-        from src.agent.tools.registry import ToolRegistry
-
-        registry = ToolRegistry()
-        config = ToolRegistrationConfig(workspace=self.workspace, mode="subagent")
+        config = ToolRegistrationConfig(workspace=self.workspace, mode=mode)
         register_standard_tools(registry, config)
         return registry
 
@@ -149,7 +138,7 @@ class PhaseReviewProtocol:
                 actor="ver",
                 provider=self.ver_provider,
                 model=self.ver_model,
-                tools=self._ver_tools or self._make_write_tools(),
+                tools=self._ver_tools or self._make_tools("subagent"),
                 prompt_fn=lambda content: prompts.review_ver_prompt(
                     phase=str(self.phase),
                     artifact_path=artifact_path,
@@ -176,7 +165,7 @@ class PhaseReviewProtocol:
             actor="gen",
             provider=self.gen_provider,
             model=self.gen_model,
-            tools=self._gen_tools or self._make_write_tools(),
+            tools=self._gen_tools or self._make_tools("subagent"),
             prompt_fn=lambda content: prompts.review_gen_prompt(
                 phase=str(self.phase),
                 artifact_path=artifact_path,
@@ -203,7 +192,7 @@ class PhaseReviewProtocol:
             actor="ver",
             provider=self.ver_provider,
             model=self.ver_model,
-            tools=self._ver_tools or self._make_read_tools(),
+            tools=self._ver_tools or self._make_tools("verifier"),
             prompt_fn=lambda content: prompts.review_ver_prompt(
                 phase=str(self.phase),
                 artifact_path=artifact_path,
@@ -260,7 +249,7 @@ class PhaseReviewProtocol:
 
         logger.info("[GenVer:{}:{}] Running step={} model={}", self.phase, actor, step, model)
 
-        content, tools_used, messages, usage = await run_tool_loop(
+        content, _, _, usage = await run_tool_loop(
             provider=provider,
             messages=messages,
             tools=tools,

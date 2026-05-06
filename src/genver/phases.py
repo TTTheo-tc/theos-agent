@@ -187,9 +187,6 @@ async def run_execute(
         else:
             messages = [ctx_msg, *messages]
 
-    # NOTE: GenVerLoop must be adapted so that when approved plan/spec context
-    # is provided by the pipeline, it does NOT re-require an ad-hoc "[Plan]"
-    # before coding. Task 8 updates the legacy preamble for this.
     loop = GenVerLoop(
         config=genver_config,
         provider=provider,
