@@ -14,7 +14,9 @@ from src.utils.helpers import ensure_dir, safe_filename
 class MemoryScopeResolver:
     """Resolves memory workspace and scope from session context."""
 
-    def __init__(self, workspace: Path, groups_base_dir: Path, group_memory_enabled: bool):
+    def __init__(
+        self, workspace: Path, groups_base_dir: Path, group_memory_enabled: bool
+    ) -> None:
         self._workspace = workspace
         self._groups_base_dir = groups_base_dir
         self._group_memory_enabled = group_memory_enabled

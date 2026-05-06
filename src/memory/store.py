@@ -32,7 +32,7 @@ _DEFAULT_DIRECTIVES_SECTION = "Remembered Directives"
 class MemoryStore:
     """Two-layer memory: MEMORY.md (long-term facts) + HISTORY.md (grep-searchable log)."""
 
-    def __init__(self, workspace: Path):
+    def __init__(self, workspace: Path) -> None:
         self.memory_dir = ensure_dir(workspace / "memory")
         self.memory_file = self.memory_dir / "MEMORY.md"
         self.history_file = self.memory_dir / "HISTORY.md"

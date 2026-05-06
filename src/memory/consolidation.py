@@ -146,7 +146,7 @@ class MemoryConsolidationService:
         self,
         *,
         scope: MemoryScopeResolver,
-    ):
+    ) -> None:
         # Kept for constructor parity with MemoryHandler; consolidation uses explicit stores.
         del scope
 

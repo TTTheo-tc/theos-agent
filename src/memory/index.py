@@ -34,8 +34,7 @@ class MemoryIndex:
 
     async def ensure_table(self) -> None:
         """Create the FTS5 table if it doesn't exist."""
-        assert self._db._conn
-        await self._db._conn.executescript(_FTS_SCHEMA)
+        await self._db.executescript(_FTS_SCHEMA)
 
     # ------------------------------------------------------------------
     # Sync: rebuild index from markdown truth files

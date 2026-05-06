@@ -212,7 +212,7 @@ class MemoryRecallService:
         scope: MemoryScopeResolver,
         *,
         memory_config: Any = None,
-    ):
+    ) -> None:
         self._scope = scope
         self._memory_config = memory_config
 

@@ -36,7 +36,7 @@ class ResponseCache:
         max_memory: int = 256,
         ttl_seconds: int = 3600,
         max_db_entries: int = 5000,
-    ):
+    ) -> None:
         self._db = db
         self._hot: OrderedDict[str, tuple[str, float]] = OrderedDict()
         self._max_memory = max_memory
