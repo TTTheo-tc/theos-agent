@@ -59,6 +59,9 @@ _MAX_CONSOLIDATION_ATTEMPTS = 2
 _MESSAGE_PROMPT_LIMIT = 1000
 _MESSAGE_PROMPT_HEAD = 500
 _MESSAGE_PROMPT_TAIL = 500
+_SECTION_TITLE_RE = re.compile(r"^##\s+(.+?)$", re.MULTILINE)
+_SECTION_BLOCK_RE = re.compile(r"^##\s+(.+?)$(.*?)(?=^##\s|\Z)", re.MULTILINE | re.DOTALL)
+_PINNED_MARKER = "<!-- pinned"
 
 
 @dataclass(frozen=True)
@@ -88,10 +91,8 @@ def _validate_memory_update(old: str, new: str) -> tuple[bool, str]:
     if not old.strip():
         return True, ""
 
-    # Extract section titles (## Title lines).
-    section_re = re.compile(r"^##\s+(.+?)$", re.MULTILINE)
-    old_sections = section_re.findall(old)
-    new_sections = section_re.findall(new)
+    old_sections = _SECTION_TITLE_RE.findall(old)
+    new_sections = _SECTION_TITLE_RE.findall(new)
 
     # Section count sanity: if old had >=3 sections, new must retain >=50%.
     if len(old_sections) >= 3:
@@ -104,10 +105,10 @@ def _validate_memory_update(old: str, new: str) -> tuple[bool, str]:
 
     # Pinned section protection: find pinned titles in old, require all in new.
     pinned_titles: list[str] = []
-    for match in re.finditer(r"^##\s+(.+?)$(.*?)(?=^##\s|\Z)", old, re.MULTILINE | re.DOTALL):
+    for match in _SECTION_BLOCK_RE.finditer(old):
         title = match.group(1).strip()
         body = match.group(2)
-        if "<!-- pinned" in body:
+        if _PINNED_MARKER in body:
             pinned_titles.append(title)
 
     new_section_set = {s.strip() for s in new_sections}
@@ -144,12 +145,13 @@ class MemoryConsolidationService:
     def __init__(
         self,
         *,
-        scope: "MemoryScopeResolver",
+        scope: MemoryScopeResolver,
     ):
-        self._scope = scope
+        # Kept for constructor parity with MemoryHandler; consolidation uses explicit stores.
+        del scope
 
     @staticmethod
-    def _gather_recent_history(store: "MemoryStore", max_entries: int = 10) -> str:
+    def _gather_recent_history(store: MemoryStore, max_entries: int = 10) -> str:
         """Read recent entries from HISTORY.md for cross-session context."""
         try:
             if not store.history_file.exists():
@@ -170,15 +172,15 @@ class MemoryConsolidationService:
     async def consolidate(
         self,
         *,
-        session: "Session",
-        provider: "LLMProvider",
+        session: Session,
+        provider: LLMProvider,
         model: str,
-        store: "MemoryStore",
+        store: MemoryStore,
         archive_all: bool = False,
         memory_window: int = 50,
         short_term_store: Any = None,
         session_key: str | None = None,
-        memory_index: "MemoryIndex | None" = None,
+        memory_index: MemoryIndex | None = None,
     ) -> bool:
         """Consolidate old messages into MEMORY.md + HISTORY.md via LLM tool call.
 
@@ -273,7 +275,7 @@ class MemoryConsolidationService:
 
     @staticmethod
     def _consolidation_plan(
-        session: "Session",
+        session: Session,
         *,
         archive_all: bool,
         memory_window: int,
@@ -370,7 +372,7 @@ class MemoryConsolidationService:
     @staticmethod
     async def _call_provider(
         *,
-        provider: "LLMProvider",
+        provider: LLMProvider,
         model: str,
         prompt: str,
     ) -> Any | None:
@@ -442,14 +444,14 @@ class MemoryConsolidationService:
 
     async def _persist_fallback(
         self,
-        session: "Session",
+        session: Session,
         *,
-        store: "MemoryStore",
+        store: MemoryStore,
         plan: _ConsolidationPlan,
         current_memory: str,
         short_term_store: Any = None,
         session_key: str | None = None,
-        memory_index: "MemoryIndex | None" = None,
+        memory_index: MemoryIndex | None = None,
     ) -> bool:
         return await self._persist_consolidation_result(
             session,
@@ -468,9 +470,9 @@ class MemoryConsolidationService:
 
     async def _persist_consolidation_result(
         self,
-        session: "Session",
+        session: Session,
         *,
-        store: "MemoryStore",
+        store: MemoryStore,
         archive_all: bool,
         keep_count: int,
         current_memory: str,
@@ -478,7 +480,7 @@ class MemoryConsolidationService:
         memory_update: str | None,
         short_term_store: Any = None,
         session_key: str | None = None,
-        memory_index: "MemoryIndex | None" = None,
+        memory_index: MemoryIndex | None = None,
         target_last_consolidated: int | None = None,
         archived_count: int | None = None,
     ) -> bool:
@@ -538,7 +540,7 @@ class MemoryConsolidationService:
 
     @staticmethod
     def _archived_message_count(
-        session: "Session",
+        session: Session,
         *,
         archive_all: bool,
         keep_count: int,
