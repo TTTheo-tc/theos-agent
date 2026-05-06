@@ -56,6 +56,57 @@ def _format_lines(lines: list[str], *, offset: int, head_limit: int) -> str:
     return result
 
 
+def _is_relative_to(path: str, allowed: Path) -> bool:
+    try:
+        return Path(path).resolve().is_relative_to(allowed.resolve())
+    except OSError:
+        return False
+
+
+def _rg_output_path(line: str, options: "_GrepOptions") -> str | None:
+    if line == "--":
+        return None
+    if options.output_mode == "files_with_matches":
+        return line
+    if options.output_mode == "count":
+        path, _, count = line.rpartition(":")
+        return path if count.isdecimal() else line
+    if options.show_line_numbers:
+        match = re.match(r"^(?P<path>.*?)(?::|-)\d+(?::|-)", line)
+        return match.group("path") if match else line
+    path, _, _ = line.partition(":")
+    return path or line
+
+
+def _filter_rg_lines_within_allowed(
+    lines: list[str],
+    allowed_dir: Path | None,
+    options: "_GrepOptions",
+) -> list[str]:
+    if allowed_dir is None:
+        return lines
+    allowed = allowed_dir.resolve()
+    filtered = [
+        line
+        for line in lines
+        if (path := _rg_output_path(line, options)) is None or _is_relative_to(path, allowed)
+    ]
+    return _normalize_rg_separators(filtered)
+
+
+def _normalize_rg_separators(lines: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for line in lines:
+        if line == "--":
+            if normalized and normalized[-1] != "--":
+                normalized.append(line)
+            continue
+        normalized.append(line)
+    if normalized and normalized[-1] == "--":
+        normalized.pop()
+    return normalized
+
+
 class GlobTool(Tool):
     """Find files matching a glob pattern."""
 
@@ -399,14 +450,15 @@ class GrepTool(Tool):
             return f"No matches found for '{options.pattern}'"
 
         lines = raw.rstrip("\n").split("\n")
-        if self._allowed_dir:
-            allowed = str(self._allowed_dir.resolve())
-            lines = [ln for ln in lines if ln.startswith(allowed) or ln.startswith("--")]
+        lines = _filter_rg_lines_within_allowed(lines, self._allowed_dir, options)
+        if not lines:
+            return f"No matches found for '{options.pattern}'"
 
         return _format_lines(lines, offset=options.offset, head_limit=options.head_limit)
 
     def _build_rg_command(self, *, rg_path: str, base: Path, options: _GrepOptions) -> list[str]:
         cmd: list[str] = [rg_path]
+        cmd.append("--with-filename")
 
         # Output mode
         if options.output_mode == "files_with_matches":

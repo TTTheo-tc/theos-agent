@@ -96,6 +96,7 @@ def test_grep_builds_rg_command_from_compatible_aliases(tmp_path: Path) -> None:
     cmd = tool._build_rg_command(rg_path="/usr/bin/rg", base=tmp_path, options=options)
 
     assert cmd[0] == "/usr/bin/rg"
+    assert "--with-filename" in cmd
     assert "--ignore-case" in cmd
     assert cmd[cmd.index("--context") + 1] == "2"
     assert cmd[cmd.index("--type") + 1] == "py"
@@ -106,7 +107,7 @@ def test_grep_builds_rg_command_from_compatible_aliases(tmp_path: Path) -> None:
 
 async def test_grep_rg_backend_filters_allowed_dir_before_window(tmp_path: Path) -> None:
     allowed = tmp_path / "allowed"
-    outside = tmp_path / "outside"
+    outside = tmp_path / "allowed-sibling"
     allowed.mkdir()
     outside.mkdir()
     fake_rg = tmp_path / "fake-rg"
@@ -135,3 +136,67 @@ async def test_grep_rg_backend_filters_allowed_dir_before_window(tmp_path: Path)
     assert result.splitlines()[0] == f"{allowed}/b.py:2:needle two"
     assert str(outside) not in result
     assert "... (truncated at 1 results)" in result
+
+
+async def test_grep_rg_backend_filters_context_separators_after_allowed_dir(
+    tmp_path: Path,
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "allowed-sibling"
+    allowed.mkdir()
+    outside.mkdir()
+    fake_rg = tmp_path / "fake-rg"
+    fake_rg.write_text(
+        "\n".join(
+            [
+                "#!/bin/sh",
+                "cat <<'EOF'",
+                f"{outside}/x.py-1-before outside",
+                f"{outside}/x.py:2:needle outside",
+                "--",
+                f"{allowed}/a.py-1-before allowed",
+                f"{allowed}/a.py:2:needle allowed",
+                "--",
+                "EOF",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_rg.chmod(0o755)
+
+    tool = GrepTool(allowed_dir=allowed)
+    options = fs_search._GrepOptions.from_kwargs({"pattern": "needle", "context": 1})
+    result = await tool._run_rg(rg_path=str(fake_rg), base=allowed, options=options)
+
+    assert result.splitlines() == [
+        f"{allowed}/a.py-1-before allowed",
+        f"{allowed}/a.py:2:needle allowed",
+    ]
+
+
+async def test_grep_rg_backend_reports_no_matches_after_allowed_dir_filter(
+    tmp_path: Path,
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "allowed-sibling"
+    allowed.mkdir()
+    outside.mkdir()
+    fake_rg = tmp_path / "fake-rg"
+    fake_rg.write_text(
+        "\n".join(
+            [
+                "#!/bin/sh",
+                "cat <<'EOF'",
+                f"{outside}/x.py:1:needle outside",
+                "EOF",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_rg.chmod(0o755)
+
+    tool = GrepTool(allowed_dir=allowed)
+    options = fs_search._GrepOptions.from_kwargs({"pattern": "needle"})
+    result = await tool._run_rg(rg_path=str(fake_rg), base=allowed, options=options)
+
+    assert result == "No matches found for 'needle'"
