@@ -55,7 +55,9 @@ class FileRiskController:
         self.enabled = enabled
         self._workspace = workspace
         self._whitelist = tuple(self._normalize(pattern) for pattern in (whitelist_patterns or ()))
-        self._blacklist = tuple(self._normalize(pattern) for pattern in (blacklist_patterns or _DEFAULT_BLACKLIST))
+        self._blacklist = tuple(
+            self._normalize(pattern) for pattern in (blacklist_patterns or _DEFAULT_BLACKLIST)
+        )
         self._critical_re = [re.compile(p) for p in _CRITICAL_PATTERNS]
 
     @classmethod
@@ -64,7 +66,7 @@ class FileRiskController:
         *,
         workspace: Path | None = None,
         config: Any = None,
-    ) -> "FileRiskController":
+    ) -> FileRiskController:
         """Build a controller from the optional orchestrator neuro-symbolic config."""
         return cls(
             workspace=workspace,

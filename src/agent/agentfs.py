@@ -33,7 +33,7 @@ class AgentFS:
         path = self._artifact_path(name)
         if not path.exists():
             return None
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def clear(self) -> None:
         """Remove all files in the workspace."""

@@ -36,6 +36,14 @@ class TestAgentFS:
         assert path.exists()
         assert fs.read("report") == data
 
+    def test_write_and_read_utf8(self, tmp_path: Path):
+        fs = AgentFS(tmp_path, subdir=".test")
+        data = {"summary": "你好", "findings": ["café"]}
+
+        fs.write("unicode", data)
+
+        assert fs.read("unicode") == data
+
     def test_nested_artifact_names_stay_inside_root(self, tmp_path: Path):
         fs = AgentFS(tmp_path, subdir=".test")
         path = fs.write("runtime/report", {"ok": True})
