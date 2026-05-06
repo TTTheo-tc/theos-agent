@@ -99,6 +99,7 @@ class Database:
         conn = self._check_conn()
         async with self._write_lock:
             await conn.executescript(sql)
+            await conn.commit()
 
     async def set_row_factory(self) -> None:
         """Enable dict-like row access via aiosqlite.Row."""
@@ -118,5 +119,4 @@ class Database:
 
     async def _ensure_schema(self) -> None:
         """Create tables and indexes if they don't exist (idempotent)."""
-        conn = self._check_conn()
-        await conn.executescript(_SCHEMA_SQL)
+        await self.executescript(_SCHEMA_SQL)
