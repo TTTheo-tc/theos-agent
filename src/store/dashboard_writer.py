@@ -251,9 +251,11 @@ class DashboardWriter:
         *,
         online: bool = True,
     ) -> None:
+        now = _now()
+        online_value = int(online)
         await self._exec(
             """INSERT INTO channel_stats (channel, online, updated_at)
                VALUES (?, ?, ?)
                ON CONFLICT(channel) DO UPDATE SET online = ?, updated_at = ?""",
-            (channel, int(online), _now(), int(online), _now()),
+            (channel, online_value, now, online_value, now),
         )
