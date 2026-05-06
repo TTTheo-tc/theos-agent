@@ -21,7 +21,7 @@ def feishu_auth(
     code: str = typer.Option(
         None, "--code", "-c", help="Exchange an authorization code directly (skip browser)"
     ),
-):
+) -> None:
     """Authorize Feishu user token (OAuth flow).
 
     Use --reconfigure / -r to update app credentials.

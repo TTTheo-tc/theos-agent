@@ -38,7 +38,7 @@ app = typer.Typer(
 )
 
 
-def version_callback(value: bool):
+def version_callback(value: bool) -> None:
     if value:
         console.print(f"[bold {THEOS_ACCENT}]theos[/] v{__version__}")
         raise typer.Exit()
@@ -48,7 +48,7 @@ def version_callback(value: bool):
 def main(
     ctx: typer.Context,
     version: bool = typer.Option(None, "--version", "-v", callback=version_callback, is_eager=True),
-):
+) -> None:
     """TheOS - Personal AI Assistant."""
     del version
     if ctx.invoked_subcommand is None:
@@ -73,7 +73,7 @@ def agent(
     page: bool = typer.Option(
         True, "--page/--no-page", help="Use alternate-screen page mode for interactive chat"
     ),
-):
+) -> None:
     """Interact with the agent directly."""
     from src.cli.agent_cmd import agent as _agent
 
@@ -84,7 +84,7 @@ def agent(
 def init(
     reset: bool = typer.Option(False, "--reset", help="Reset existing data before init"),
     no_daemon: bool = typer.Option(False, "--no-daemon", help="Skip gateway daemon installation"),
-):
+) -> None:
     """Initialize TheOS: config, workspace, and provider setup."""
     from src.cli.init_cmd import init as _init
 
@@ -104,7 +104,7 @@ gateway_app = typer.Typer(
 def gateway(
     ctx: typer.Context,
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """Start the theos gateway (foreground)."""
     if ctx.resilient_parsing or ctx.invoked_subcommand is not None:
         return
@@ -114,7 +114,7 @@ def gateway(
 
 
 @gateway_app.command("stop")
-def gateway_stop():
+def gateway_stop() -> None:
     """Stop the gateway daemon."""
     from src.cli.gateway_cmd import gateway_stop as _gateway_stop
 
@@ -122,7 +122,7 @@ def gateway_stop():
 
 
 @gateway_app.command("restart")
-def gateway_restart_cmd():
+def gateway_restart_cmd() -> None:
     """Restart the gateway daemon."""
     from src.cli.gateway_cmd import gateway_restart_cmd as _gateway_restart_cmd
 
@@ -130,7 +130,7 @@ def gateway_restart_cmd():
 
 
 @gateway_app.command("uninstall")
-def gateway_uninstall():
+def gateway_uninstall() -> None:
     """Stop and remove the gateway daemon service."""
     from src.cli.gateway_cmd import gateway_uninstall as _gateway_uninstall
 
@@ -141,7 +141,7 @@ def gateway_uninstall():
 def gateway_logs(
     source: str = typer.Option("app", help="Log source: app, supervisor-stdout, supervisor-stderr"),
     raw: bool = typer.Option(False, "--raw", help="Output raw JSONL"),
-):
+) -> None:
     """Tail gateway logs."""
     from src.cli.gateway_cmd import gateway_logs as _gateway_logs
 
@@ -154,7 +154,7 @@ def ui_command(
     host: str = typer.Option(
         "127.0.0.1", "--host", help="Bind address (use 0.0.0.0 for network access)"
     ),
-):
+) -> None:
     """Start the theos dashboard (read-only viewer)."""
     from src.cli.ui_cmd import ui as _ui
 
@@ -167,7 +167,7 @@ cron_app = typer.Typer(help="Manage scheduled tasks")
 @cron_app.command("list")
 def cron_list(
     all: bool = typer.Option(False, "--all", "-a", help="Include disabled jobs"),
-):
+) -> None:
     """List scheduled jobs."""
     from src.cli.cron_cmd import cron_list as _cron_list
 
@@ -189,7 +189,7 @@ def cron_add(
     channel: str = typer.Option(
         None, "--channel", help="Channel for delivery (e.g. 'telegram', 'whatsapp')"
     ),
-):
+) -> None:
     """Add a scheduled job."""
     from src.cli.cron_cmd import cron_add as _cron_add
 
@@ -209,7 +209,7 @@ def cron_add(
 @cron_app.command("remove")
 def cron_remove(
     job_id: str = typer.Argument(..., help="Job ID to remove"),
-):
+) -> None:
     """Remove a scheduled job."""
     from src.cli.cron_cmd import cron_remove as _cron_remove
 
@@ -220,7 +220,7 @@ def cron_remove(
 def cron_enable(
     job_id: str = typer.Argument(..., help="Job ID"),
     disable: bool = typer.Option(False, "--disable", help="Disable instead of enable"),
-):
+) -> None:
     """Enable or disable a job."""
     from src.cli.cron_cmd import cron_enable as _cron_enable
 
@@ -231,7 +231,7 @@ def cron_enable(
 def cron_run(
     job_id: str = typer.Argument(..., help="Job ID to run"),
     force: bool = typer.Option(False, "--force", "-f", help="Run even if disabled"),
-):
+) -> None:
     """Manually run a job."""
     from src.cli.cron_cmd import cron_run as _cron_run
 
@@ -243,7 +243,7 @@ config_app = typer.Typer(help="Manage configuration presets")
 
 
 @config_app.command("full-access")
-def config_full_access():
+def config_full_access() -> None:
     """Enable full local-development tool access."""
     from src.cli.config_cmd import full_access as _full_access
 
@@ -251,7 +251,7 @@ def config_full_access():
 
 
 @config_app.command("safe")
-def config_safe():
+def config_safe() -> None:
     """Restore conservative default tool permissions."""
     from src.cli.config_cmd import safe as _safe
 
@@ -259,7 +259,7 @@ def config_safe():
 
 
 @config_app.command("compact")
-def config_compact():
+def config_compact() -> None:
     """Rewrite config.json with only non-default values."""
     from src.cli.config_cmd import compact as _compact
 
@@ -267,7 +267,7 @@ def config_compact():
 
 
 @config_app.command("features")
-def config_features():
+def config_features() -> None:
     """List available feature flags and current values."""
     from src.cli.config_cmd import features as _features
 
@@ -277,7 +277,7 @@ def config_features():
 @config_app.command("show")
 def config_show(
     full: bool = typer.Option(False, "--full", help="Show merged config including defaults"),
-):
+) -> None:
     """Print current config as JSON with secrets masked."""
     from src.cli.config_cmd import show as _show
 
@@ -285,7 +285,7 @@ def config_show(
 
 
 @report_app.command("daily")
-def daily():
+def daily() -> None:
     """Generate a daily activity report."""
     from src.cli.report_cmd import daily as _daily
 
@@ -293,7 +293,7 @@ def daily():
 
 
 @report_app.command("weekly")
-def weekly():
+def weekly() -> None:
     """Generate a weekly activity report."""
     from src.cli.report_cmd import weekly as _weekly
 
@@ -318,7 +318,7 @@ app.add_typer(channels_app, name="channels")
 
 
 @channels_app.command("status")
-def channels_status():
+def channels_status() -> None:
     """Show channel status."""
     from src.cli.channels_cmd import channels_status as _channels_status
 
@@ -326,7 +326,7 @@ def channels_status():
 
 
 @channels_app.command("login")
-def channels_login():
+def channels_login() -> None:
     """Link device via QR code."""
     from src.cli.channels_cmd import channels_login as _channels_login
 
@@ -353,7 +353,7 @@ def feishu_auth(
     code: str = typer.Option(
         None, "--code", "-c", help="Exchange an authorization code directly (skip browser)"
     ),
-):
+) -> None:
     """Authorize Feishu user token (OAuth flow).
 
     Use --reconfigure / -r to update app credentials.
@@ -377,7 +377,7 @@ def feishu_auth(
 
 
 @app.command()
-def status():
+def status() -> None:
     """Show theos status."""
     from src.cli.status_cmd import status as _status
 

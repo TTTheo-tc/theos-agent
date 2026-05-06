@@ -16,7 +16,7 @@ def ui(
     host: str = typer.Option(
         "127.0.0.1", "--host", help="Bind address (use 0.0.0.0 for network access)"
     ),
-):
+) -> None:
     """Start the theos dashboard (read-only viewer)."""
 
     from src.config.loader import load_config

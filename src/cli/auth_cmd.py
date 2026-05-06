@@ -14,7 +14,7 @@ auth_app = typer.Typer(help="Manage provider authentication.")
 
 
 @auth_app.command("list")
-def auth_list():
+def auth_list() -> None:
     """List all saved auth profiles."""
     from rich.table import Table
 
@@ -72,7 +72,7 @@ def auth_add(
     key: str = typer.Option(..., "--key", "-k", help="API key"),
     name: str = typer.Option("default", "--name", "-n", help="Profile name (default: 'default')"),
     email: str = typer.Option(None, "--email", "-e", help="Optional email for this account"),
-):
+) -> None:
     """Save an API key as a named auth profile."""
     from src.auth.store import add_api_key_profile
     from src.providers.registry import normalize_provider_name
@@ -85,7 +85,7 @@ def auth_add(
 @auth_app.command("remove")
 def auth_remove(
     profile_id: str = typer.Argument(..., help="Profile ID to remove (e.g. anthropic:default)"),
-):
+) -> None:
     """Remove an auth profile."""
     from src.auth.store import remove_profile
 
@@ -101,7 +101,7 @@ def auth_use(
     profile_id: str = typer.Argument(
         ..., help="Profile ID to set as default (e.g. anthropic:work)"
     ),
-):
+) -> None:
     """Set an auth profile as the default for its provider."""
     from src.auth.store import set_default_profile
 
@@ -118,7 +118,7 @@ def auth_use(
 
 
 @auth_app.command("status")
-def auth_status():
+def auth_status() -> None:
     """Show authentication status for all providers."""
     import time as _time
 
@@ -149,7 +149,7 @@ def auth_status():
 
 
 @auth_app.command("refresh")
-def auth_refresh(provider: str):
+def auth_refresh(provider: str) -> None:
     """Manually refresh OAuth token for a provider."""
     from src.cli.auth_oauth_cmd import auth_refresh as _auth_refresh
 
@@ -157,7 +157,7 @@ def auth_refresh(provider: str):
 
 
 @auth_app.command("login")
-def auth_login(provider: str):
+def auth_login(provider: str) -> None:
     """Re-run OAuth authorization for a provider."""
     from src.cli.auth_oauth_cmd import auth_login as _auth_login
 
@@ -165,7 +165,7 @@ def auth_login(provider: str):
 
 
 @auth_app.command("revoke")
-def auth_revoke(provider: str):
+def auth_revoke(provider: str) -> None:
     """Remove credentials for a provider."""
     from src.cli.auth_oauth_cmd import auth_revoke as _auth_revoke
 
@@ -184,7 +184,7 @@ def provider_login(
     provider: str = typer.Argument(
         ..., help="OAuth provider (e.g. 'openai-codex', 'github-copilot')"
     ),
-):
+) -> None:
     """Authenticate with an OAuth provider."""
     from src.cli.auth_oauth_cmd import provider_login as _provider_login
 

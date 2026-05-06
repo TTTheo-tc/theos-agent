@@ -8,7 +8,7 @@ from src import __logo__
 from src.cli.display import console
 
 
-def channels_status():
+def channels_status() -> None:
     """Show channel status."""
     from rich.table import Table
 
@@ -127,7 +127,7 @@ def _get_bridge_dir():
     return user_bridge
 
 
-def channels_login():
+def channels_login() -> None:
     """Link device via QR code."""
     import os
     import subprocess

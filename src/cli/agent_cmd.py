@@ -48,7 +48,7 @@ def agent(
     page: bool = typer.Option(
         True, "--page/--no-page", help="Use alternate-screen page mode for interactive chat"
     ),
-):
+) -> None:
     """Interact with the agent directly."""
     from loguru import logger
 

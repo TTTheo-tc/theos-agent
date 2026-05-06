@@ -50,7 +50,7 @@ def detect_oauth_token(provider_name: str) -> str | None:
     return None
 
 
-def auth_refresh(provider: str):
+def auth_refresh(provider: str) -> None:
     """Manually refresh OAuth token for a provider."""
     from src.providers.registry import display_provider_name, normalize_provider_name
 
@@ -79,7 +79,7 @@ def auth_refresh(provider: str):
         console.print(f"[red]\u2717[/red] Refresh failed for {display_name}")
 
 
-def auth_login(provider: str):
+def auth_login(provider: str) -> None:
     """Re-run OAuth authorization for a provider."""
     from src.providers.registry import normalize_provider_name
 
@@ -119,7 +119,7 @@ def auth_login(provider: str):
         raise typer.Exit(1)
 
 
-def auth_revoke(provider: str):
+def auth_revoke(provider: str) -> None:
     """Remove credentials for a provider."""
     from src.auth.store import load_auth_store, remove_profile
     from src.providers.registry import normalize_provider_name
@@ -140,7 +140,7 @@ def provider_login(
     provider: str = typer.Argument(
         ..., help="OAuth provider (e.g. 'openai-codex', 'github-copilot')"
     ),
-):
+) -> None:
     """Authenticate with an OAuth provider."""
     from src import __logo__
     from src.providers.registry import (

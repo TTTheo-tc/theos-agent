@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from loguru import logger
@@ -30,6 +31,9 @@ from src.utils.proxy import (
     is_socks_proxy,
 )
 
+if TYPE_CHECKING:
+    from src.config.schema import AgentRoleConfig, GenVerConfig
+
 
 def configure_channels(config: Config) -> None:
     from src.cli.init_channels import configure_channels as _configure_channels
@@ -37,13 +41,17 @@ def configure_channels(config: Config) -> None:
     return _configure_channels(config)
 
 
-def configure_genver_interactive(configured_providers: list[str] | None = None):
+def configure_genver_interactive(
+    configured_providers: list[str] | None = None,
+) -> GenVerConfig | None:
     from src.cli.init_genver import configure_genver_interactive as _configure_genver_interactive
 
     return _configure_genver_interactive(configured_providers)
 
 
-def configure_roles_interactive(configured_providers: list[str] | None = None):
+def configure_roles_interactive(
+    configured_providers: list[str] | None = None,
+) -> dict[str, AgentRoleConfig] | None:
     from src.cli.init_roles import configure_roles_interactive as _configure_roles_interactive
 
     return _configure_roles_interactive(configured_providers)
@@ -342,7 +350,7 @@ def _install_gateway_daemon(config: Config) -> None:
 def init(
     reset: bool = typer.Option(False, "--reset", help="Reset existing data before init"),
     no_daemon: bool = typer.Option(False, "--no-daemon", help="Skip gateway daemon installation"),
-):
+) -> None:
     """Initialize TheOS: config, workspace, and provider setup."""
     from src.config.loader import get_config_path, load_config, save_config
     from src.utils.helpers import get_workspace_path

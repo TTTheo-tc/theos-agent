@@ -47,7 +47,7 @@ def _resolve_service():
     return resolve_service()
 
 
-def gateway_stop():
+def gateway_stop() -> None:
     """Stop the gateway daemon."""
     svc = _resolve_service()
     if not svc.is_loaded():
@@ -57,7 +57,7 @@ def gateway_stop():
     console.print("[green]\u2713[/green] Gateway daemon stopped.")
 
 
-def gateway_restart_cmd():
+def gateway_restart_cmd() -> None:
     """Restart the gateway daemon."""
     svc = _resolve_service()
     if not svc.is_loaded():
@@ -71,7 +71,7 @@ def gateway_restart_cmd():
     console.print("[green]\u2713[/green] Gateway daemon restarting.")
 
 
-def gateway_uninstall():
+def gateway_uninstall() -> None:
     """Stop and remove the gateway daemon service."""
     svc = _resolve_service()
     if not svc.is_loaded():
@@ -84,7 +84,7 @@ def gateway_uninstall():
 def gateway_logs(
     source: str = typer.Option("app", help="Log source: app, supervisor-stdout, supervisor-stderr"),
     raw: bool = typer.Option(False, "--raw", help="Output raw JSONL"),
-):
+) -> None:
     """Tail gateway logs."""
     import subprocess as _sp
 
@@ -263,7 +263,7 @@ def _warn_missing_owner_ids(config) -> None:
 def gateway(
     ctx: typer.Context,
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> None:
     """Start the theos gateway (foreground)."""
     if ctx.invoked_subcommand is not None:
         return
