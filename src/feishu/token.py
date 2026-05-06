@@ -406,13 +406,13 @@ def _wait_for_authorization_code(
     port = parsed.port or 9527
 
     authorization_code: str | None = None
-    error_message: str | None = None  # noqa: F841
+    error_message: str | None = None
 
     server: HTTPServer | None = None
     stop_event = Event()
 
     class _CallbackHandler(BaseHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802
+        def do_GET(self):
             nonlocal authorization_code, error_message
             parsed_path = urlparse(self.path)
             query_params = parse_qs(parsed_path.query)
@@ -429,7 +429,7 @@ def _wait_for_authorization_code(
                 self.end_headers()
                 self.wfile.write((error_message or "Unknown error").encode("utf-8"))
 
-        def log_message(self, format, *args):  # noqa: A002
+        def log_message(self, format, *args):
             logger.debug(f"HTTP: {format % args}")
 
     logger.info(f"Starting callback server on {host}:{port}")
