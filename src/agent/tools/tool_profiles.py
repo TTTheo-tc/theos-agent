@@ -38,6 +38,7 @@ _MEMORY_TOOLS = frozenset(
 )
 _DISCOVERY_TOOLS = frozenset({"capability_search", "skill_search", "mcp_search"})
 _PLAN_MODE_TOOLS = frozenset({"enter_plan_mode", "exit_plan_mode"})
+_TASK_TOOLS = frozenset({"todo", "task_create", "task_list", "task_update", "task_get"})
 _COMMS_TOOLS = frozenset(
     {
         "message",
@@ -91,6 +92,7 @@ TOOL_GROUPS: dict[str, set[str]] = {
     "group:web": set(_WEB_TOOLS),
     "group:memory": set(_MEMORY_TOOLS),
     "group:discovery": set(_DISCOVERY_TOOLS),
+    "group:tasks": set(_TASK_TOOLS),
     "group:comms": set(_COMMS_TOOLS),
     "group:analysis": set(_ANALYSIS_TOOLS),
     "group:feishu": set(_FEISHU_TOOLS),
@@ -142,8 +144,9 @@ PROFILES: dict[str, set[str] | None] = {
         | _MEMORY_TOOLS
         | _DISCOVERY_TOOLS
         | _PLAN_MODE_TOOLS
+        | _TASK_TOOLS
         | _FEISHU_READONLY_TOOLS
-        | {"tool_search", "todo", "agent", "cron", "image_analyze", "pdf"}
+        | {"tool_search", "agent", "cron", "image_analyze", "pdf"}
     ),
     "messaging": set(
         _MEMORY_TOOLS

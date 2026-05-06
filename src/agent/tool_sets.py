@@ -235,23 +235,55 @@ def _register_notebook_tools(state: _RegistrationState) -> None:
 
 
 def _register_todo_tools(state: _RegistrationState) -> None:
-    if state.mode == "subagent" or not state.should("todo"):
+    if state.mode == "subagent":
         return
 
-    from src.agent.tools.tasks import (
-        TaskCreateTool,
-        TaskGetTool,
-        TaskListTool,
-        TaskUpdateTool,
-    )
-    from src.agent.tools.todo import TodoTool
+    todo_enabled = state.should("todo")
+    task_tool_names = ("task_create", "task_list", "task_update", "task_get")
+    enabled_task_tools = [
+        name
+        for name in task_tool_names
+        if _should_register_task_tool(state, name, todo_enabled=todo_enabled)
+    ]
+    if not todo_enabled and not enabled_task_tools:
+        return
 
     workspace = state.config.workspace
-    state.register(TodoTool(workspace=workspace))
-    state.register(TaskCreateTool(workspace=workspace))
-    state.register(TaskListTool(workspace=workspace))
-    state.register(TaskUpdateTool(workspace=workspace))
-    state.register(TaskGetTool(workspace=workspace))
+    if todo_enabled:
+        from src.agent.tools.todo import TodoTool
+
+        state.register(TodoTool(workspace=workspace))
+
+    if enabled_task_tools:
+        from src.agent.tools.tasks import (
+            TaskCreateTool,
+            TaskGetTool,
+            TaskListTool,
+            TaskUpdateTool,
+        )
+
+        task_tools = {
+            "task_create": TaskCreateTool,
+            "task_list": TaskListTool,
+            "task_update": TaskUpdateTool,
+            "task_get": TaskGetTool,
+        }
+        for name in enabled_task_tools:
+            state.register(task_tools[name](workspace=workspace))
+
+
+def _should_register_task_tool(
+    state: _RegistrationState,
+    name: str,
+    *,
+    todo_enabled: bool,
+) -> bool:
+    if name in state.deny_tools:
+        return False
+    profile_allows = state.profile_set is None or name in state.profile_set
+    allowed_allows = state.expanded_allowed is None or name in state.expanded_allowed
+    explicitly_allowed = state.expanded_allowed is not None and name in state.expanded_allowed
+    return profile_allows and allowed_allows and (todo_enabled or explicitly_allowed)
 
 
 def _register_exec_tools(state: _RegistrationState) -> None:

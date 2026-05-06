@@ -81,6 +81,7 @@ def test_tool_groups_exact_membership():
             "domain_rule_get",
         },
         "group:discovery": {"capability_search", "skill_search", "mcp_search"},
+        "group:tasks": {"todo", "task_create", "task_list", "task_update", "task_get"},
         "group:comms": {
             "message",
             "agent",
@@ -224,6 +225,10 @@ def test_profiles_exact_membership():
         "feishu_info",
         "feishu_comments",
         "todo",
+        "task_create",
+        "task_list",
+        "task_update",
+        "task_get",
         "agent",
         "cron",
         "image_analyze",
@@ -416,6 +421,53 @@ def test_register_standard_tools_deny_tools_expands_groups(tmp_path: Path):
     names = set(registry.tool_names)
     assert names.isdisjoint(TOOL_GROUPS["group:web"])
     assert "read_file" in names
+
+
+def test_register_standard_tools_can_deny_individual_task_tool(tmp_path: Path):
+    registry = ToolRegistry()
+    register_standard_tools(
+        registry,
+        ToolRegistrationConfig(
+            workspace=tmp_path,
+            mode="single",
+            profile="coding",
+            deny_tools={"task_create"},
+        ),
+    )
+
+    names = set(registry.tool_names)
+    assert "todo" in names
+    assert "task_create" not in names
+    assert {"task_list", "task_update", "task_get"} <= names
+
+
+def test_register_standard_tools_accepts_task_tools_without_todo(tmp_path: Path):
+    registry = ToolRegistry()
+    register_standard_tools(
+        registry,
+        ToolRegistrationConfig(
+            workspace=tmp_path,
+            mode="single",
+            allowed_tools={"task_create"},
+        ),
+    )
+
+    assert set(registry.tool_names) == {"task_create"}
+
+
+def test_register_standard_tools_task_tools_respect_allowed_intersection(tmp_path: Path):
+    registry = ToolRegistry()
+    register_standard_tools(
+        registry,
+        ToolRegistrationConfig(
+            workspace=tmp_path,
+            mode="single",
+            profile="coding",
+            allowed_tools={"read_file"},
+        ),
+    )
+
+    assert set(registry.tool_names) == {"read_file"}
 
 
 def test_register_standard_tools_verifier_respects_group_denies(tmp_path: Path):
