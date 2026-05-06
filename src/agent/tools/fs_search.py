@@ -63,7 +63,7 @@ def _is_relative_to(path: str, allowed: Path) -> bool:
         return False
 
 
-def _rg_output_path(line: str, options: "_GrepOptions") -> str | None:
+def _rg_output_path(line: str, options: _GrepOptions) -> str | None:
     if line == "--":
         return None
     if options.output_mode == "files_with_matches":
@@ -81,7 +81,7 @@ def _rg_output_path(line: str, options: "_GrepOptions") -> str | None:
 def _filter_rg_lines_within_allowed(
     lines: list[str],
     allowed_dir: Path | None,
-    options: "_GrepOptions",
+    options: _GrepOptions,
 ) -> list[str]:
     if allowed_dir is None:
         return lines
@@ -159,6 +159,7 @@ class GlobTool(Tool):
         root: str | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         # Accept both 'path' (Claude Code) and 'root' (legacy)
         search_path = path or root
         try:
@@ -260,7 +261,7 @@ class _GrepOptions:
     offset: int
 
     @classmethod
-    def from_kwargs(cls, kwargs: dict[str, Any]) -> "_GrepOptions":
+    def from_kwargs(cls, kwargs: dict[str, Any]) -> _GrepOptions:
         both_ctx = kwargs.get("-C")
         return cls(
             pattern=kwargs.get("pattern", ""),

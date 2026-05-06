@@ -187,9 +187,10 @@ class ReadFileTool(ContextAwareTool):
         path: str | None = None,
         offset: int | None = None,
         limit: int | None = None,
-        _context: "ToolContext | None" = None,
+        _context: ToolContext | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         session_key = _context.session_key if _context else None
         target = file_path or path
         if not target:

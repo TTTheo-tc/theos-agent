@@ -69,6 +69,7 @@ class ListDirTool(Tool):
         }
 
     async def execute(self, path: str, ignore: list[str] | None = None, **kwargs: Any) -> str:
+        del kwargs
         try:
             dir_path, error = _resolve_directory(path, self._workspace, self._allowed_dir)
             if error:
