@@ -15,7 +15,7 @@ from typing import Any
 class AgentFS:
     """Directory-backed JSON store for inter-agent data exchange."""
 
-    def __init__(self, workspace: Path, subdir: str = ".genver"):
+    def __init__(self, workspace: Path, subdir: str = ".genver") -> None:
         self.root = workspace / subdir
         if self.root.is_symlink():
             raise ValueError(f"AgentFS root must not be a symlink: {self.root}")
