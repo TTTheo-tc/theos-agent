@@ -176,20 +176,29 @@ Skills with available="false" need dependencies installed first - you can try in
             static.append(roles_section)
 
     def _build_memory_tools_section(self, memory_tool_names: Iterable[str] | None = None) -> str:
-        names = set(self.MEMORY_TOOL_ORDER if memory_tool_names is None else memory_tool_names)
+        names = self._selected_memory_tool_names(memory_tool_names)
         tools = [name for name in self.MEMORY_TOOL_ORDER if name in names]
         if not tools:
             return ""
 
         tool_list = ", ".join(f"`{name}`" for name in tools)
+        policy = self._memory_recall_policy(names)
+        return (
+            "# Memory Tools\n\n"
+            f"You have {tool_list} tools available.\n\n"
+            f"{policy}"
+        )
+
+    def _selected_memory_tool_names(self, memory_tool_names: Iterable[str] | None) -> set[str]:
+        return set(self.MEMORY_TOOL_ORDER if memory_tool_names is None else memory_tool_names)
+
+    def _memory_recall_policy(self, names: set[str]) -> str:
         search_tools = [
-            name
-            for name in ("memory_search", "structured_memory_search")
-            if name in names
+            name for name in ("memory_search", "structured_memory_search") if name in names
         ]
         if search_tools:
             search_phrase = " or ".join(f"`{name}`" for name in search_tools)
-            policy = (
+            return (
                 "**Mandatory recall policy:**\n"
                 "- When the user asks about prior work, past decisions, stated preferences, "
                 "commitments, or todos — and the injected Memory section does not "
@@ -199,17 +208,10 @@ Skills with available="false" need dependencies installed first - you can try in
                 "- The Memory section is pre-loaded context; for specific historical "
                 "questions beyond its scope, always search first."
             )
-        else:
-            policy = (
-                "**Recall policy:**\n"
-                "- Use the available memory tools only for specific facts already identified "
-                "by prior context or tool output."
-            )
-
         return (
-            "# Memory Tools\n\n"
-            f"You have {tool_list} tools available.\n\n"
-            f"{policy}"
+            "**Recall policy:**\n"
+            "- Use the available memory tools only for specific facts already identified "
+            "by prior context or tool output."
         )
 
     def _build_dynamic_sections(
