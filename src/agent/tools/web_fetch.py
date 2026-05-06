@@ -3,50 +3,27 @@
 from __future__ import annotations
 
 import asyncio
-import html
 import json
 import os
 import re
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
 from src.agent.tools.base import Tool
+from src.agent.tools.web_common import (
+    MAX_REDIRECTS,
+    USER_AGENT,
+    normalize_text,
+    strip_tags,
+    validate_http_url,
+)
 from src.agent.tools.web_ssrf import async_ssrf_safe_request, async_validate_url_target
 from src.security.credential_injector import (
     CredentialInjector,
     EncryptedSecretResolver,
     build_default_registry,
 )
-
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36"
-MAX_REDIRECTS = 5
-
-
-def _strip_tags(text: str) -> str:
-    """Remove HTML tags and decode entities."""
-    text = re.sub(r"<script[\s\S]*?</script>", "", text, flags=re.I)
-    text = re.sub(r"<style[\s\S]*?</style>", "", text, flags=re.I)
-    text = re.sub(r"<[^>]+>", "", text)
-    return html.unescape(text).strip()
-
-
-def _normalize(text: str) -> str:
-    text = re.sub(r"[ \t]+", " ", text)
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
-
-
-def _validate_url(url: str) -> tuple[bool, str]:
-    try:
-        p = urlparse(url)
-        if p.scheme not in ("http", "https"):
-            return False, f"Only http/https allowed, got '{p.scheme or 'none'}'"
-        if not p.netloc:
-            return False, "Missing domain"
-        return True, ""
-    except Exception as e:
-        return False, str(e)
 
 
 class WebFetchTool(Tool):
@@ -118,7 +95,7 @@ class WebFetchTool(Tool):
         max_chars = max_chars or self.max_chars
 
         # URL scheme/format validation
-        is_valid, error_msg = _validate_url(url)
+        is_valid, error_msg = validate_http_url(url)
         if not is_valid:
             return json.dumps(
                 {"error": f"URL validation failed: {error_msg}", "url": url},
@@ -252,7 +229,7 @@ class WebFetchTool(Tool):
             content = (
                 self._to_markdown(doc.summary())
                 if mode == "markdown"
-                else _strip_tags(doc.summary())
+                else strip_tags(doc.summary())
             )
             text = f"# {doc.title()}\n\n{content}" if doc.title() else content
             return text, "readability"
@@ -262,22 +239,22 @@ class WebFetchTool(Tool):
     def _to_markdown(self, html_content: str) -> str:
         text = re.sub(
             r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>([\s\S]*?)</a>',
-            lambda m: f"[{_strip_tags(m[2])}]({m[1]})",
+            lambda m: f"[{strip_tags(m[2])}]({m[1]})",
             html_content,
             flags=re.I,
         )
         text = re.sub(
             r"<h([1-6])[^>]*>([\s\S]*?)</h\1>",
-            lambda m: f'\n{"#" * int(m[1])} {_strip_tags(m[2])}\n',
+            lambda m: f'\n{"#" * int(m[1])} {strip_tags(m[2])}\n',
             text,
             flags=re.I,
         )
         text = re.sub(
             r"<li[^>]*>([\s\S]*?)</li>",
-            lambda m: f"\n- {_strip_tags(m[1])}",
+            lambda m: f"\n- {strip_tags(m[1])}",
             text,
             flags=re.I,
         )
         text = re.sub(r"</(p|div|section|article)>", "\n\n", text, flags=re.I)
         text = re.sub(r"<(br|hr)\s*/?>", "\n", text, flags=re.I)
-        return _normalize(_strip_tags(text))
+        return normalize_text(strip_tags(text))

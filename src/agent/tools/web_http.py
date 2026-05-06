@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
 from src.agent.tools.base import Tool
+from src.agent.tools.web_common import MAX_REDIRECTS, USER_AGENT, validate_http_url
 from src.agent.tools.web_ssrf import async_ssrf_safe_request, async_validate_url_target
 from src.safety.layer import SafetyLayer
 from src.security.credential_injector import (
@@ -16,9 +16,6 @@ from src.security.credential_injector import (
     EncryptedSecretResolver,
     build_default_registry,
 )
-
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36"
-MAX_REDIRECTS = 5
 
 
 def _json_body_preview(value: Any) -> str:
@@ -40,18 +37,6 @@ def _resolve_request_data(value: Any, injector: CredentialInjector) -> Any:
             value
         )  # reuse the same secret resolution path as headers/query
     return value
-
-
-def _validate_url(url: str) -> tuple[bool, str]:
-    try:
-        p = urlparse(url)
-        if p.scheme not in ("http", "https"):
-            return False, f"Only http/https allowed, got '{p.scheme or 'none'}'"
-        if not p.netloc:
-            return False, "Missing domain"
-        return True, ""
-    except Exception as e:
-        return False, str(e)
 
 
 class HttpRequestTool(Tool):
@@ -128,7 +113,7 @@ class HttpRequestTool(Tool):
         max_chars: int | None = None,
         **kwargs: Any,
     ) -> str:
-        is_valid, error_msg = _validate_url(url)
+        is_valid, error_msg = validate_http_url(url)
         if not is_valid:
             return json.dumps(
                 {"error": f"URL validation failed: {error_msg}", "url": url}, ensure_ascii=False

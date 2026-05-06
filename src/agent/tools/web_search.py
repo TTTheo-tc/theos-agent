@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import html
 import os
-import re
 from typing import Any
 from urllib.parse import urlparse
 
@@ -17,25 +15,13 @@ except ImportError:
     DDGS = None  # type: ignore[assignment]
 
 from src.agent.tools.base import Tool
+from src.agent.tools.web_common import normalize_text, strip_tags
 from src.security.credential_injector import (
     CredentialInjector,
     EncryptedSecretResolver,
     build_default_registry,
 )
 from src.security.secret_refs import resolve_secret_ref
-
-
-def _strip_tags(text: str) -> str:
-    """Remove HTML tags and decode entities."""
-    text = re.sub(r"<script[\s\S]*?</script>", "", text, flags=re.I)
-    text = re.sub(r"<style[\s\S]*?</style>", "", text, flags=re.I)
-    text = re.sub(r"<[^>]+>", "", text)
-    return html.unescape(text).strip()
-
-
-def _normalize(text: str) -> str:
-    text = re.sub(r"[ \t]+", " ", text)
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 class WebSearchTool(Tool):
@@ -175,7 +161,7 @@ class WebSearchTool(Tool):
             for i, r in enumerate(results[:n], 1):
                 title = r.get("title", "")
                 url = r.get("href", "")
-                body = _normalize(_strip_tags(r.get("body", "")))
+                body = normalize_text(strip_tags(r.get("body", "")))
                 lines.append(f"{i}. {title}\n   {url}")
                 if body:
                     lines.append(f"   {body}")
