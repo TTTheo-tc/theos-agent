@@ -29,7 +29,7 @@ class PollerService:
         self.bus = bus
         self._on_event = on_event or self._default_on_event
         self._pollers: list[BasePoller] = []
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[None]] = []
 
     def register(self, poller: BasePoller) -> None:
         """Register a poller to be started with the service."""
@@ -38,6 +38,10 @@ class PollerService:
 
     async def start(self) -> None:
         """Start all registered pollers."""
+        self._tasks = [task for task in self._tasks if not task.done()]
+        if self._tasks:
+            logger.warning("PollerService already started")
+            return
         if not self._pollers:
             logger.debug("No pollers registered")
             return

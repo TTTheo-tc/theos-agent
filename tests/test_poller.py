@@ -36,6 +36,23 @@ class _RecordingPoller(BasePoller):
         self.teardown_called = True
 
 
+class _FailingSetupPoller(BasePoller):
+    name = "fail_setup"
+
+    def __init__(self) -> None:
+        self.setup_calls = 0
+
+    async def setup(self) -> None:
+        self.setup_calls += 1
+        raise RuntimeError("setup failed")
+
+    async def poll_once(self) -> list[PollerEvent]:
+        return []
+
+    async def teardown(self) -> None:
+        pass
+
+
 @pytest.mark.asyncio
 async def test_default_event_handler_injects_owner_message() -> None:
     bus = _Bus()
@@ -71,6 +88,36 @@ async def test_service_start_stop_tracks_registered_pollers() -> None:
 
     assert poller.setup_called is True
     assert poller.teardown_called is True
+
+
+@pytest.mark.asyncio
+async def test_service_start_is_idempotent() -> None:
+    bus = _Bus()
+    service = PollerService(bus=bus)
+    poller = _RecordingPoller()
+    service.register(poller)
+
+    await service.start()
+    await service.start()
+
+    assert len(service._tasks) == 1
+
+    await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_service_start_allows_retry_after_setup_failure() -> None:
+    bus = _Bus()
+    service = PollerService(bus=bus)
+    poller = _FailingSetupPoller()
+    service.register(poller)
+
+    await service.start()
+    await asyncio.wait_for(service._tasks[0], timeout=1)
+    await service.start()
+    await asyncio.wait_for(service._tasks[0], timeout=1)
+
+    assert poller.setup_calls == 2
 
 
 @pytest.mark.asyncio
