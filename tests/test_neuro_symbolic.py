@@ -10,6 +10,18 @@ def test_workspace_path_is_low_risk(tmp_path: Path):
     assert ctrl.assess_path(str(tmp_path / "src" / "main.py")) == "low"
 
 
+def test_workspace_sibling_is_not_low_risk(tmp_path: Path):
+    workspace = tmp_path / "app"
+    sibling = tmp_path / "app2" / "main.py"
+    workspace.mkdir()
+    sibling.parent.mkdir()
+    sibling.touch()
+
+    ctrl = FileRiskController(workspace=workspace)
+
+    assert ctrl.assess_path(str(sibling)) == "medium"
+
+
 def test_blacklisted_env_file_is_high():
     ctrl = FileRiskController()
     assert ctrl.assess_path("/app/.env") == "high"
@@ -67,3 +79,20 @@ def test_custom_blacklist():
     assert ctrl.assess_path("/app/database.secret") == "high"
     # Default patterns not present when custom provided
     assert ctrl.assess_path("/app/.env") != "high"
+
+
+def test_empty_custom_blacklist_uses_defaults():
+    ctrl = FileRiskController(blacklist_patterns=[])
+
+    assert ctrl.assess_path("/app/.env") == "high"
+
+
+def test_from_config_empty_blacklist_uses_defaults():
+    class Config:
+        enabled = True
+        whitelist_patterns: list[str] = []
+        blacklist_patterns: list[str] = []
+
+    ctrl = FileRiskController.from_config(config=Config())
+
+    assert ctrl.assess_path("/app/.env") == "high"

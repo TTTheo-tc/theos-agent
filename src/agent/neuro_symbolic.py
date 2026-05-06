@@ -1,13 +1,13 @@
-"""Neuro-symbolic controller — file-level risk assessment via whitelist/blacklist rules."""
+"""File-level risk assessment via symbolic whitelist/blacklist rules."""
 
 from __future__ import annotations
 
 import fnmatch
 import re
 from pathlib import Path
+from typing import Any
 
-# Default blacklist: sensitive system/credential paths
-_DEFAULT_BLACKLIST: list[str] = [
+_DEFAULT_BLACKLIST: tuple[str, ...] = (
     "/etc/*",
     "/var/log/*",
     "~/.ssh/*",
@@ -25,14 +25,16 @@ _DEFAULT_BLACKLIST: list[str] = [
     "*/.git/config",
     "*/shadow",
     "*/passwd",
-]
+)
 
-# High-risk patterns that warrant CRITICAL level
-_CRITICAL_PATTERNS: list[str] = [
+_CRITICAL_PATTERNS: tuple[str, ...] = (
     r"/etc/(?:shadow|passwd|sudoers)",
     r"~?/\.ssh/(?:id_|authorized_keys|config)",
     r"~?/\.gnupg/",
-]
+)
+_RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+_RISK_BY_SCORE = {score: risk for risk, score in _RISK_ORDER.items()}
+_WRITE_OPERATIONS = {"write", "edit", "delete"}
 
 
 class FileRiskController:
@@ -52,9 +54,24 @@ class FileRiskController:
     ) -> None:
         self.enabled = enabled
         self._workspace = workspace
-        self._whitelist = whitelist_patterns or []
-        self._blacklist = blacklist_patterns or list(_DEFAULT_BLACKLIST)
+        self._whitelist = tuple(self._normalize(pattern) for pattern in (whitelist_patterns or ()))
+        self._blacklist = tuple(self._normalize(pattern) for pattern in (blacklist_patterns or _DEFAULT_BLACKLIST))
         self._critical_re = [re.compile(p) for p in _CRITICAL_PATTERNS]
+
+    @classmethod
+    def from_config(
+        cls,
+        *,
+        workspace: Path | None = None,
+        config: Any = None,
+    ) -> "FileRiskController":
+        """Build a controller from the optional orchestrator neuro-symbolic config."""
+        return cls(
+            workspace=workspace,
+            whitelist_patterns=getattr(config, "whitelist_patterns", None),
+            blacklist_patterns=getattr(config, "blacklist_patterns", None) or None,
+            enabled=getattr(config, "enabled", True),
+        )
 
     def assess_path(self, path: str) -> str:
         """Evaluate a file path and return a risk level string.
@@ -66,37 +83,21 @@ class FileRiskController:
 
         normalized = self._normalize(path)
 
-        # Critical patterns first
-        for pat in self._critical_re:
-            if pat.search(normalized):
+        for pattern in self._critical_re:
+            if pattern.search(normalized):
                 return "critical"
 
-        # Blacklist check
         for pattern in self._blacklist:
-            pattern = self._normalize(pattern)
-            if fnmatch.fnmatch(normalized, pattern):
-                return "high"
-            # Also match basename for non-path patterns like *.env
-            if fnmatch.fnmatch(Path(normalized).name, pattern):
+            if self._matches_pattern(normalized, pattern):
                 return "high"
 
-        # Whitelist: workspace paths are low risk
-        if self._workspace:
-            try:
-                ws = str(self._workspace.resolve())
-                resolved = str(Path(path).resolve())
-                if resolved.startswith(ws):
-                    return "low"
-            except (OSError, ValueError):
-                pass
+        if self._is_workspace_path(path):
+            return "low"
 
-        # Explicit whitelist patterns
         for pattern in self._whitelist:
-            pattern = self._normalize(pattern)
-            if fnmatch.fnmatch(normalized, pattern):
+            if self._matches_pattern(normalized, pattern):
                 return "low"
 
-        # Default: medium for unknown paths
         return "medium"
 
     def assess_operation(self, operation: str, paths: list[str]) -> str:
@@ -108,19 +109,28 @@ class FileRiskController:
         if not self.enabled:
             return "low"
 
-        risk_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-        reverse = {v: k for k, v in risk_order.items()}
-
         max_risk = 0
-        for p in paths:
-            level = self.assess_path(p)
-            max_risk = max(max_risk, risk_order.get(level, 0))
+        for path in paths:
+            level = self.assess_path(path)
+            max_risk = max(max_risk, _RISK_ORDER.get(level, 0))
 
-        # Write/edit operations bump medium → high
-        if operation in ("write", "edit", "delete") and max_risk == 1:
+        if operation in _WRITE_OPERATIONS and max_risk == _RISK_ORDER["medium"]:
             max_risk = 2
 
-        return reverse.get(max_risk, "medium")
+        return _RISK_BY_SCORE.get(max_risk, "medium")
+
+    def _is_workspace_path(self, path: str) -> bool:
+        if not self._workspace:
+            return False
+        try:
+            Path(path).resolve().relative_to(self._workspace.resolve())
+        except (OSError, ValueError):
+            return False
+        return True
+
+    @staticmethod
+    def _matches_pattern(path: str, pattern: str) -> bool:
+        return fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(Path(path).name, pattern)
 
     @staticmethod
     def _normalize(path: str) -> str:

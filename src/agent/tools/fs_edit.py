@@ -87,13 +87,7 @@ class EditFileTool(ContextAwareTool):
         """Assess risk based on target file path."""
         from src.agent.neuro_symbolic import FileRiskController
 
-        ns = self._ns_config
-        ctrl = FileRiskController(
-            workspace=self._workspace,
-            whitelist_patterns=ns.whitelist_patterns if ns else None,
-            blacklist_patterns=ns.blacklist_patterns if ns and ns.blacklist_patterns else None,
-            enabled=ns.enabled if ns else True,
-        )
+        ctrl = FileRiskController.from_config(workspace=self._workspace, config=self._ns_config)
         return ctrl.assess_operation("edit", [file_path] if file_path else [])
 
     @property
