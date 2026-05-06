@@ -42,12 +42,16 @@ class MemoryTierManager:
     is a bookkeeping operation, not a guarantee that SQLite is the archive source.
     """
 
-    def __init__(self, workspace: Path, orchestrator_config: OrchestratorConfig | None = None):
+    def __init__(
+        self,
+        workspace: Path,
+        orchestrator_config: OrchestratorConfig | None = None,
+    ) -> None:
         self._workspace = workspace
         self._config = orchestrator_config
         self._db: Database | None = None
         self._short_term_store: ShortTermMemoryStore | None = None
-        self._immediate_queues: dict[str, list[dict]] = {}
+        self._immediate_queues: dict[str, list[dict[str, Any]]] = {}
         self._flush_tasks: dict[str, asyncio.Task[None]] = {}
 
     @property

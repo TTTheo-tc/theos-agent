@@ -3,17 +3,19 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from src.memory.tiers import MemoryTierManager
 
 
 class _BlockingShortTermStore:
     def __init__(self) -> None:
-        self.calls: list[list[dict]] = []
+        self.calls: list[list[dict[str, Any]]] = []
         self.first_call_started = asyncio.Event()
         self._release_first = asyncio.Event()
 
-    async def write_messages(self, session_key: str, batch: list[dict]) -> None:
+    async def write_messages(self, session_key: str, batch: list[dict[str, Any]]) -> None:
+        del session_key
         self.calls.append(list(batch))
         if len(self.calls) == 1:
             self.first_call_started.set()
@@ -23,7 +25,7 @@ class _BlockingShortTermStore:
         self._release_first.set()
 
 
-async def test_memory_tier_flush_is_single_flight_and_preserves_new_entries():
+async def test_memory_tier_flush_is_single_flight_and_preserves_new_entries() -> None:
     cfg = SimpleNamespace(
         memory_tiers=SimpleNamespace(enabled=True, immediate_queue_size=2),
         event_store=SimpleNamespace(db_name="theos.db"),
