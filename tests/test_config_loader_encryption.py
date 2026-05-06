@@ -115,6 +115,34 @@ def test_load_config_raises_with_encrypted_values_but_no_key(tmp_path: Path):
         load_config(config_path)
 
 
+def test_load_config_raises_with_invalid_master_key_env(tmp_path: Path, monkeypatch):
+    """Invalid SECRETS_MASTER_KEY is a config error, not a silent plaintext fallback."""
+    import pytest
+
+    data = {"agents": {"defaults": {"model": "anthropic/claude-sonnet-4"}}}
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(data))
+    monkeypatch.setenv("SECRETS_MASTER_KEY", "not-hex")
+
+    with pytest.raises(RuntimeError, match="SECRETS_MASTER_KEY"):
+        load_config(config_path)
+
+
+def test_save_config_raises_with_invalid_master_key_env(tmp_path: Path, monkeypatch):
+    """Invalid SECRETS_MASTER_KEY should not make save_config write plaintext."""
+    import pytest
+
+    config_path = tmp_path / "config.json"
+    config = Config()
+    config.channels.telegram.token = "plain-token"
+    monkeypatch.setenv("SECRETS_MASTER_KEY", "not-hex")
+
+    with pytest.raises(RuntimeError, match="SECRETS_MASTER_KEY"):
+        save_config(config, config_path)
+
+    assert not config_path.exists()
+
+
 def test_load_config_raises_with_wrong_master_key(tmp_path: Path):
     """load_config raises if encrypted values can't be decrypted (wrong key)."""
     import pytest

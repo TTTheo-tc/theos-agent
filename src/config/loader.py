@@ -128,6 +128,8 @@ def _decrypt_config_data(data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
             )
     except RuntimeError:
         raise
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
     except Exception:
         logger.debug("Config secrets decryption unavailable")
     return data, False
@@ -146,6 +148,8 @@ def _encrypt_config_data(data: dict[str, Any]) -> dict[str, Any]:
                 "No master key available — config secrets saved as plaintext. "
                 "Set SECRETS_MASTER_KEY or install a keychain to enable encryption."
             )
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
     except Exception:
         logger.warning("Config secrets encryption failed, saving plaintext")
     return data
