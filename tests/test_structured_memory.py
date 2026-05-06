@@ -30,6 +30,179 @@ def test_coerce_metadata_tolerates_kg_metadata_shapes() -> None:
     assert _coerce_metadata(None) == {}
 
 
+async def test_structured_memory_store_migrates_legacy_json_to_kg(tmp_path: Path) -> None:
+    legacy_dir = tmp_path / "memory" / "structured"
+    tasks_dir = legacy_dir / "tasks"
+    rules_dir = legacy_dir / "rules"
+    research_dir = legacy_dir / "research_notes"
+    tasks_dir.mkdir(parents=True)
+    rules_dir.mkdir(parents=True)
+    research_dir.mkdir(parents=True)
+
+    (tasks_dir / "task-old.json").write_text(
+        json.dumps(
+            {
+                "id": "task-old",
+                "session_key": "cli:test",
+                "status": "success",
+                "user_message": "Legacy task about auth refactor",
+                "response_summary": "Refactored auth",
+                "tools_used": ["edit_file"],
+                "routed_skills": ["coding"],
+                "routing_domains": ["coding/auth"],
+                "source_refs": ["src/auth.py"],
+                "is_latest_success": False,
+                "superseded_by": "task-new",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tasks_dir / "broken.json").write_text("{bad json", encoding="utf-8")
+    (rules_dir / "rule-old.json").write_text(
+        json.dumps(
+            {
+                "id": "rule-old",
+                "rule_text": "Always run auth tests before committing.",
+                "domains": ["coding/auth"],
+                "occurrence_count": 2,
+                "source_task_ids": ["task-old"],
+                "confidence": 0.8,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (research_dir / "research-old.json").write_text(
+        json.dumps(
+            {
+                "id": "research-old",
+                "title": "Auth migration research",
+                "summary": "Legacy auth research summary",
+                "domains": ["coding/auth"],
+                "tags": ["auth"],
+                "task_memory_id": "task-old",
+                "session_key": "cli:test",
+                "source_refs": ["https://example.com/auth"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = StructuredMemoryStore(tmp_path)
+    try:
+        await store.ensure_kg()
+        assert store._kg is not None
+        task_node = await store.get_task_memory("task-old")
+        rule_node = await store.get_domain_rule("rule-old")
+        research_node = await store.get_research_note("research-old")
+
+        assert task_node is not None
+        assert rule_node is not None
+        assert research_node is not None
+        assert task_node["superseded_by"] == "task-new"
+        assert "coding/auth" in rule_node["domains"]
+        assert _coerce_metadata(rule_node["metadata"])["source_task_ids"] == ["task-old"]
+
+        related = await store._kg.find_related("task-old")
+        assert {(item["to_id"], item["relation"]) for item in related} == {
+            ("rule-old", "derived"),
+            ("research-old", "produced"),
+        }
+        results = await store.search("auth migration", max_results=5)
+        assert any(item["id"] == "research-old" for item in results)
+        assert not legacy_dir.exists()
+        assert (tmp_path / "memory" / "structured_backup").is_dir()
+    finally:
+        await store.close()
+
+
+async def test_structured_memory_store_migrates_legacy_coercion_edges(tmp_path: Path) -> None:
+    legacy_dir = tmp_path / "memory" / "structured"
+    tasks_dir = legacy_dir / "tasks"
+    rules_dir = legacy_dir / "rules"
+    research_dir = legacy_dir / "research_notes"
+    tasks_dir.mkdir(parents=True)
+    rules_dir.mkdir(parents=True)
+    research_dir.mkdir(parents=True)
+
+    (tasks_dir / "numeric-task.json").write_text(
+        json.dumps(
+            {
+                "id": 0,
+                "status": "success",
+                "user_message": "Legacy numeric id task",
+                "tools_used": "edit_file",
+                "routed_skills": None,
+                "routing_domains": "coding/auth",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tasks_dir / "superseded-by-zero.json").write_text(
+        json.dumps(
+            {
+                "id": "task-sup",
+                "status": "success",
+                "user_message": "Legacy task superseded by numeric id",
+                "superseded_by": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (rules_dir / "numeric-rule.json").write_text(
+        json.dumps(
+            {
+                "id": 123,
+                "rule_text": "Always preserve legacy IDs during migration.",
+                "domains": "coding/auth",
+                "occurrence_count": "not-an-int",
+                "source_task_ids": [0, None, ""],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (research_dir / "null-lists.json").write_text(
+        json.dumps(
+            {
+                "title": "Legacy note with null lists",
+                "summary": "Legacy note should migrate with blank tags/domains.",
+                "domains": None,
+                "tags": None,
+                "task_memory_id": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = StructuredMemoryStore(tmp_path)
+    try:
+        await store.ensure_kg()
+        assert store._kg is not None
+
+        task_node = await store.get_task_memory("0")
+        superseded_task = await store.get_task_memory("task-sup")
+        rule_node = await store.get_domain_rule("123")
+        note_node = await store.get_research_note("null-lists")
+
+        assert task_node is not None
+        assert task_node["tags"] == "edit_file"
+        assert task_node["domains"] == "coding/auth"
+        assert superseded_task is not None
+        assert superseded_task["superseded_by"] == "0"
+        assert rule_node is not None
+        assert rule_node["domains"] == "coding/auth"
+        assert note_node is not None
+        assert note_node["tags"] == ""
+        assert note_node["domains"] == ""
+
+        related = await store._kg.find_related("0")
+        assert {(item["to_id"], item["relation"]) for item in related} == {
+            ("123", "derived"),
+            ("null-lists", "produced"),
+        }
+    finally:
+        await store.close()
+
+
 async def test_structured_memory_store_creates_task_rule_and_research_note(tmp_path: Path) -> None:
     store = StructuredMemoryStore(tmp_path)
     try:

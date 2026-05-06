@@ -42,6 +42,38 @@ from src.utils.tokenize import tokenize_query
 
 _NODE_TYPE_ALIASES = {"research_note": "research"}
 _DISPLAY_TYPE_ALIASES = {"research": "research_note"}
+_TASK_METADATA_FIELDS = (
+    "session_key",
+    "status",
+    "user_message",
+    "tools_used",
+    "routed_skills",
+    "selected_primary",
+    "usage",
+    "duration_ms",
+    "source_refs",
+    "artifacts",
+    "tests",
+    "is_latest_success",
+    "superseded_by",
+    "superseded_at",
+    "response_summary",
+)
+_RULE_METADATA_FIELDS = (
+    "rule_text",
+    "selected_primary",
+    "source_task_ids",
+    "occurrence_count",
+    "first_seen_at",
+    "last_seen_at",
+    "confidence",
+)
+_RESEARCH_METADATA_FIELDS = (
+    "task_memory_id",
+    "session_key",
+    "summary",
+    "source_refs",
+)
 
 
 @dataclass
@@ -95,11 +127,11 @@ def _dedupe(items: list[str]) -> list[str]:
     return list(dict.fromkeys(items))
 
 
-def _clean_deduped_strings(items: list[str] | None) -> list[str]:
+def _clean_deduped_strings(items: list[Any] | None) -> list[str]:
     values: list[str] = []
     seen: set[str] = set()
     for item in items or []:
-        if not item:
+        if item is None:
             continue
         value = str(item).strip()
         if not value or value in seen:
@@ -107,6 +139,52 @@ def _clean_deduped_strings(items: list[str] | None) -> list[str]:
         seen.add(value)
         values.append(value)
     return values
+
+
+def _legacy_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return _clean_deduped_strings(value)
+    if isinstance(value, str):
+        return _clean_deduped_strings([value])
+    return []
+
+
+def _legacy_metadata(data: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+    return {key: data[key] for key in fields if key in data}
+
+
+def _legacy_int(value: Any, default: int = 1) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _legacy_id(data: dict[str, Any], path: Path) -> str:
+    value = data.get("id", path.stem)
+    return path.stem if value is None else str(value)
+
+
+def _legacy_ref(value: Any) -> str | None:
+    if value is None:
+        return None
+    ref = str(value).strip()
+    return ref or None
+
+
+def _legacy_json_files(directory: Path) -> list[tuple[Path, dict[str, Any]]]:
+    if not directory.is_dir():
+        return []
+
+    payloads: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted(directory.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(data, dict):
+            payloads.append((path, data))
+    return payloads
 
 
 def _search_node_types(object_type: str) -> list[str | None]:
@@ -809,148 +887,91 @@ class StructuredMemoryStore:
     ) -> None:
         """Migrate legacy JSON files to KG nodes and rename the directory."""
         logger.info("Migrating legacy JSON structured memory -> KG: {}", legacy_dir)
-        tasks_dir = legacy_dir / "tasks"
-        rules_dir = legacy_dir / "rules"
-        research_dir = legacy_dir / "research_notes"
-
-        # --- tasks ---
-        if tasks_dir.is_dir():
-            for path in sorted(tasks_dir.glob("*.json")):
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                tid = data.get("id", path.stem)
-                title = data.get("response_summary") or first_sentence(data.get("user_message", ""))
-                content = (data.get("user_message") or "")[:300]
-                tools = data.get("tools_used", [])
-                skills = data.get("routed_skills", [])
-                domains = data.get("routing_domains", [])
-                meta = {
-                    k: data[k]
-                    for k in (
-                        "session_key",
-                        "status",
-                        "user_message",
-                        "tools_used",
-                        "routed_skills",
-                        "selected_primary",
-                        "usage",
-                        "duration_ms",
-                        "source_refs",
-                        "artifacts",
-                        "tests",
-                        "is_latest_success",
-                        "superseded_by",
-                        "superseded_at",
-                        "response_summary",
-                    )
-                    if k in data
-                }
-                await kg.add_node(
-                    node_type="task",
-                    title=title or tid,
-                    content=content,
-                    tags=tools + skills,
-                    domains=domains,
-                    importance=compute_importance("task", content),
-                    metadata=meta,
-                    node_id=tid,
-                )
-                # If superseded_by is set, mark via supersede
-                if data.get("superseded_by"):
-                    try:
-                        await kg.supersede(tid, data["superseded_by"])
-                    except Exception:
-                        pass
-
-        # --- rules ---
-        if rules_dir.is_dir():
-            for path in sorted(rules_dir.glob("*.json")):
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                rid = data.get("id", path.stem)
-                rule_text = data.get("rule_text", "")
-                domains = data.get("domains", [])
-                occ = data.get("occurrence_count", 1)
-                meta = {
-                    k: data[k]
-                    for k in (
-                        "rule_text",
-                        "selected_primary",
-                        "source_task_ids",
-                        "occurrence_count",
-                        "first_seen_at",
-                        "last_seen_at",
-                        "confidence",
-                    )
-                    if k in data
-                }
-                await kg.add_node(
-                    node_type="rule",
-                    title=rule_text,
-                    content=rule_text,
-                    tags=[],
-                    domains=domains,
-                    importance=compute_importance("rule", rule_text, occ),
-                    metadata=meta,
-                    node_id=rid,
-                )
-                # Create edges: task -> rule
-                for src_tid in data.get("source_task_ids", []):
-                    try:
-                        await kg.add_edge(src_tid, rid, "derived")
-                    except Exception:
-                        pass
-
-        # --- research notes ---
-        if research_dir.is_dir():
-            for path in sorted(research_dir.glob("*.json")):
-                try:
-                    data = json.loads(path.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                nid = data.get("id", path.stem)
-                title = data.get("title", "Research")
-                summary = data.get("summary", "")
-                domains = data.get("domains", [])
-                tags = data.get("tags", [])
-                meta = {
-                    k: data[k]
-                    for k in (
-                        "task_memory_id",
-                        "session_key",
-                        "summary",
-                        "source_refs",
-                    )
-                    if k in data
-                }
-                await kg.add_node(
-                    node_type="research",
-                    title=title,
-                    content=summary[:500],
-                    tags=tags,
-                    domains=domains,
-                    importance=compute_importance("research", summary),
-                    metadata=meta,
-                    node_id=nid,
-                )
-                # Edge: task -> research
-                task_id = data.get("task_memory_id")
-                if task_id:
-                    try:
-                        await kg.add_edge(task_id, nid, "produced")
-                    except Exception:
-                        pass
-
-        # Rebuild FTS to ensure all migrated nodes are indexed
+        await self._migrate_legacy_tasks(kg, legacy_dir / "tasks")
+        await self._migrate_legacy_rules(kg, legacy_dir / "rules")
+        await self._migrate_legacy_research_notes(kg, legacy_dir / "research_notes")
         await search.rebuild_fts()
+        self._backup_legacy_dir(legacy_dir)
+        logger.info("Legacy JSON migrated. Backup at {}", legacy_dir.parent / "structured_backup")
 
-        # Rename legacy dir to backup
+    async def _migrate_legacy_tasks(self, kg: KnowledgeGraph, tasks_dir: Path) -> None:
+        for path, data in _legacy_json_files(tasks_dir):
+            task_id = _legacy_id(data, path)
+            user_message = str(data.get("user_message") or "")
+            title = str(data.get("response_summary") or first_sentence(user_message) or task_id)
+            content = user_message[:300]
+            tools = _legacy_list(data.get("tools_used"))
+            skills = _legacy_list(data.get("routed_skills"))
+
+            await kg.add_node(
+                node_type="task",
+                title=title,
+                content=content,
+                tags=tools + skills,
+                domains=_legacy_list(data.get("routing_domains")),
+                importance=compute_importance("task", content),
+                metadata=_legacy_metadata(data, _TASK_METADATA_FIELDS),
+                node_id=task_id,
+            )
+            superseded_by = _legacy_ref(data.get("superseded_by"))
+            if superseded_by:
+                try:
+                    await kg.supersede(task_id, superseded_by)
+                except Exception:
+                    pass
+
+    async def _migrate_legacy_rules(self, kg: KnowledgeGraph, rules_dir: Path) -> None:
+        for path, data in _legacy_json_files(rules_dir):
+            rule_id = _legacy_id(data, path)
+            rule_text = str(data.get("rule_text") or "")
+            occurrence_count = _legacy_int(data.get("occurrence_count"))
+
+            await kg.add_node(
+                node_type="rule",
+                title=rule_text,
+                content=rule_text,
+                tags=[],
+                domains=_legacy_list(data.get("domains")),
+                importance=compute_importance("rule", rule_text, occurrence_count),
+                metadata=_legacy_metadata(data, _RULE_METADATA_FIELDS),
+                node_id=rule_id,
+            )
+            for task_id in _legacy_list(data.get("source_task_ids")):
+                try:
+                    await kg.add_edge(task_id, rule_id, "derived")
+                except Exception:
+                    pass
+
+    async def _migrate_legacy_research_notes(
+        self,
+        kg: KnowledgeGraph,
+        research_dir: Path,
+    ) -> None:
+        for path, data in _legacy_json_files(research_dir):
+            note_id = _legacy_id(data, path)
+            title = str(data.get("title") or "Research")
+            summary = str(data.get("summary") or "")
+
+            await kg.add_node(
+                node_type="research",
+                title=title,
+                content=summary[:500],
+                tags=_legacy_list(data.get("tags")),
+                domains=_legacy_list(data.get("domains")),
+                importance=compute_importance("research", summary),
+                metadata=_legacy_metadata(data, _RESEARCH_METADATA_FIELDS),
+                node_id=note_id,
+            )
+            task_id = _legacy_ref(data.get("task_memory_id"))
+            if task_id:
+                try:
+                    await kg.add_edge(task_id, note_id, "produced")
+                except Exception:
+                    pass
+
+    @staticmethod
+    def _backup_legacy_dir(legacy_dir: Path) -> None:
         backup_dir = legacy_dir.parent / "structured_backup"
         if backup_dir.exists():
             shutil.rmtree(backup_dir)
         shutil.move(str(legacy_dir), str(backup_dir))
-        logger.info("Legacy JSON migrated. Backup at {}", backup_dir)
