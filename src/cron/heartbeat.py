@@ -127,6 +127,10 @@ class HeartbeatService:
     def stop(self) -> None:
         """Stop the heartbeat service."""
         self._running = False
+        self._cancel_task()
+
+    def _cancel_task(self) -> None:
+        """Cancel and clear the background heartbeat task."""
         if self._task:
             self._task.cancel()
             self._task = None

@@ -39,6 +39,25 @@ async def test_start_is_idempotent(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_stop_clears_background_task_reference(tmp_path) -> None:
+    provider = DummyProvider([])
+    service = HeartbeatService(
+        workspace=tmp_path,
+        provider=provider,
+        model="openai/gpt-4o-mini",
+        interval_s=9999,
+        enabled=True,
+    )
+
+    await service.start()
+    assert service._task is not None
+
+    service.stop()
+    assert service._task is None
+    await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
 async def test_decide_returns_skip_when_no_tool_call(tmp_path) -> None:
     provider = DummyProvider([LLMResponse(content="no tool call", tool_calls=[])])
     service = HeartbeatService(
