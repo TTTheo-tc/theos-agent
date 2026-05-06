@@ -48,7 +48,7 @@ class MemoryStore:
         tmp.replace(self.memory_file)
 
     def append_history(self, entry: str) -> None:
-        with open(self.history_file, "a", encoding="utf-8") as f:
+        with self.history_file.open("a", encoding="utf-8") as f:
             f.write(entry.rstrip() + "\n\n")
 
     def remember(self, note: str, *, section_title: str = _DEFAULT_DIRECTIVES_SECTION) -> bool:
@@ -121,7 +121,7 @@ class MemoryStore:
     async def compact_messages(
         self,
         messages: list[dict[str, Any]],
-        provider: "LLMProvider",
+        provider: LLMProvider,
         model: str,
     ) -> str:
         """Summarize a list of messages into a compact text summary.
