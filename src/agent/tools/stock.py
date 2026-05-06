@@ -49,7 +49,7 @@ class StockAnalysisTool(Tool):
         provider_keys: dict[str, str],
         brave_api_key: str | None = None,
         channel_env: dict[str, str] | None = None,
-    ):
+    ) -> None:
         self._stock_config = stock_config
         self._provider_keys = provider_keys
         self._brave_api_key = brave_api_key
