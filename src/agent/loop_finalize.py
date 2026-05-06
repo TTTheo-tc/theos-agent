@@ -467,9 +467,7 @@ class TurnFinalizer:
             }
             if turn_id:
                 user_entry["turn_id"] = turn_id
-            session.messages.append(user_entry)
-            if memory_tiers is not None:
-                memory_tiers.buffer_entry(session.key, user_entry)
+            self._append_session_entry(session, user_entry, memory_tiers)
 
         for m in messages[skip:]:
             entry = {k: v for k, v in m.items() if k != "reasoning_content"}
@@ -497,13 +495,19 @@ class TurnFinalizer:
             if role == "assistant" and usage and m is messages[-1]:
                 entry["usage"] = usage
 
-            session.messages.append(entry)
-
-            # Three-tier memory: buffer into immediate queue
-            if memory_tiers is not None:
-                memory_tiers.buffer_entry(session.key, entry)
+            self._append_session_entry(session, entry, memory_tiers)
 
         session.updated_at = datetime.now()
+
+    def _append_session_entry(
+        self,
+        session: Session,
+        entry: dict[str, Any],
+        memory_tiers: "MemoryTierManager | None",
+    ) -> None:
+        session.messages.append(entry)
+        if memory_tiers is not None:
+            memory_tiers.buffer_entry(session.key, entry)
 
     def _skip_persisted_user_content(self, content: Any) -> bool:
         return isinstance(content, str) and (
