@@ -17,7 +17,7 @@ from loguru import logger
 
 from src.agent.loop_detector import LoopDetector
 from src.agent.tools.registry import ToolRegistry
-from src.providers.base import LLMProvider
+from src.providers.base import LLMProvider, ToolCallRequest
 from src.safety.leak_detector import scrub_credentials
 from src.utils.text import strip_think, tool_hint
 from src.utils.usage import merge_usage
@@ -129,6 +129,53 @@ def _cancel_preflight_tasks(tasks: dict[str, asyncio.Task]) -> None:
     for task in tasks.values():
         task.cancel()
     tasks.clear()
+
+
+def _tool_call_dicts(tool_calls: list[ToolCallRequest]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": tc.id,
+            "type": "function",
+            "function": {
+                "name": tc.name,
+                "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+            },
+        }
+        for tc in tool_calls
+    ]
+
+
+def _plan_unique_tool_calls(
+    tool_calls: list[ToolCallRequest],
+    tools: ToolRegistry,
+) -> tuple[list[int], dict[int, int]]:
+    """Return unique call indices plus duplicate-to-first index mapping."""
+    dedup_map: dict[str, int] = {}
+    unique_indices: list[int] = []
+    duplicate_map: dict[int, int] = {}
+
+    for i, tc in enumerate(tool_calls):
+        tool_obj = tools.get(tc.name)
+        if tool_obj and tool_obj.dedupe_within_turn:
+            sig = f"{tc.name}:{json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False)}"
+            if sig in dedup_map:
+                duplicate_map[i] = dedup_map[sig]
+                logger.info("[ToolLoop] Dedup: call {} is duplicate of {}", i, dedup_map[sig])
+                continue
+            dedup_map[sig] = i
+        unique_indices.append(i)
+
+    return unique_indices, duplicate_map
+
+
+def _all_parallel_safe(tool_calls: list[ToolCallRequest], tools: ToolRegistry) -> bool:
+    if len(tool_calls) <= 1:
+        return False
+    for tc in tool_calls:
+        tool_obj = tools.get(tc.name)
+        if tool_obj is None or not tool_obj.parallel_safe:
+            return False
+    return True
 
 
 def _default_add_tool_result(
@@ -312,17 +359,7 @@ async def run_tool_loop(
                     await on_progress(clean)
                 await on_progress(tool_hint(response.tool_calls), tool_hint=True)
 
-            tool_call_dicts = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.name,
-                        "arguments": json.dumps(tc.arguments, ensure_ascii=False),
-                    },
-                }
-                for tc in response.tool_calls
-            ]
+            tool_call_dicts = _tool_call_dicts(response.tool_calls)
 
             messages = _add_assistant(
                 messages,
@@ -332,33 +369,12 @@ async def run_tool_loop(
             )
 
             # -- Dedup: collapse identical calls for opt-in tools --
-            dedup_map: dict[str, int] = {}  # signature -> index of first occurrence
-            unique_indices: list[int] = []
-            duplicate_map: dict[int, int] = {}  # duplicate_index -> first_index
-
-            for i, tc in enumerate(response.tool_calls):
-                tool_obj = tools.get(tc.name)
-                if tool_obj and tool_obj.dedupe_within_turn:
-                    sig = (
-                        f"{tc.name}:"
-                        f"{json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False)}"
-                    )
-                    if sig in dedup_map:
-                        duplicate_map[i] = dedup_map[sig]
-                        logger.info(
-                            "[ToolLoop] Dedup: call {} is duplicate of {}", i, dedup_map[sig]
-                        )
-                        continue
-                    dedup_map[sig] = i
-                unique_indices.append(i)
+            unique_indices, duplicate_map = _plan_unique_tool_calls(response.tool_calls, tools)
 
             calls_to_execute = [response.tool_calls[i] for i in unique_indices]
 
             # -- Parallel branch: run all tools concurrently when safe --
-            all_parallel = len(calls_to_execute) > 1 and all(
-                tools.get(tc.name) is not None and tools.get(tc.name).parallel_safe
-                for tc in calls_to_execute
-            )
+            all_parallel = _all_parallel_safe(calls_to_execute, tools)
 
             executed_results: dict[int, str] = {}
 

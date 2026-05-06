@@ -411,6 +411,40 @@ async def test_dedup_different_args_not_collapsed():
     assert tool_msgs[0]["content"] != tool_msgs[1]["content"]
 
 
+async def test_dedup_identical_args_with_different_key_order():
+    """Dedup signatures normalize argument key order."""
+    counting = _CountingTool()
+    registry = _ParallelRegistry({"counting": counting})
+
+    provider = _make_provider(
+        LLMResponse(
+            content="same object",
+            tool_calls=[
+                ToolCallRequest(id="a", name="counting", arguments={"a": 1, "b": 2}),
+                ToolCallRequest(id="b", name="counting", arguments={"b": 2, "a": 1}),
+            ],
+            finish_reason="tool_calls",
+        ),
+        LLMResponse(content="done", finish_reason="stop"),
+    )
+
+    _, used, msgs, _ = await run_tool_loop(
+        provider=provider,
+        tools=registry,
+        messages=[{"role": "user", "content": "go"}],
+        model="test",
+        temperature=0,
+        max_tokens=1024,
+        max_iterations=5,
+    )
+
+    assert counting.call_count == 1
+    assert used == ["counting", "counting"]
+    tool_msgs = [m for m in msgs if m.get("role") == "tool"]
+    assert len(tool_msgs) == 2
+    assert tool_msgs[0]["content"] == tool_msgs[1]["content"]
+
+
 async def test_no_dedup_for_non_opt_in_tool():
     """Identical calls to a tool without dedupe_within_turn execute every time."""
     counting = _CountingNoDedupTool()

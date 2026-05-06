@@ -95,6 +95,49 @@ async def test_tool_output_injection_is_blocked_before_reentering_context():
     assert tool_messages[0]["content"] == "[BLOCKED: prompt injection detected]"
 
 
+async def test_assistant_tool_call_message_format():
+    provider = AsyncMock()
+    provider.chat = AsyncMock(
+        side_effect=[
+            LLMResponse(
+                content="checking",
+                tool_calls=[
+                    ToolCallRequest(
+                        id="call_1",
+                        name="test",
+                        arguments={"path": "/tmp/a.txt"},
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            LLMResponse(content="done", finish_reason="stop"),
+        ]
+    )
+    messages = [{"role": "user", "content": "hi"}]
+
+    await run_tool_loop(
+        provider=provider,
+        tools=MockToolRegistry(),
+        messages=messages,
+        model="test-model",
+        temperature=0.7,
+        max_tokens=4096,
+        max_iterations=5,
+    )
+
+    assistant_calls = [msg for msg in messages if msg.get("role") == "assistant" and msg.get("tool_calls")]
+    assert assistant_calls[0]["tool_calls"] == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "test",
+                "arguments": '{"path": "/tmp/a.txt"}',
+            },
+        }
+    ]
+
+
 def test_scrub_credentials_applied_to_log_args():
     args = '{"headers": {"Authorization": "Bearer sk-ant-secret12345678"}}'
     scrubbed = scrub_credentials(args[:200])
