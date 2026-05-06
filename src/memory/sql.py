@@ -19,6 +19,8 @@ from typing import Any
 
 from src.store.database import Database
 
+_MESSAGE_COLUMNS = "id, session_key, role, content, timestamp, metadata, consolidated"
+
 
 class ShortTermMemoryStore:
     """Read/write short-term conversation messages in ``memory_short_term``.
@@ -53,7 +55,7 @@ class ShortTermMemoryStore:
     async def get_recent(self, session_key: str, *, limit: int = 200) -> list[dict[str, Any]]:
         """Return the most recent messages for a session."""
         rows = await self._db.fetchall(
-            "SELECT id, session_key, role, content, timestamp, metadata, consolidated"
+            f"SELECT {_MESSAGE_COLUMNS}"
             " FROM memory_short_term WHERE session_key = ? ORDER BY id DESC LIMIT ?",
             (session_key, limit),
         )
@@ -64,7 +66,7 @@ class ShortTermMemoryStore:
     ) -> list[dict[str, Any]]:
         """Return messages not yet consolidated, oldest first."""
         rows = await self._db.fetchall(
-            "SELECT id, session_key, role, content, timestamp, metadata, consolidated"
+            f"SELECT {_MESSAGE_COLUMNS}"
             " FROM memory_short_term WHERE session_key = ? AND consolidated = 0 ORDER BY id LIMIT ?",
             (session_key, limit),
         )
@@ -98,6 +100,20 @@ class ShortTermMemoryStore:
             "role": row[2],
             "content": row[3],
             "timestamp": row[4],
-            "metadata": json.loads(row[5]) if row[5] else {},
+            "metadata": _metadata_dict(row[5]),
             "consolidated": bool(row[6]),
         }
+
+
+def _metadata_dict(value: Any) -> dict[str, Any]:
+    if not value:
+        return {}
+    if isinstance(value, dict):
+        return dict(value)
+    if not isinstance(value, str):
+        return {}
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}

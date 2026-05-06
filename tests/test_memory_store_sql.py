@@ -35,6 +35,38 @@ async def test_write_and_read(store: ShortTermMemoryStore):
     assert recent[1]["content"] == "hi there"
 
 
+async def test_read_tolerates_invalid_metadata(store: ShortTermMemoryStore):
+    await store.write_messages(
+        "sess1",
+        [{"role": "user", "content": "hello", "timestamp": "2025-01-01T00:00:00"}],
+    )
+    recent = await store.get_recent("sess1")
+    await store._db.execute(
+        "UPDATE memory_short_term SET metadata = ? WHERE id = ?",
+        ("{bad json", recent[0]["id"]),
+    )
+
+    reread = await store.get_recent("sess1")
+
+    assert reread[0]["metadata"] == {}
+
+
+async def test_read_ignores_non_object_metadata(store: ShortTermMemoryStore):
+    await store.write_messages(
+        "sess1",
+        [{"role": "user", "content": "hello", "timestamp": "2025-01-01T00:00:00"}],
+    )
+    recent = await store.get_recent("sess1")
+    await store._db.execute(
+        "UPDATE memory_short_term SET metadata = ? WHERE id = ?",
+        ('["not", "object"]', recent[0]["id"]),
+    )
+
+    reread = await store.get_recent("sess1")
+
+    assert reread[0]["metadata"] == {}
+
+
 async def test_get_recent_respects_limit(store: ShortTermMemoryStore):
     messages = [
         {"role": "user", "content": f"msg{i}", "timestamp": f"2025-01-01T00:00:{i:02d}"}
