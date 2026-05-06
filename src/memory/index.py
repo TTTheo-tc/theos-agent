@@ -115,11 +115,11 @@ class MemoryIndex:
         params.append(max_results)
 
         rows = await self._db.fetchall(
-            f"SELECT source, section, content, timestamp, rank"
-            f" FROM memory_fts"
+            "SELECT source, section, content, timestamp, rank"
+            " FROM memory_fts"
             f" WHERE memory_fts MATCH ?{source_filter}"
-            f" ORDER BY rank"
-            f" LIMIT ?",
+            " ORDER BY rank"
+            " LIMIT ?",
             tuple(params),
         )
 
