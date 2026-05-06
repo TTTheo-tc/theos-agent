@@ -5,8 +5,8 @@ Single owner for group/global/genver workspace rules.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from src.utils.helpers import ensure_dir, safe_filename
 
