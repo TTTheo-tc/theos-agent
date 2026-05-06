@@ -43,6 +43,17 @@ def _error_response_from_exception(exc: Exception) -> LLMResponse:
     )
 
 
+async def _sleep_before_retry(provider: LLMProvider, attempt: int) -> None:
+    delay = _backoff_delay(attempt)
+    logger.debug(
+        "Retrying provider %s (attempt %d, delay %.2fs)",
+        provider.get_default_model(),
+        attempt,
+        delay,
+    )
+    await asyncio.sleep(delay)
+
+
 class RecoveryProvider(LLMProvider):
     """Wraps a primary provider with retry logic and ordered fallback providers.
 
@@ -264,11 +275,4 @@ class RecoveryProvider(LLMProvider):
                 return response, True
             # action is RETRY
             attempt += 1
-            delay = _backoff_delay(attempt)
-            logger.debug(
-                "Retrying provider %s (attempt %d, delay %.2fs)",
-                provider.get_default_model(),
-                attempt,
-                delay,
-            )
-            await asyncio.sleep(delay)
+            await _sleep_before_retry(provider, attempt)
