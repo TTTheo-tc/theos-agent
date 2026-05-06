@@ -15,6 +15,57 @@ if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
 
 
+def _resolve_edit_path(
+    target: str,
+    workspace: Path | None,
+    allowed_dir: Path | None,
+) -> tuple[Path | None, str | None]:
+    raw_policy_error = policy_error(target, kind="File edit")
+    if raw_policy_error:
+        return None, raw_policy_error
+    try:
+        fp = _resolve_path(target, workspace, allowed_dir)
+    except PermissionError as e:
+        return None, f"Error: {e}"
+    resolved_policy_error = policy_error(str(fp), kind="File edit")
+    if resolved_policy_error:
+        return None, resolved_policy_error
+    if not fp.exists():
+        return None, f"Error: File not found: {target}"
+    return fp, None
+
+
+def _read_text_with_encoding(fp: Path) -> tuple[str, str]:
+    try:
+        from charset_normalizer import from_bytes
+
+        raw = fp.read_bytes()
+        result = from_bytes(raw).best()
+        encoding = result.encoding if result else "utf-8"
+        content = str(result) if result else raw.decode("utf-8")
+        return content, encoding
+    except ImportError:
+        return fp.read_text(encoding="utf-8"), "utf-8"
+
+
+def _replace_content(
+    content: str,
+    old: str,
+    new: str,
+    *,
+    replace_all: bool,
+) -> tuple[str, int]:
+    if replace_all:
+        return content.replace(old, new), content.count(old)
+    return content.replace(old, new, 1), 1
+
+
+def _edit_values(edit: dict) -> tuple[str, str, bool]:
+    old = edit.get("old_string") or edit.get("old_text", "")
+    new = edit.get("new_string") or edit.get("new_text", "")
+    return old, new, edit.get("replace_all", False)
+
+
 class EditFileTool(ContextAwareTool):
     """Edit a file by replacing old_string with new_string."""
 
@@ -95,7 +146,6 @@ class EditFileTool(ContextAwareTool):
         **kwargs: Any,
     ) -> str:
         session_key = _context.session_key if _context else None
-        # Accept both Claude Code style (old_string) and legacy (old_text)
         target = file_path or path
         old = old_string if old_string is not None else old_text
         new = new_string if new_string is not None else new_text
@@ -104,32 +154,16 @@ class EditFileTool(ContextAwareTool):
         if old is None or new is None:
             return "Error: old_string and new_string are required"
         try:
-            raw_policy_error = policy_error(target, kind="File edit")
-            if raw_policy_error:
-                return raw_policy_error
-            fp = _resolve_path(target, self._workspace, self._allowed_dir)
-            resolved_policy_error = policy_error(str(fp), kind="File edit")
-            if resolved_policy_error:
-                return resolved_policy_error
-            if not fp.exists():
-                return f"Error: File not found: {target}"
+            fp, error = _resolve_edit_path(target, self._workspace, self._allowed_dir)
+            if error:
+                return error
+            assert fp is not None
 
-            # --- mtime staleness detection ---
             staleness = WriteFileTool.check_staleness(session_key, str(fp))
             if staleness:
                 return staleness
 
-            # --- encoding detection ---
-            try:
-                from charset_normalizer import from_bytes
-
-                raw = fp.read_bytes()
-                result = from_bytes(raw).best()
-                encoding = result.encoding if result else "utf-8"
-                content = str(result) if result else raw.decode("utf-8")
-            except ImportError:
-                encoding = "utf-8"
-                content = fp.read_text(encoding="utf-8")
+            content, encoding = _read_text_with_encoding(fp)
 
             if old not in content:
                 return self._not_found_message(old, content, target)
@@ -141,17 +175,10 @@ class EditFileTool(ContextAwareTool):
                     "Use replace_all=true or provide more context to make it unique."
                 )
 
-            if replace_all:
-                new_content = content.replace(old, new)
-            else:
-                new_content = content.replace(old, new, 1)
-
+            new_content, replaced = _replace_content(content, old, new, replace_all=replace_all)
             fp.write_text(new_content, encoding=encoding)
 
-            # Update read state so subsequent edits/writes see current mtime.
             WriteFileTool.record_read(session_key, str(fp), fp.stat().st_mtime)
-
-            replaced = count if replace_all else 1
             return f"Successfully edited {fp} ({replaced} replacement{'s' if replaced > 1 else ''})"
         except PermissionError as e:
             return f"Error: {e}"
@@ -253,56 +280,33 @@ class MultiEditTool(ContextAwareTool):
         if not edits:
             return "Error: edits list is required"
         try:
-            raw_policy_error = policy_error(target, kind="File edit")
-            if raw_policy_error:
-                return raw_policy_error
-            fp = _resolve_path(target, self._workspace, self._allowed_dir)
-            resolved_policy_error = policy_error(str(fp), kind="File edit")
-            if resolved_policy_error:
-                return resolved_policy_error
-            if not fp.exists():
-                return f"Error: File not found: {target}"
+            fp, error = _resolve_edit_path(target, self._workspace, self._allowed_dir)
+            if error:
+                return error
+            assert fp is not None
 
-            # --- mtime staleness detection ---
             staleness = WriteFileTool.check_staleness(session_key, str(fp))
             if staleness:
                 return staleness
 
-            # --- encoding detection ---
-            try:
-                from charset_normalizer import from_bytes
-
-                raw = fp.read_bytes()
-                result = from_bytes(raw).best()
-                encoding = result.encoding if result else "utf-8"
-                content = str(result) if result else raw.decode("utf-8")
-            except ImportError:
-                encoding = "utf-8"
-                content = fp.read_text(encoding="utf-8")
+            content, encoding = _read_text_with_encoding(fp)
 
             applied = 0
 
             for i, edit in enumerate(edits):
-                old = edit.get("old_string") or edit.get("old_text", "")
-                new = edit.get("new_string") or edit.get("new_text", "")
-                do_all = edit.get("replace_all", False)
+                old, new, replace_all = _edit_values(edit)
 
                 if old not in content:
                     return f"Error: edit[{i}] old_string not found (after {applied} edits applied). Aborting."
                 count = content.count(old)
-                if not do_all and count > 1:
+                if not replace_all and count > 1:
                     return f"Error: edit[{i}] old_string appears {count} times — use replace_all or make unique. Aborting."
-                if do_all:
-                    content = content.replace(old, new)
-                else:
-                    content = content.replace(old, new, 1)
+                content, _ = _replace_content(content, old, new, replace_all=replace_all)
                 applied += 1
 
             fp.write_text(content, encoding=encoding)
 
-            # Update read state so subsequent edits/writes see current mtime.
             WriteFileTool.record_read(session_key, str(fp), fp.stat().st_mtime)
-
             return f"Successfully applied {applied} edit(s) to {fp}"
         except PermissionError as e:
             return f"Error: {e}"
