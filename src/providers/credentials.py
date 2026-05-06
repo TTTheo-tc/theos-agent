@@ -74,11 +74,7 @@ def resolve_credentials(
                 api_key, oauth_headers = resolved
                 return ProviderCredentials(
                     api_key=api_key,
-                    api_base=(
-                        resolve_secret_ref(p.api_base)
-                        if p and p.api_base
-                        else getattr(spec, "default_api_base", "")
-                    ),
+                    api_base=_configured_api_base(p, spec)[0],
                     extra_headers={**oauth_headers, **(extra_headers or {})},
                 )
 
@@ -105,12 +101,8 @@ def resolve_credentials(
                 break
 
     # Resolve api_base: config > spec default
-    api_base: str | None = None
-    if p and p.api_base:
-        api_base = resolve_secret_ref(p.api_base)
-    elif spec and spec.default_api_base:
-        api_base = spec.default_api_base
-    elif model:
+    api_base, had_provider_base = _configured_api_base(p, spec)
+    if not api_base and not had_provider_base and model:
         api_base = resolve_secret_ref(config.get_api_base(model))
 
     return ProviderCredentials(
@@ -118,3 +110,14 @@ def resolve_credentials(
         api_base=api_base,
         extra_headers=extra_headers,
     )
+
+
+def _configured_api_base(provider_config: Any | None, spec: Any | None) -> tuple[str | None, bool]:
+    """Resolve provider-specific API base and whether config supplied one."""
+    from src.security.secret_refs import resolve_secret_ref
+
+    if provider_config and provider_config.api_base:
+        return resolve_secret_ref(provider_config.api_base), True
+    if spec and getattr(spec, "default_api_base", ""):
+        return spec.default_api_base, False
+    return None, False

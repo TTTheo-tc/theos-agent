@@ -76,6 +76,34 @@ def test_api_base_from_config():
     assert creds.api_base == "https://custom.api/v1"
 
 
+def test_missing_secret_api_base_does_not_fall_back_to_model_base():
+    """An explicit but unresolved api_base config keeps the old no-fallback behavior."""
+    config = MagicMock()
+    p_config = MagicMock()
+    p_config.api_key = ""
+    p_config.api_base = "secret://missing_base"
+    p_config.extra_headers = None
+    config.providers.anthropic = p_config
+    config.get_api_base.side_effect = AssertionError("model fallback should not run")
+
+    with (
+        patch(
+            "src.auth.store.get_static_credential_for_provider",
+            return_value=("sk-test", "anthropic:default"),
+        ),
+        patch(
+            "src.security.secret_refs.resolve_secret_ref",
+            side_effect=lambda value, **kwargs: None
+            if value == "secret://missing_base"
+            else value,
+        ),
+        patch("src.security.secret_refs.resolve_mapping_refs", return_value=None),
+    ):
+        creds = resolve_credentials("anthropic", config, model="claude-sonnet-4-5")
+
+    assert creds.api_base is None
+
+
 def test_api_base_from_spec_default():
     """api_base falls back to spec.default_api_base when config has none."""
     from types import SimpleNamespace
@@ -237,3 +265,37 @@ def test_oauth_provider_resolves_token_and_headers():
         "Authorization": "Bearer copilot-token",
         "x-app": "theos",
     }
+
+
+def test_oauth_provider_uses_config_api_base_before_spec_default():
+    """OAuth-backed providers still honor provider api_base overrides."""
+    from types import SimpleNamespace
+
+    config = Config()
+    config.providers.github_copilot.api_base = "secret://copilot_base"
+    spec = SimpleNamespace(is_oauth=True, default_api_base="https://api.githubcopilot.com")
+
+    class _Manager:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def resolve(self, provider: str, profile_id: str):
+            return "copilot-token", {}
+
+    with (
+        patch(
+            "src.auth.store.get_oauth_credential_for_provider",
+            return_value=(object(), "github_copilot:default"),
+        ),
+        patch("src.auth.plugins.register_builtin_plugins", return_value={}),
+        patch("src.auth.oauth_manager.OAuthManager", _Manager),
+        patch(
+            "src.auth.store.get_api_key_for_provider",
+            side_effect=lambda name: (
+                "https://copilot.internal/v1" if name == "copilot_base" else None
+            ),
+        ),
+    ):
+        creds = resolve_credentials("github-copilot", config, spec=spec)
+
+    assert creds.api_base == "https://copilot.internal/v1"
