@@ -10,8 +10,8 @@ from __future__ import annotations
 # Tool groups — symbolic references that expand to concrete tool names
 # ---------------------------------------------------------------------------
 
-TOOL_GROUPS: dict[str, set[str]] = {
-    "group:fs": {
+_FS_TOOLS = frozenset(
+    {
         "read_file",
         "write_file",
         "edit_file",
@@ -20,36 +20,26 @@ TOOL_GROUPS: dict[str, set[str]] = {
         "glob",
         "grep",
         "list_dir",
-    },
-    "group:notebook": {
-        "notebook_read",
-        "notebook_edit",
-    },
-    "group:shell": {
-        "bash",
-        "process",
-    },
-    "group:web": {
-        "web_search",
-        "web_fetch",
-        "http_request",
-        "image_search",
-        "browser",
-    },
-    "group:memory": {
+    }
+)
+_CORE_READ_TOOLS = frozenset({"read_file", "list_dir", "glob", "grep"})
+_NOTEBOOK_TOOLS = frozenset({"notebook_read", "notebook_edit"})
+_SHELL_TOOLS = frozenset({"bash", "process"})
+_WEB_TOOLS = frozenset({"web_search", "web_fetch", "http_request", "image_search", "browser"})
+_MEMORY_TOOLS = frozenset(
+    {
         "memory_search",
         "memory_get",
         "structured_memory_search",
         "research_note_get",
         "task_memory_get",
         "domain_rule_get",
-    },
-    "group:discovery": {
-        "capability_search",
-        "skill_search",
-        "mcp_search",
-    },
-    "group:comms": {
+    }
+)
+_DISCOVERY_TOOLS = frozenset({"capability_search", "skill_search", "mcp_search"})
+_PLAN_MODE_TOOLS = frozenset({"enter_plan_mode", "exit_plan_mode"})
+_COMMS_TOOLS = frozenset(
+    {
         "message",
         "agent",
         "cron",
@@ -57,15 +47,11 @@ TOOL_GROUPS: dict[str, set[str]] = {
         "sessions_history",
         "sessions_send",
         "subagents_list",
-    },
-    "group:analysis": {
-        "stock_analysis",
-        "vendor_study",
-        "image_analyze",
-        "pdf",
-        "tts",
-    },
-    "group:feishu": {
+    }
+)
+_ANALYSIS_TOOLS = frozenset({"stock_analysis", "vendor_study", "image_analyze", "pdf", "tts"})
+_FEISHU_TOOLS = frozenset(
+    {
         "feishu_read",
         "feishu_search",
         "feishu_list",
@@ -84,7 +70,30 @@ TOOL_GROUPS: dict[str, set[str]] = {
         "feishu_chat",
         "feishu_file",
         "feishu_contact",
-    },
+    }
+)
+_FEISHU_READONLY_TOOLS = frozenset(
+    {
+        "feishu_read",
+        "feishu_search",
+        "feishu_list",
+        "feishu_spaces",
+        "feishu_calendar",
+        "feishu_info",
+        "feishu_comments",
+    }
+)
+
+TOOL_GROUPS: dict[str, set[str]] = {
+    "group:fs": set(_FS_TOOLS),
+    "group:notebook": set(_NOTEBOOK_TOOLS),
+    "group:shell": set(_SHELL_TOOLS),
+    "group:web": set(_WEB_TOOLS),
+    "group:memory": set(_MEMORY_TOOLS),
+    "group:discovery": set(_DISCOVERY_TOOLS),
+    "group:comms": set(_COMMS_TOOLS),
+    "group:analysis": set(_ANALYSIS_TOOLS),
+    "group:feishu": set(_FEISHU_TOOLS),
 }
 
 # ---------------------------------------------------------------------------
@@ -93,15 +102,10 @@ TOOL_GROUPS: dict[str, set[str]] = {
 # ---------------------------------------------------------------------------
 
 ALWAYS_ON_TOOLS: frozenset[str] = frozenset(
-    {
-        # Core read-only filesystem
-        "read_file",
-        "list_dir",
-        "glob",
-        "grep",
-        # Core memory
+    _CORE_READ_TOOLS
+    | {
         "memory_search",
-        # Discovery (always-on so model can find deferred tools)
+        # Always-on so the model can find deferred tools.
         "tool_search",
     }
 )
@@ -129,104 +133,48 @@ def expand_groups(names: set[str] | None) -> set[str] | None:
 
 PROFILES: dict[str, set[str] | None] = {
     "full": None,  # No restrictions
-    "minimal": {
-        "read_file",
-        "list_dir",
-        "glob",
-        "grep",
-        "memory_search",
-        "tool_search",
-    },
-    "coding": {
-        # fs
-        "read_file",
-        "write_file",
-        "edit_file",
-        "multi_edit",
-        "apply_patch",
-        "glob",
-        "grep",
-        "list_dir",
-        # notebook
-        "notebook_read",
-        "notebook_edit",
-        # shell
-        "bash",
-        "process",
-        # web
-        "web_search",
-        "web_fetch",
-        "http_request",
-        "image_search",
-        "browser",
-        # memory
-        "memory_search",
-        "memory_get",
-        "structured_memory_search",
-        "research_note_get",
-        "task_memory_get",
-        "domain_rule_get",
-        "tool_search",
-        "capability_search",
-        "skill_search",
-        "mcp_search",
-        "enter_plan_mode",
-        "exit_plan_mode",
-        # feishu (read-only)
-        "feishu_read",
-        "feishu_search",
-        "feishu_list",
-        "feishu_spaces",
-        "feishu_calendar",
-        "feishu_info",
-        "feishu_comments",
-        # misc
-        "todo",
-        "agent",
-        "cron",
-        "image_analyze",
-        "pdf",
-    },
-    "messaging": {
-        "message",
-        "web_search",
-        "web_fetch",
-        "memory_search",
-        "memory_get",
-        "structured_memory_search",
-        "research_note_get",
-        "task_memory_get",
-        "domain_rule_get",
-        "tool_search",
-        "capability_search",
-        "skill_search",
-        "mcp_search",
-        "enter_plan_mode",
-        "exit_plan_mode",
-        # feishu (knowledge retrieval + messaging)
-        "feishu_read",
-        "feishu_search",
-        "feishu_list",
-        "feishu_spaces",
-        "feishu_calendar",
-        "feishu_send",
-    },
-    "readonly": {
-        "read_file",
-        "list_dir",
-        "glob",
-        "grep",
-        "notebook_read",
-        "web_search",
-        "web_fetch",
-        "browser",
-        "tool_search",
-        "capability_search",
-        "skill_search",
-        "mcp_search",
-        "enter_plan_mode",
-        "exit_plan_mode",
-    },
+    "minimal": set(ALWAYS_ON_TOOLS),
+    "coding": set(
+        _FS_TOOLS
+        | _NOTEBOOK_TOOLS
+        | _SHELL_TOOLS
+        | _WEB_TOOLS
+        | _MEMORY_TOOLS
+        | _DISCOVERY_TOOLS
+        | _PLAN_MODE_TOOLS
+        | _FEISHU_READONLY_TOOLS
+        | {"tool_search", "todo", "agent", "cron", "image_analyze", "pdf"}
+    ),
+    "messaging": set(
+        _MEMORY_TOOLS
+        | _DISCOVERY_TOOLS
+        | _PLAN_MODE_TOOLS
+        | {
+            "message",
+            "web_search",
+            "web_fetch",
+            "tool_search",
+            # Feishu knowledge retrieval + messaging.
+            "feishu_read",
+            "feishu_search",
+            "feishu_list",
+            "feishu_spaces",
+            "feishu_calendar",
+            "feishu_send",
+        }
+    ),
+    "readonly": set(
+        _CORE_READ_TOOLS
+        | _DISCOVERY_TOOLS
+        | _PLAN_MODE_TOOLS
+        | {
+            "notebook_read",
+            "web_search",
+            "web_fetch",
+            "browser",
+            "tool_search",
+        }
+    ),
 }
 
 

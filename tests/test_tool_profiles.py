@@ -57,6 +57,63 @@ def test_always_on_tools_excludes_deferred_tools():
         assert name not in ALWAYS_ON_TOOLS, f"{name} should be deferred"
 
 
+def test_tool_groups_exact_membership():
+    assert TOOL_GROUPS == {
+        "group:fs": {
+            "read_file",
+            "write_file",
+            "edit_file",
+            "multi_edit",
+            "apply_patch",
+            "glob",
+            "grep",
+            "list_dir",
+        },
+        "group:notebook": {"notebook_read", "notebook_edit"},
+        "group:shell": {"bash", "process"},
+        "group:web": {"web_search", "web_fetch", "http_request", "image_search", "browser"},
+        "group:memory": {
+            "memory_search",
+            "memory_get",
+            "structured_memory_search",
+            "research_note_get",
+            "task_memory_get",
+            "domain_rule_get",
+        },
+        "group:discovery": {"capability_search", "skill_search", "mcp_search"},
+        "group:comms": {
+            "message",
+            "agent",
+            "cron",
+            "sessions_list",
+            "sessions_history",
+            "sessions_send",
+            "subagents_list",
+        },
+        "group:analysis": {"stock_analysis", "vendor_study", "image_analyze", "pdf", "tts"},
+        "group:feishu": {
+            "feishu_read",
+            "feishu_search",
+            "feishu_list",
+            "feishu_spaces",
+            "feishu_calendar",
+            "feishu_edit",
+            "feishu_create",
+            "feishu_send",
+            "feishu_comments",
+            "feishu_download",
+            "feishu_info",
+            "feishu_auth",
+            "feishu_sheet",
+            "feishu_task",
+            "feishu_perm",
+            "feishu_chat",
+            "feishu_file",
+            "feishu_contact",
+        },
+    }
+
+
 def test_expand_groups_none_passthrough():
     assert expand_groups(None) is None
 
@@ -93,6 +150,7 @@ def test_resolve_profile_full():
 def test_resolve_profile_minimal():
     result = resolve_profile("minimal")
     assert result is not None
+    assert result == set(ALWAYS_ON_TOOLS)
     assert "read_file" in result
     assert "list_dir" in result
     assert "glob" in result
@@ -123,6 +181,93 @@ def test_resolve_profile_readonly_keeps_tool_search():
     assert "tool_search" in result
     assert "browser" in result
     assert "notebook_read" in result
+
+
+def test_profiles_exact_membership():
+    assert PROFILES["full"] is None
+    assert PROFILES["minimal"] == set(ALWAYS_ON_TOOLS)
+    assert PROFILES["coding"] == {
+        "read_file",
+        "write_file",
+        "edit_file",
+        "multi_edit",
+        "apply_patch",
+        "glob",
+        "grep",
+        "list_dir",
+        "notebook_read",
+        "notebook_edit",
+        "bash",
+        "process",
+        "web_search",
+        "web_fetch",
+        "http_request",
+        "image_search",
+        "browser",
+        "memory_search",
+        "memory_get",
+        "structured_memory_search",
+        "research_note_get",
+        "task_memory_get",
+        "domain_rule_get",
+        "tool_search",
+        "capability_search",
+        "skill_search",
+        "mcp_search",
+        "enter_plan_mode",
+        "exit_plan_mode",
+        "feishu_read",
+        "feishu_search",
+        "feishu_list",
+        "feishu_spaces",
+        "feishu_calendar",
+        "feishu_info",
+        "feishu_comments",
+        "todo",
+        "agent",
+        "cron",
+        "image_analyze",
+        "pdf",
+    }
+    assert PROFILES["messaging"] == {
+        "message",
+        "web_search",
+        "web_fetch",
+        "memory_search",
+        "memory_get",
+        "structured_memory_search",
+        "research_note_get",
+        "task_memory_get",
+        "domain_rule_get",
+        "tool_search",
+        "capability_search",
+        "skill_search",
+        "mcp_search",
+        "enter_plan_mode",
+        "exit_plan_mode",
+        "feishu_read",
+        "feishu_search",
+        "feishu_list",
+        "feishu_spaces",
+        "feishu_calendar",
+        "feishu_send",
+    }
+    assert PROFILES["readonly"] == {
+        "read_file",
+        "list_dir",
+        "glob",
+        "grep",
+        "notebook_read",
+        "web_search",
+        "web_fetch",
+        "browser",
+        "tool_search",
+        "capability_search",
+        "skill_search",
+        "mcp_search",
+        "enter_plan_mode",
+        "exit_plan_mode",
+    }
 
 
 def test_resolve_profile_unknown_raises():
