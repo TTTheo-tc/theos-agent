@@ -16,6 +16,17 @@ def _make_client():
     return client
 
 
+def test_call_api_refreshes_token_and_passes_client():
+    client = _make_client()
+    api_func = MagicMock(return_value={"ok": True})
+
+    result = client._call_api(api_func, "arg", option=True)
+
+    client.ensure_token.assert_called_once()
+    api_func.assert_called_once_with(client._client, "arg", option=True)
+    assert result == {"ok": True}
+
+
 def test_import_file_uploads_creates_task_and_returns_success():
     client = _make_client()
 

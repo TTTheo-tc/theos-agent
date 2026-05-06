@@ -10,7 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -122,6 +124,10 @@ class FeishuClient:
         path = self._cache_dir / f"{key}.json"
         if path.exists():
             path.unlink()
+
+    def _call_api(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        self.ensure_token()
+        return func(self._client, *args, **kwargs)
 
     def output_prefix(self, label: str, token: str) -> str:
         """File prefix for cache artefacts (EditArena compatibility)."""
@@ -1096,8 +1102,7 @@ class FeishuClient:
 
     def calendar_list(self) -> list[dict]:
         """List the current user's calendars."""
-        self.ensure_token()
-        return api_calendar.list_calendars(self._client)
+        return self._call_api(api_calendar.list_calendars)
 
     def calendar_events(
         self,
@@ -1120,8 +1125,7 @@ class FeishuClient:
 
     def calendar_get_event(self, event_id: str, calendar_id: str = "primary") -> dict:
         """Get a single calendar event's details."""
-        self.ensure_token()
-        return api_calendar.get_event(self._client, calendar_id, event_id)
+        return self._call_api(api_calendar.get_event, calendar_id, event_id)
 
     def calendar_create_event(
         self,
@@ -1136,9 +1140,8 @@ class FeishuClient:
         Keyword args are forwarded to ``api_calendar.create_event``
         (description, attendees, location, is_all_day).
         """
-        self.ensure_token()
-        return api_calendar.create_event(
-            self._client,
+        return self._call_api(
+            api_calendar.create_event,
             calendar_id=calendar_id,
             summary=summary,
             start_time=start_time,
@@ -1148,25 +1151,21 @@ class FeishuClient:
 
     def calendar_delete_event(self, event_id: str, calendar_id: str = "primary") -> bool:
         """Delete a calendar event."""
-        self.ensure_token()
-        return api_calendar.delete_event(self._client, calendar_id, event_id)
+        return self._call_api(api_calendar.delete_event, calendar_id, event_id)
 
     def calendar_freebusy(self, user_ids: list[str], start_time: str, end_time: str) -> dict:
         """Query free/busy status for one or more users."""
-        self.ensure_token()
-        return api_calendar.freebusy_query(self._client, user_ids, start_time, end_time)
+        return self._call_api(api_calendar.freebusy_query, user_ids, start_time, end_time)
 
     # --- tasks ---
 
     def task_list(self, completed: bool | None = None) -> list[dict]:
         """List tasks visible to the current user."""
-        self.ensure_token()
-        return api_tasks.list_tasks(self._client, completed=completed)
+        return self._call_api(api_tasks.list_tasks, completed=completed)
 
     def task_get(self, task_guid: str) -> dict:
         """Get a single task's detail."""
-        self.ensure_token()
-        return api_tasks.get_task(self._client, task_guid)
+        return self._call_api(api_tasks.get_task, task_guid)
 
     def task_create(
         self,
@@ -1183,10 +1182,9 @@ class FeishuClient:
             due: Due timestamp (epoch seconds string) or ``None``.
             assignee: User open_id to assign, or ``None``.
         """
-        self.ensure_token()
         members = [{"id": assignee, "role": "assignee"}] if assignee else None
-        return api_tasks.create_task(
-            self._client,
+        return self._call_api(
+            api_tasks.create_task,
             summary=summary,
             description=description,
             due=due,
@@ -1196,18 +1194,15 @@ class FeishuClient:
 
     def task_complete(self, task_guid: str) -> bool:
         """Mark a task as completed."""
-        self.ensure_token()
-        return api_tasks.complete_task(self._client, task_guid)
+        return self._call_api(api_tasks.complete_task, task_guid)
 
     def task_delete(self, task_guid: str) -> bool:
         """Delete a task."""
-        self.ensure_token()
-        return api_tasks.delete_task(self._client, task_guid)
+        return self._call_api(api_tasks.delete_task, task_guid)
 
     def task_add_subtask(self, task_guid: str, summary: str) -> dict:
         """Add a subtask to an existing task."""
-        self.ensure_token()
-        return api_tasks.create_subtask(self._client, task_guid, summary)
+        return self._call_api(api_tasks.create_subtask, task_guid, summary)
 
     # --- user operations ---
 
@@ -1224,8 +1219,7 @@ class FeishuClient:
 
     def search_users(self, query: str) -> list[dict]:
         """Search users by keyword."""
-        self.ensure_token()
-        return api.search_users(self._client, query)
+        return self._call_api(api.search_users, query)
 
     # --- permissions ---
 
@@ -1303,66 +1297,57 @@ class FeishuClient:
         self, name: str, description: str = "", user_ids: list[str] | None = None
     ) -> dict:
         """Create a group chat."""
-        self.ensure_token()
-        return api_chat.create_chat(self._client, name, description=description, user_ids=user_ids)
+        return self._call_api(
+            api_chat.create_chat, name, description=description, user_ids=user_ids
+        )
 
     def chat_info(self, chat_id: str) -> dict:
         """Get chat details."""
-        self.ensure_token()
-        return api_chat.get_chat(self._client, chat_id)
+        return self._call_api(api_chat.get_chat, chat_id)
 
     def chat_update(
         self, chat_id: str, name: str | None = None, description: str | None = None
     ) -> dict:
         """Update chat properties."""
-        self.ensure_token()
-        return api_chat.update_chat(self._client, chat_id, name=name, description=description)
+        return self._call_api(api_chat.update_chat, chat_id, name=name, description=description)
 
     def chat_members(self, chat_id: str) -> list[dict]:
         """List members of a chat."""
-        self.ensure_token()
-        return api_chat.list_chat_members(self._client, chat_id)
+        return self._call_api(api_chat.list_chat_members, chat_id)
 
     def chat_add_members(self, chat_id: str, user_ids: list[str]) -> dict:
         """Add members to a chat."""
-        self.ensure_token()
-        return api_chat.add_chat_members(self._client, chat_id, user_ids)
+        return self._call_api(api_chat.add_chat_members, chat_id, user_ids)
 
     def chat_remove_members(self, chat_id: str, user_ids: list[str]) -> dict:
         """Remove members from a chat."""
-        self.ensure_token()
-        return api_chat.remove_chat_members(self._client, chat_id, user_ids)
+        return self._call_api(api_chat.remove_chat_members, chat_id, user_ids)
 
     def chat_messages(self, chat_id: str, page_size: int = 50) -> list[dict]:
         """Get message history for a chat."""
-        self.ensure_token()
-        return api_chat.list_chat_messages(self._client, chat_id, page_size=page_size)
+        return self._call_api(api_chat.list_chat_messages, chat_id, page_size=page_size)
 
     # --- drive file management ---
 
     def file_create_folder(self, folder_token: str, name: str) -> dict:
         """Create a subfolder inside *folder_token*."""
-        self.ensure_token()
-        return api_write.create_folder(self._client, folder_token, name)
+        return self._call_api(api_write.create_folder, folder_token, name)
 
     def file_move(self, file_token: str, dest_folder: str, file_type: str = "") -> dict:
         """Move a file/folder to *dest_folder*."""
-        self.ensure_token()
-        return api_write.move_file(self._client, file_token, dest_folder, file_type=file_type)
+        return self._call_api(api_write.move_file, file_token, dest_folder, file_type=file_type)
 
     def file_copy(
         self, file_token: str, dest_folder: str, new_name: str = "", file_type: str = ""
     ) -> dict:
         """Copy a file to *dest_folder*."""
-        self.ensure_token()
-        return api_write.copy_file(
-            self._client, file_token, dest_folder, new_name=new_name, file_type=file_type
+        return self._call_api(
+            api_write.copy_file, file_token, dest_folder, new_name=new_name, file_type=file_type
         )
 
     def file_delete(self, file_token: str, file_type: str) -> bool:
         """Delete (trash) a file/folder."""
-        self.ensure_token()
-        return api_write.delete_file(self._client, file_token, file_type)
+        return self._call_api(api_write.delete_file, file_token, file_type)
 
     def file_upload(
         self,
@@ -1372,15 +1357,13 @@ class FeishuClient:
         parent_type: str = "explorer",
     ) -> dict:
         """Upload a local file (< 20 MB) to Drive."""
-        self.ensure_token()
-        return api_write.upload_file(
-            self._client, file_name, file_path, parent_token, parent_type=parent_type
+        return self._call_api(
+            api_write.upload_file, file_name, file_path, parent_token, parent_type=parent_type
         )
 
     def file_list(self, folder_token: str) -> list[dict]:
         """List files in a Drive folder."""
-        self.ensure_token()
-        return api.list_folder_files(self._client, folder_token)
+        return self._call_api(api.list_folder_files, folder_token)
 
     def import_file(
         self,
@@ -1491,25 +1474,20 @@ class FeishuClient:
 
     def contact_departments(self, parent_id: str = "0") -> list[dict]:
         """List child departments of *parent_id* (``"0"`` for root)."""
-        self.ensure_token()
-        return api_contacts.list_departments(self._client, parent_id)
+        return self._call_api(api_contacts.list_departments, parent_id)
 
     def contact_department(self, department_id: str) -> dict:
         """Get a department's info."""
-        self.ensure_token()
-        return api_contacts.get_department(self._client, department_id)
+        return self._call_api(api_contacts.get_department, department_id)
 
     def contact_department_users(self, department_id: str) -> list[dict]:
         """List users in a department."""
-        self.ensure_token()
-        return api_contacts.list_department_users(self._client, department_id)
+        return self._call_api(api_contacts.list_department_users, department_id)
 
     def contact_find_by_email(self, email: str) -> dict | None:
         """Find a user by email address."""
-        self.ensure_token()
-        return api_contacts.get_user_by_email(self._client, email)
+        return self._call_api(api_contacts.get_user_by_email, email)
 
     def contact_find_by_phone(self, phone: str) -> dict | None:
         """Find a user by phone number."""
-        self.ensure_token()
-        return api_contacts.get_user_by_phone(self._client, phone)
+        return self._call_api(api_contacts.get_user_by_phone, phone)
