@@ -93,11 +93,11 @@ class CronService:
         self,
         store_path: Path,
         on_job: Callable[[CronJob], Coroutine[Any, Any, str | None]] | None = None,
-    ):
+    ) -> None:
         self.store_path = store_path
         self.on_job = on_job  # Callback to execute job, returns response text
         self._store: CronStore | None = None
-        self._timer_task: asyncio.Task | None = None
+        self._timer_task: asyncio.Task[None] | None = None
         self._running = False
 
     def _load_store(self) -> CronStore:
@@ -205,7 +205,7 @@ class CronService:
         delay_ms = max(0, next_wake - _now_ms())
         delay_s = delay_ms / 1000
 
-        async def tick():
+        async def tick() -> None:
             await asyncio.sleep(delay_s)
             if self._running:
                 await self._on_timer()
@@ -358,7 +358,7 @@ class CronService:
         self._save_and_rearm()
         return True
 
-    def status(self) -> dict:
+    def status(self) -> dict[str, Any]:
         """Get service status."""
         store = self._load_store()
         return {

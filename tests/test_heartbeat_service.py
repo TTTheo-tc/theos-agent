@@ -7,10 +7,11 @@ from src.providers.base import LLMResponse, ToolCallRequest
 
 
 class DummyProvider:
-    def __init__(self, responses: list[LLMResponse]):
+    def __init__(self, responses: list[LLMResponse]) -> None:
         self._responses = list(responses)
 
     async def chat(self, *args, **kwargs) -> LLMResponse:
+        del args, kwargs
         if self._responses:
             return self._responses.pop(0)
         return LLMResponse(content="", tool_calls=[])
