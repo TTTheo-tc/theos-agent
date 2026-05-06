@@ -536,25 +536,15 @@ class _AtomicPatchSession:
         return fp
 
     def update_file(self, raw_path: str, chunks: list[UpdateChunk]) -> Path:
-        fp = self._resolve(raw_path)
-        if not fp.exists():
-            raise FileNotFoundError(f"Cannot update file (not found): {raw_path}")
-        self._backup_file(fp)
-        content = fp.read_text(encoding="utf-8")
-        new_content = apply_update_hunk(content, chunks)
+        fp, new_content = self._prepare_update(raw_path, chunks)
         fp.write_text(new_content, encoding="utf-8")
         return fp
 
     def move_file(
         self, raw_path: str, move_path: str, chunks: list[UpdateChunk]
     ) -> tuple[Path, Path]:
-        src = self._resolve(raw_path)
         dst = self._resolve(move_path)
-        if not src.exists():
-            raise FileNotFoundError(f"Cannot update file (not found): {raw_path}")
-        self._backup_file(src)
-        content = src.read_text(encoding="utf-8")
-        new_content = apply_update_hunk(content, chunks)
+        src, new_content = self._prepare_update(raw_path, chunks)
         self._ensure_parent(dst)
         if src == dst:
             src.write_text(new_content, encoding="utf-8")
@@ -563,6 +553,14 @@ class _AtomicPatchSession:
         dst.write_text(new_content, encoding="utf-8")
         src.unlink()
         return src, dst
+
+    def _prepare_update(self, raw_path: str, chunks: list[UpdateChunk]) -> tuple[Path, str]:
+        fp = self._resolve(raw_path)
+        if not fp.exists():
+            raise FileNotFoundError(f"Cannot update file (not found): {raw_path}")
+        self._backup_file(fp)
+        content = fp.read_text(encoding="utf-8")
+        return fp, apply_update_hunk(content, chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -680,4 +678,3 @@ def _display(fp: Path, workspace: Path | None) -> str:
         except ValueError:
             pass
     return str(fp)
-
