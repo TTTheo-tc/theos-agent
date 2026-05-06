@@ -26,6 +26,12 @@ from src.auth.types import (
 Credential = ApiKeyCredential | TokenCredential | OAuthCredential
 T = TypeVar("T")
 
+_CREDENTIAL_TYPES: dict[str, type[Credential]] = {
+    "api_key": ApiKeyCredential,
+    "token": TokenCredential,
+    "oauth": OAuthCredential,
+}
+
 
 def _normalize_provider(provider: str) -> str:
     """Normalize provider IDs used in auth profile keys."""
@@ -142,35 +148,35 @@ def _decrypt_file(path: Path) -> str:
 
 def _coerce_store(data: dict) -> AuthProfileStore:
     """Parse raw JSON into AuthProfileStore, coercing credential discriminant."""
-    credential_types: dict[str, type[Credential]] = {
-        "api_key": ApiKeyCredential,
-        "token": TokenCredential,
-        "oauth": OAuthCredential,
-    }
+    return AuthProfileStore(
+        version=data.get("version", 1),
+        profiles=_coerce_profiles(data.get("profiles", {})),
+        last_good=data.get("lastGood", data.get("last_good", {})),
+        usage_stats=_coerce_usage_stats(data.get("usageStats", data.get("usage_stats", {}))),
+    )
+
+
+def _coerce_profiles(raw_profiles: dict) -> dict[str, Credential]:
     profiles: dict[str, Credential] = {}
-    for pid, cred_data in data.get("profiles", {}).items():
-        model = credential_types.get(cred_data.get("type", "api_key"))
+    for pid, cred_data in raw_profiles.items():
+        model = _CREDENTIAL_TYPES.get(cred_data.get("type", "api_key"))
         if model is None:
             continue
         try:
             profiles[pid] = model.model_validate(cred_data)
         except Exception:
             pass
+    return profiles
 
+
+def _coerce_usage_stats(raw_stats: dict) -> dict[str, ProfileUsageStats]:
     usage_stats: dict[str, ProfileUsageStats] = {}
-    # Support both camelCase (openclaw compat) and snake_case
-    for pid, stats in data.get("usageStats", data.get("usage_stats", {})).items():
+    for pid, stats in raw_stats.items():
         try:
             usage_stats[pid] = ProfileUsageStats.model_validate(stats)
         except Exception:
             pass
-
-    return AuthProfileStore(
-        version=data.get("version", 1),
-        profiles=profiles,
-        last_good=data.get("lastGood", data.get("last_good", {})),
-        usage_stats=usage_stats,
-    )
+    return usage_stats
 
 
 # ---------------------------------------------------------------------------
