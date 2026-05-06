@@ -64,6 +64,20 @@ class TestSchedulePreCompactionFlush:
         assert len(events) == 0
 
     @pytest.mark.asyncio
+    async def test_none_history_skips_before_reading_config(self, tmp_path):
+        handler = _make_handler(tmp_path)
+        handler._memory_config = None
+
+        await handler._schedule_pre_compaction_flush(
+            session_key="test",
+            persisted_history=None,
+            compact_prefix_count=8,
+            provider=AsyncMock(),
+            model="test",
+            workspace=tmp_path,
+        )
+
+    @pytest.mark.asyncio
     async def test_skips_when_gap_too_large(self, tmp_path):
         handler = _make_handler(tmp_path)
         # 60 messages with cursor at 0 → gap > 50, should skip

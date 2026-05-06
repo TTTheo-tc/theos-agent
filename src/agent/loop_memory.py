@@ -55,10 +55,9 @@ def _find_safe_cut(
     target_mid = history_start + (history_end - history_start) // 2
 
     # Collect all candidate cut indices (user message boundaries).
-    candidates: list[int] = []
-    for i in range(history_start + 1, history_end):
-        if messages[i].get("role") == "user":
-            candidates.append(i)
+    candidates = [
+        i for i in range(history_start + 1, history_end) if messages[i].get("role") == "user"
+    ]
 
     if not candidates:
         return None
@@ -221,6 +220,24 @@ def _apply_microcompaction(messages: list[dict]) -> tuple[list[dict], int]:
     if changed == 0:
         return messages, 0
     return compacted, changed
+
+
+def _pre_compaction_gap(
+    persisted_history: list[dict] | None,
+    *,
+    cursor: int,
+    compact_prefix_count: int,
+) -> list[dict] | None:
+    """Return the not-yet-extracted history prefix that compaction will summarize."""
+    if persisted_history is None:
+        return None
+    compact_end = min(len(persisted_history), compact_prefix_count)
+    if compact_end <= cursor:
+        return None
+    gap_msgs = persisted_history[cursor:compact_end]
+    if len(gap_msgs) < 2:
+        return None
+    return gap_msgs
 
 
 class MemoryHandler:
@@ -827,12 +844,12 @@ class MemoryHandler:
             return
 
         cursor = max(self._extract_cursor.get(session_key, 0), 0)
-        compact_end = min(len(persisted_history), compact_prefix_count)
-        if compact_end <= cursor:
-            return
-
-        gap_msgs = persisted_history[cursor:compact_end]
-        if len(gap_msgs) < 2:
+        gap_msgs = _pre_compaction_gap(
+            persisted_history,
+            cursor=cursor,
+            compact_prefix_count=compact_prefix_count,
+        )
+        if gap_msgs is None:
             return
         if len(gap_msgs) > 50:
             logger.warning(
