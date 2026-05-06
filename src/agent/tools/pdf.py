@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 import httpx
 
 from src.agent.tools.base import Tool
+from src.agent.tools.media_common import collect_sources
+from src.agent.tools.media_common import is_http_url as _is_url
 from src.agent.tools.provider_failures import get_user_safe_provider_error
 
 if TYPE_CHECKING:
@@ -56,14 +58,6 @@ def parse_page_range(spec: str, total_pages: int) -> list[int]:
 # ---------------------------------------------------------------------------
 # PDF loading helpers
 # ---------------------------------------------------------------------------
-
-
-def _is_url(s: str) -> bool:
-    try:
-        p = urlparse(s)
-        return p.scheme in ("http", "https")
-    except Exception:
-        return False
 
 
 async def _load_pdf_bytes(source: str) -> tuple[bytes, str]:
@@ -226,13 +220,7 @@ class PdfTool(Tool):
         **kwargs: Any,
     ) -> str:
         # ---- collect and dedupe sources ----
-        sources: list[str] = []
-        seen: set[str] = set()
-        for src in ([pdf] if pdf else []) + (pdfs or []):
-            s = src.strip()
-            if s and s not in seen:
-                seen.add(s)
-                sources.append(s)
+        sources = collect_sources(pdf, pdfs)
 
         if not sources:
             return "Error: No PDF provided. Pass 'pdf' or 'pdfs' parameter."

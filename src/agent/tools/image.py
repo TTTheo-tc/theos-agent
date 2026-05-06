@@ -6,11 +6,12 @@ import base64
 import mimetypes
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
 
 import httpx
 
 from src.agent.tools.base import Tool
+from src.agent.tools.media_common import collect_sources
+from src.agent.tools.media_common import is_http_url as _is_url
 from src.agent.tools.provider_failures import get_user_safe_provider_error
 
 if TYPE_CHECKING:
@@ -19,14 +20,6 @@ if TYPE_CHECKING:
 DEFAULT_PROMPT = "Describe this image in detail."
 DEFAULT_MAX_IMAGES = 20
 MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20 MB per image
-
-
-def _is_url(s: str) -> bool:
-    try:
-        p = urlparse(s)
-        return p.scheme in ("http", "https")
-    except Exception:
-        return False
 
 
 async def _load_image(source: str) -> tuple[str, str]:
@@ -122,14 +115,7 @@ class ImageAnalyzeTool(Tool):
         max_tokens: int = 4096,
         **kwargs: Any,
     ) -> str:
-        # Collect and dedupe image sources
-        sources: list[str] = []
-        seen: set[str] = set()
-        for src in ([image] if image else []) + (images or []):
-            s = src.strip()
-            if s and s not in seen:
-                seen.add(s)
-                sources.append(s)
+        sources = collect_sources(image, images)
 
         if not sources:
             return "Error: No images provided. Pass 'image' or 'images' parameter."
