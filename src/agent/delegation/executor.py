@@ -24,6 +24,7 @@ from src.agent.delegation.types import (
     SubagentResult,
     SubagentStatus,
     SubagentTaskRecord,
+    is_terminal_status,
 )
 
 if TYPE_CHECKING:
@@ -113,11 +114,7 @@ class SubagentExecutor:
 
             # Policy: max_children_per_agent
             if parent_task_id is not None:
-                children_count = sum(
-                    1
-                    for r in self._records.values()
-                    if r.parent_task_id == parent_task_id and not r.is_terminal
-                )
+                children_count = len(self._non_terminal_children(parent_task_id))
                 if children_count >= self._policy.max_children_per_agent:
                     return (
                         f"Error: children limit ({self._policy.max_children_per_agent}) "
@@ -185,12 +182,7 @@ class SubagentExecutor:
         # Check results cache first
         if task_id in self._results:
             result = self._results[task_id]
-            if result.status in (
-                SubagentStatus.COMPLETED,
-                SubagentStatus.FAILED,
-                SubagentStatus.TIMED_OUT,
-                SubagentStatus.CANCELLED,
-            ):
+            if is_terminal_status(result.status):
                 self._consumed.add(task_id)
             return result
 
@@ -219,12 +211,7 @@ class SubagentExecutor:
             pass
 
         result = self._build_result(record)
-        if result.status in (
-            SubagentStatus.COMPLETED,
-            SubagentStatus.FAILED,
-            SubagentStatus.TIMED_OUT,
-            SubagentStatus.CANCELLED,
-        ):
+        if is_terminal_status(result.status):
             self._consumed.add(task_id)
         return result
 
@@ -772,11 +759,7 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
         )
 
     async def _cancel_running_children(self, task_id: str) -> None:
-        children = [
-            tid
-            for tid, record in self._records.items()
-            if record.parent_task_id == task_id and not record.is_terminal
-        ]
+        children = self._non_terminal_children(task_id)
         for child_id in children:
             child_task = self._tasks.get(child_id)
             if child_task and not child_task.done():
@@ -789,6 +772,13 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
         ]
         if child_atasks:
             await asyncio.gather(*child_atasks, return_exceptions=True)
+
+    def _non_terminal_children(self, task_id: str) -> list[str]:
+        return [
+            tid
+            for tid, record in self._records.items()
+            if record.parent_task_id == task_id and not record.is_terminal
+        ]
 
     def _is_descendant(self, task_id: str, ancestor_task_id: str) -> bool:
         current = self._records.get(task_id)

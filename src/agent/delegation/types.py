@@ -27,6 +27,10 @@ _TERMINAL = frozenset(
 )
 
 
+def is_terminal_status(status: SubagentStatus) -> bool:
+    return status in _TERMINAL
+
+
 @dataclass
 class HandoffSpec:
     """Structured handoff protocol (MX-2). Phase 1: data carrier only."""
@@ -63,7 +67,7 @@ class SubagentTaskRecord:
 
     @property
     def is_terminal(self) -> bool:
-        return self.status in _TERMINAL
+        return is_terminal_status(self.status)
 
 
 @dataclass

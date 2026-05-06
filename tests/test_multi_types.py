@@ -7,6 +7,7 @@ from src.agent.delegation.types import (
     SubagentResult,
     SubagentStatus,
     SubagentTaskRecord,
+    is_terminal_status,
 )
 from src.agent.tools.context import ToolContext
 
@@ -29,6 +30,8 @@ class TestSubagentStatus:
         }
         non_terminal = {SubagentStatus.PENDING, SubagentStatus.RUNNING}
         assert terminal & non_terminal == set()
+        assert all(is_terminal_status(status) for status in terminal)
+        assert not any(is_terminal_status(status) for status in non_terminal)
 
 
 class TestHandoffSpec:
