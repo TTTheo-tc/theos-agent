@@ -9,17 +9,17 @@ from src.auth.types import OAuthCredential
 # --- Codex ---
 
 
-def test_codex_auth_headers():
+def test_codex_auth_headers() -> None:
     headers = OpenAICodexPlugin().auth_headers("tok-abc")
     assert headers["Authorization"] == "Bearer tok-abc"
 
 
-def test_codex_format_api_key():
+def test_codex_format_api_key() -> None:
     cred = OAuthCredential(provider="openai_codex", access="tok", refresh="ref", expires=0)
     assert OpenAICodexPlugin().format_api_key(cred) == "tok"
 
 
-def test_codex_read_external_credentials(tmp_path):
+def test_codex_read_external_credentials(tmp_path) -> None:
     auth_file = tmp_path / "auth.json"
     auth_file.write_text(
         json.dumps(
@@ -39,7 +39,7 @@ def test_codex_read_external_credentials(tmp_path):
     assert cred.account_id == "acct-123"
 
 
-def test_codex_read_missing():
+def test_codex_read_missing() -> None:
     plugin = OpenAICodexPlugin()
     with patch.object(plugin, "_auth_json_path", return_value=None):
         assert plugin.read_external_credentials() is None
@@ -48,7 +48,7 @@ def test_codex_read_missing():
 # --- GitHub Copilot ---
 
 
-def test_github_copilot_refresh_preserves_github_access_token():
+def test_github_copilot_refresh_preserves_github_access_token() -> None:
     plugin = GitHubCopilotPlugin()
     cred = OAuthCredential(
         provider="github_copilot",
@@ -70,7 +70,7 @@ def test_github_copilot_refresh_preserves_github_access_token():
     assert refreshed.expires == 1234000
 
 
-def test_github_copilot_read_litellm_store_maps_cached_api_key(tmp_path):
+def test_github_copilot_read_litellm_store_maps_cached_api_key(tmp_path) -> None:
     token_dir = tmp_path / "github_copilot"
     token_dir.mkdir()
     (token_dir / "access-token").write_text("github-access-token\n", encoding="utf-8")
@@ -87,7 +87,7 @@ def test_github_copilot_read_litellm_store_maps_cached_api_key(tmp_path):
     assert cred.expires == 9999999999000
 
 
-def test_github_copilot_read_hosts_json_exchanges_oauth_token(tmp_path):
+def test_github_copilot_read_hosts_json_exchanges_oauth_token(tmp_path) -> None:
     hosts_path = tmp_path / "hosts.json"
     hosts_path.write_text(
         json.dumps({"github.com": {"oauth_token": "github-oauth-token"}}),
@@ -111,7 +111,7 @@ def test_github_copilot_read_hosts_json_exchanges_oauth_token(tmp_path):
 # --- Registry ---
 
 
-def test_register_builtin_plugins():
+def test_register_builtin_plugins() -> None:
     plugins = register_builtin_plugins()
     assert "anthropic" not in plugins
     assert "openai_codex" in plugins

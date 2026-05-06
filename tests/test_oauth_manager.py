@@ -42,7 +42,7 @@ def _make_plugin() -> MagicMock:
     return plugin
 
 
-def test_resolve_returns_token_and_headers_when_valid():
+def test_resolve_returns_token_and_headers_when_valid() -> None:
     """Valid (non-expired) cred -> returns (api_key, headers)."""
     cred = _make_cred()
     store = AuthProfileStore(profiles={"google:default": cred})
@@ -59,7 +59,7 @@ def test_resolve_returns_token_and_headers_when_valid():
     plugin.refresh.assert_not_called()
 
 
-def test_resolve_returns_none_for_non_oauth():
+def test_resolve_returns_none_for_non_oauth() -> None:
     """ApiKeyCredential in store -> returns None."""
     store = AuthProfileStore(
         profiles={"anthropic:default": ApiKeyCredential(provider="anthropic", key="sk-xxx")}
@@ -73,7 +73,7 @@ def test_resolve_returns_none_for_non_oauth():
     assert result is None
 
 
-def test_resolve_refreshes_expired_token():
+def test_resolve_refreshes_expired_token() -> None:
     """Expired cred + successful refresh -> returns new token."""
     old_cred = _make_cred(expired=True)
     new_cred = _make_cred(access="ya29.refreshed-token")
@@ -97,7 +97,7 @@ def test_resolve_refreshes_expired_token():
     plugin.refresh.assert_called_once_with(old_cred)
 
 
-def test_resolve_returns_expired_cred_when_refresh_fails():
+def test_resolve_returns_expired_cred_when_refresh_fails() -> None:
     """Expired cred + plugin.refresh returns None -> returns expired cred anyway."""
     old_cred = _make_cred(expired=True)
     store = AuthProfileStore(profiles={"google:default": old_cred})
@@ -119,7 +119,7 @@ def test_resolve_returns_expired_cred_when_refresh_fails():
     assert api_key == old_cred.access
 
 
-def test_resolve_returns_none_when_no_plugin():
+def test_resolve_returns_none_when_no_plugin() -> None:
     """OAuth cred in store but no matching plugin -> returns None."""
     cred = _make_cred()
     store = AuthProfileStore(profiles={"google:default": cred})
@@ -132,7 +132,7 @@ def test_resolve_returns_none_when_no_plugin():
     assert result is None
 
 
-def test_protocol_check():
+def test_protocol_check() -> None:
     """Verify a class with all required methods satisfies OAuthPlugin."""
     from tests.test_oauth_plugin import _FakePlugin
 

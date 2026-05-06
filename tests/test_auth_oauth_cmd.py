@@ -24,10 +24,11 @@ def test_auth_login_normalizes_hyphenated_oauth_provider(monkeypatch) -> None:
     )
 
     class _Plugin:
-        def read_external_credentials(self):
+        def read_external_credentials(self) -> OAuthCredential:
             return cred
 
-        def login(self, redirect_uri: str):
+        def login(self, redirect_uri: str) -> None:
+            del redirect_uri
             raise AssertionError("external credentials should be used first")
 
     saved = {}
@@ -48,10 +49,10 @@ def test_auth_login_normalizes_hyphenated_oauth_provider(monkeypatch) -> None:
 
 def test_auth_refresh_uses_normalized_oauth_profile(monkeypatch) -> None:
     class _Manager:
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
             pass
 
-        def resolve(self, provider: str, profile_id: str):
+        def resolve(self, provider: str, profile_id: str) -> tuple[str, dict[str, str]]:
             assert provider == "github_copilot"
             assert profile_id == "github_copilot:default"
             return "token", {}
@@ -64,9 +65,9 @@ def test_auth_refresh_uses_normalized_oauth_profile(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "src.auth.store.get_oauth_credential_for_provider",
-        lambda provider: (cred, "github_copilot:default"),
+        lambda _provider: (cred, "github_copilot:default"),
     )
-    monkeypatch.setattr("src.auth.plugins.register_builtin_plugins", lambda: {})
+    monkeypatch.setattr("src.auth.plugins.register_builtin_plugins", dict)
     monkeypatch.setattr("src.auth.oauth_manager.OAuthManager", _Manager)
 
     auth_oauth_cmd.auth_refresh("github-copilot")

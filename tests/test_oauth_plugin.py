@@ -29,13 +29,13 @@ class _FakePlugin:
         return None
 
 
-def test_protocol_check():
+def test_protocol_check() -> None:
     """A class implementing all methods passes isinstance(obj, OAuthPlugin)."""
     plugin = _FakePlugin()
     assert isinstance(plugin, OAuthPlugin)
 
 
-def test_non_conforming_class_fails_protocol():
+def test_non_conforming_class_fails_protocol() -> None:
     """A class missing required methods does NOT satisfy OAuthPlugin."""
 
     class _Incomplete:

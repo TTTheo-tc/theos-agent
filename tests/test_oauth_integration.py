@@ -21,16 +21,18 @@ class FakeOAuthPlugin:
         return {"Authorization": f"Bearer {token}"}
 
     def refresh(self, cred: OAuthCredential) -> OAuthCredential | None:
+        del cred
         return None
 
     def login(self, redirect_uri: str) -> OAuthCredential | None:
+        del redirect_uri
         return None
 
     def read_external_credentials(self) -> OAuthCredential | None:
         return None
 
 
-def test_e2e_oauth_resolve():
+def test_e2e_oauth_resolve() -> None:
     """Valid OAuth token resolves to API key and plugin headers."""
     cred = OAuthCredential(
         provider="fake_oauth",
@@ -54,7 +56,7 @@ def test_e2e_oauth_resolve():
     assert headers == {"Authorization": "Bearer tok-test"}
 
 
-def test_e2e_expired_token_refreshes():
+def test_e2e_expired_token_refreshes() -> None:
     """Expired token triggers plugin.refresh and returns fresh token."""
     old_cred = OAuthCredential(
         provider="fake_oauth",
@@ -90,7 +92,7 @@ def test_e2e_expired_token_refreshes():
     plugin.refresh.assert_called_once()
 
 
-def test_e2e_api_key_not_affected():
+def test_e2e_api_key_not_affected() -> None:
     """Standard API key credentials are not touched by OAuthManager."""
     store = AuthProfileStore(
         profiles={
@@ -103,7 +105,7 @@ def test_e2e_api_key_not_affected():
     assert result is None  # not an OAuth credential
 
 
-def test_e2e_register_builtin_plugins():
+def test_e2e_register_builtin_plugins() -> None:
     """Built-in plugin registry excludes Anthropic but keeps Codex."""
     from src.auth.plugins import register_builtin_plugins
 
@@ -117,7 +119,7 @@ def test_e2e_register_builtin_plugins():
         assert isinstance(p, OAuthPlugin)
 
 
-def test_try_cached_returns_valid_token():
+def test_try_cached_returns_valid_token() -> None:
     """try_cached() returns token if not expired."""
     cred = OAuthCredential(
         provider="fake_oauth",
@@ -136,7 +138,7 @@ def test_try_cached_returns_valid_token():
     assert result[0] == "tok-valid"
 
 
-def test_try_cached_returns_none_when_expired():
+def test_try_cached_returns_none_when_expired() -> None:
     """try_cached() returns None for expired token — no refresh attempted."""
     cred = OAuthCredential(
         provider="fake_oauth",

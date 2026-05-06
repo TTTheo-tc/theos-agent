@@ -19,7 +19,7 @@ from src.auth.types import (
 )
 
 
-def test_oauth_credential_roundtrip():
+def test_oauth_credential_roundtrip() -> None:
     """Create, dump, and validate an OAuthCredential."""
     cred = OAuthCredential(
         provider="google",
@@ -45,7 +45,7 @@ def test_oauth_credential_roundtrip():
     assert restored.account_id == "acct-42"
 
 
-def test_auth_profile_store_accepts_oauth():
+def test_auth_profile_store_accepts_oauth() -> None:
     """AuthProfileStore can hold a mix of credential types."""
     store = AuthProfileStore(
         profiles={
@@ -69,7 +69,7 @@ def test_auth_profile_store_accepts_oauth():
     assert restored.profiles["google:default"].access == "ya29.token"
 
 
-def test_coerce_store_handles_oauth_type():
+def test_coerce_store_handles_oauth_type() -> None:
     """_coerce_store correctly parses OAuth credentials from raw dicts."""
     raw = {
         "version": 1,
@@ -98,7 +98,7 @@ def test_coerce_store_handles_oauth_type():
     assert isinstance(store.profiles["anthropic:default"], ApiKeyCredential)
 
 
-def test_get_api_key_for_provider_returns_oauth_access():
+def test_get_api_key_for_provider_returns_oauth_access() -> None:
     """get_api_key_for_provider returns cred.access for OAuth profiles."""
     fake_store = AuthProfileStore(
         profiles={
@@ -116,7 +116,7 @@ def test_get_api_key_for_provider_returns_oauth_access():
     assert result == "ya29.my-access"
 
 
-def test_get_api_key_for_provider_oauth_fallback():
+def test_get_api_key_for_provider_oauth_fallback() -> None:
     """get_api_key_for_provider falls back to OAuth when no last_good set."""
     fake_store = AuthProfileStore(
         profiles={
@@ -134,7 +134,7 @@ def test_get_api_key_for_provider_oauth_fallback():
     assert result == "ya29.fallback"
 
 
-def test_static_credential_lookup_excludes_oauth_profiles():
+def test_static_credential_lookup_excludes_oauth_profiles() -> None:
     fake_store = AuthProfileStore(
         profiles={
             "google:oauth": OAuthCredential(
@@ -153,7 +153,7 @@ def test_static_credential_lookup_excludes_oauth_profiles():
     assert result == ("sk-static", "google:key")
 
 
-def test_oauth_credential_lookup_normalizes_hyphen_provider_name():
+def test_oauth_credential_lookup_normalizes_hyphen_provider_name() -> None:
     cred = OAuthCredential(
         provider="github_copilot",
         access="copilot-token",
@@ -170,7 +170,7 @@ def test_oauth_credential_lookup_normalizes_hyphen_provider_name():
     assert result == (cred, "github_copilot:default")
 
 
-def test_oauth_lookup_reads_legacy_hyphenated_default():
+def test_oauth_lookup_reads_legacy_hyphenated_default() -> None:
     cred = OAuthCredential(
         provider="github-copilot",
         access="legacy-copilot-token",
@@ -187,7 +187,7 @@ def test_oauth_lookup_reads_legacy_hyphenated_default():
     assert result == (cred, "github-copilot:manual")
 
 
-def test_static_lookup_reads_legacy_hyphenated_profiles():
+def test_static_lookup_reads_legacy_hyphenated_profiles() -> None:
     fake_store = AuthProfileStore(
         profiles={
             "github-copilot:manual": ApiKeyCredential(
@@ -203,7 +203,7 @@ def test_static_lookup_reads_legacy_hyphenated_profiles():
     assert result == ("legacy-key", "github-copilot:manual")
 
 
-def test_add_oauth_profile():
+def test_add_oauth_profile() -> None:
     """add_oauth_profile creates a profile and sets last_good."""
     fake_store = AuthProfileStore()
 
