@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Protocol
 
 import httpx
 from loguru import logger
@@ -19,7 +19,12 @@ _MAX_CODEX_TRANSPORT_ATTEMPTS = 2
 _CODEX_RETRY_DELAY_SECONDS = 0.5
 
 
-def get_codex_token():
+class _CodexToken(Protocol):
+    account_id: str
+    access: str
+
+
+def get_codex_token() -> _CodexToken:
     try:
         from oauth_cli_kit import get_token
     except ImportError as exc:
