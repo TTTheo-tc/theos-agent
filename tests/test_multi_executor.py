@@ -614,7 +614,6 @@ class TestHandoffFlow:
             not_in_scope="do not test",
         )
         prompt = ex._build_prompt(
-            task="do something",
             role_config=_DEFAULT_ROLES["explorer"],
             handoff=handoff,
         )

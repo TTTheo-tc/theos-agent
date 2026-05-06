@@ -542,10 +542,8 @@ class SubagentExecutor:
         *,
         role_config: RuntimeRoleConfig | None,
         handoff: HandoffSpec | None = None,
-        task: str | None = None,
     ) -> str:
         """Build system prompt from role config and handoff spec."""
-        del task
         parts: list[str] = []
 
         if role_config and role_config.system_prompt:
