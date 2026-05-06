@@ -36,6 +36,11 @@ if TYPE_CHECKING:
     from src.session.subagent_store import SubagentStore
 
 
+_DEFAULT_WAIT_TIMEOUT = 30.0
+_KILL_WAIT_TIMEOUT = 2.0
+_WORKTREE_ISOLATION = "worktree"
+
+
 class SubagentExecutor:
     """Manages subagent lifecycle: spawn, wait, kill, cancel, GC."""
 
@@ -93,39 +98,14 @@ class SubagentExecutor:
 
         lock = self._get_session_lock(root_session_key)
         async with lock:
-            # Reject if session is frozen (cancel in progress)
-            if root_session_key in self._frozen_sessions:
-                return "Error: session is being cancelled, cannot spawn new tasks."
+            if error := self._spawn_policy_error(
+                root_session_key=root_session_key,
+                parent_task_id=parent_task_id,
+                depth=depth,
+                isolation=isolation,
+            ):
+                return error
 
-            # Policy: max_depth
-            if depth >= self._policy.max_depth:
-                return (
-                    f"Error: max depth ({self._policy.max_depth}) reached. "
-                    f"Cannot spawn at depth {depth}."
-                )
-
-            # Policy: max_concurrent
-            running = self.get_running_count()
-            if running >= self._policy.max_concurrent:
-                return (
-                    f"Error: concurrent limit ({self._policy.max_concurrent}) reached. "
-                    f"{running} tasks running."
-                )
-
-            # Policy: max_children_per_agent
-            if parent_task_id is not None:
-                children_count = len(self._non_terminal_children(parent_task_id))
-                if children_count >= self._policy.max_children_per_agent:
-                    return (
-                        f"Error: children limit ({self._policy.max_children_per_agent}) "
-                        f"reached for parent {parent_task_id}."
-                    )
-
-            # Validate isolation mode
-            if isolation and isolation != "worktree":
-                return f"Error: unknown isolation mode '{isolation}'. Only 'worktree' is supported."
-
-            # Create record
             task_id = f"sub-{uuid.uuid4().hex[:12]}"
             record = SubagentTaskRecord(
                 task_id=task_id,
@@ -177,7 +157,7 @@ class SubagentExecutor:
 
         resolved_timeout = timeout if timeout is not None else timeout_seconds
         if resolved_timeout is None:
-            resolved_timeout = 30.0
+            resolved_timeout = _DEFAULT_WAIT_TIMEOUT
 
         # Check results cache first
         if task_id in self._results:
@@ -239,7 +219,7 @@ class SubagentExecutor:
 
         asyncio_task.cancel()
         try:
-            await asyncio.wait_for(asyncio.shield(asyncio_task), timeout=2.0)
+            await asyncio.wait_for(asyncio.shield(asyncio_task), timeout=_KILL_WAIT_TIMEOUT)
         except (asyncio.TimeoutError, asyncio.CancelledError):
             pass
         return True
@@ -255,16 +235,7 @@ class SubagentExecutor:
                     for tid, rec in self._records.items()
                     if rec.root_session_key == root_session_key and not rec.is_terminal
                 ]
-                for tid in task_ids:
-                    atask = self._tasks.get(tid)
-                    if atask and not atask.done():
-                        atask.cancel()
-
-                # Wait for all to finish
-                atasks = [self._tasks[tid] for tid in task_ids if tid in self._tasks]
-                if atasks:
-                    await asyncio.gather(*atasks, return_exceptions=True)
-
+                await self._cancel_task_ids(task_ids)
                 return len(task_ids)
             finally:
                 self._frozen_sessions.discard(root_session_key)
@@ -315,8 +286,7 @@ class SubagentExecutor:
             role_config.timeout_seconds if role_config and role_config.timeout_seconds else None
         ) or self._policy.timeout_seconds
 
-        # Set up worktree isolation if requested
-        if record.isolation == "worktree":
+        if record.isolation == _WORKTREE_ISOLATION:
             await self._setup_worktree(record)
 
         t0 = time.monotonic()
@@ -327,90 +297,37 @@ class SubagentExecutor:
             )
             elapsed = time.monotonic() - t0
 
-            record.status = SubagentStatus.COMPLETED
-            record.result = content
-            record.finished_at = time.time()
-
-            result = SubagentResult(
-                task_id=task_id,
-                status=SubagentStatus.COMPLETED,
-                role=record.role,
-                parent_task_id=record.parent_task_id,
-                depth=record.depth,
-                result=content,
-                elapsed_seconds=round(elapsed, 2),
-                tools_used=tools_used,
-                token_usage=usage,
-            )
-            self._results[task_id] = result
-            self._record_checkpoint(
+            self._finish_record(
                 record,
-                SubagentStatus.COMPLETED.value,
+                SubagentStatus.COMPLETED,
                 elapsed_seconds=round(elapsed, 2),
+                result=content,
                 tools_used=tools_used,
                 token_usage=usage,
-                result_preview=(content[:200] if isinstance(content, str) else None),
             )
 
         except asyncio.TimeoutError:
             elapsed = time.monotonic() - t0
-            record.status = SubagentStatus.TIMED_OUT
-            record.error = f"Timed out after {timeout_s}s"
-            record.finished_at = time.time()
-
-            self._results[task_id] = SubagentResult(
-                task_id=task_id,
-                status=SubagentStatus.TIMED_OUT,
-                role=record.role,
-                parent_task_id=record.parent_task_id,
-                depth=record.depth,
-                error=record.error,
-                elapsed_seconds=round(elapsed, 2),
-            )
-            self._record_checkpoint(
+            self._finish_record(
                 record,
-                SubagentStatus.TIMED_OUT.value,
+                SubagentStatus.TIMED_OUT,
                 elapsed_seconds=round(elapsed, 2),
-                error=record.error,
+                error=f"Timed out after {timeout_s}s",
             )
 
         except asyncio.CancelledError:
             elapsed = time.monotonic() - t0
-            record.status = SubagentStatus.CANCELLED
-            record.finished_at = time.time()
-
-            self._results[task_id] = SubagentResult(
-                task_id=task_id,
-                status=SubagentStatus.CANCELLED,
-                role=record.role,
-                parent_task_id=record.parent_task_id,
-                depth=record.depth,
-                elapsed_seconds=round(elapsed, 2),
-            )
-            self._record_checkpoint(
+            self._finish_record(
                 record,
-                SubagentStatus.CANCELLED.value,
+                SubagentStatus.CANCELLED,
                 elapsed_seconds=round(elapsed, 2),
             )
 
         except Exception as exc:
             elapsed = time.monotonic() - t0
-            record.status = SubagentStatus.FAILED
-            record.error = str(exc)
-            record.finished_at = time.time()
-
-            self._results[task_id] = SubagentResult(
-                task_id=task_id,
-                status=SubagentStatus.FAILED,
-                role=record.role,
-                parent_task_id=record.parent_task_id,
-                depth=record.depth,
-                error=str(exc),
-                elapsed_seconds=round(elapsed, 2),
-            )
-            self._record_checkpoint(
+            self._finish_record(
                 record,
-                SubagentStatus.FAILED.value,
+                SubagentStatus.FAILED,
                 elapsed_seconds=round(elapsed, 2),
                 error=str(exc),
             )
@@ -721,6 +638,87 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
             self._session_locks[session_key] = asyncio.Lock()
         return self._session_locks[session_key]
 
+    def _spawn_policy_error(
+        self,
+        *,
+        root_session_key: str,
+        parent_task_id: str | None,
+        depth: int,
+        isolation: str | None,
+    ) -> str | None:
+        if root_session_key in self._frozen_sessions:
+            return "Error: session is being cancelled, cannot spawn new tasks."
+
+        if depth >= self._policy.max_depth:
+            return (
+                f"Error: max depth ({self._policy.max_depth}) reached. "
+                f"Cannot spawn at depth {depth}."
+            )
+
+        running = self.get_running_count()
+        if running >= self._policy.max_concurrent:
+            return (
+                f"Error: concurrent limit ({self._policy.max_concurrent}) reached. "
+                f"{running} tasks running."
+            )
+
+        if parent_task_id is not None:
+            children_count = len(self._non_terminal_children(parent_task_id))
+            if children_count >= self._policy.max_children_per_agent:
+                return (
+                    f"Error: children limit ({self._policy.max_children_per_agent}) "
+                    f"reached for parent {parent_task_id}."
+                )
+
+        if isolation and isolation != _WORKTREE_ISOLATION:
+            return (
+                f"Error: unknown isolation mode '{isolation}'. "
+                f"Only '{_WORKTREE_ISOLATION}' is supported."
+            )
+
+        return None
+
+    def _finish_record(
+        self,
+        record: SubagentTaskRecord,
+        status: SubagentStatus,
+        *,
+        elapsed_seconds: float,
+        result: str | None = None,
+        error: str | None = None,
+        tools_used: list[str] | None = None,
+        token_usage: dict[str, int] | None = None,
+    ) -> None:
+        record.status = status
+        record.result = result
+        record.error = error
+        record.finished_at = time.time()
+
+        self._results[record.task_id] = SubagentResult(
+            task_id=record.task_id,
+            status=status,
+            role=record.role,
+            parent_task_id=record.parent_task_id,
+            depth=record.depth,
+            result=result,
+            error=error,
+            elapsed_seconds=elapsed_seconds,
+            tools_used=tools_used,
+            token_usage=token_usage,
+        )
+
+        metadata: dict[str, Any] = {"elapsed_seconds": elapsed_seconds}
+        if tools_used is not None:
+            metadata["tools_used"] = tools_used
+        if token_usage is not None:
+            metadata["token_usage"] = token_usage
+        if error is not None:
+            metadata["error"] = error
+        if isinstance(result, str):
+            metadata["result_preview"] = result[:200]
+
+        self._record_checkpoint(record, status.value, **metadata)
+
     def _record_checkpoint(
         self,
         record: SubagentTaskRecord,
@@ -760,18 +758,18 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
 
     async def _cancel_running_children(self, task_id: str) -> None:
         children = self._non_terminal_children(task_id)
-        for child_id in children:
-            child_task = self._tasks.get(child_id)
-            if child_task and not child_task.done():
-                child_task.cancel()
+        await self._cancel_task_ids(children)
 
-        child_atasks = [
-            self._tasks[cid]
-            for cid in children
-            if cid in self._tasks and not self._tasks[cid].done()
-        ]
-        if child_atasks:
-            await asyncio.gather(*child_atasks, return_exceptions=True)
+    async def _cancel_task_ids(self, task_ids: list[str]) -> None:
+        tasks: list[asyncio.Task] = []
+        for task_id in task_ids:
+            task = self._tasks.get(task_id)
+            if task and not task.done():
+                task.cancel()
+                tasks.append(task)
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def _non_terminal_children(self, task_id: str) -> list[str]:
         return [
