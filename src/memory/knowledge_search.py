@@ -104,6 +104,8 @@ _W_TEMPORAL = 0.1
 _W_VECTOR = 0.7
 _W_TEXT = 0.3
 
+_JACCARD_CONFLICT_THRESHOLD = 0.6
+
 
 class KnowledgeSearch:
     """FTS5 + optional vector hybrid search over ``kg_nodes``."""
@@ -365,7 +367,7 @@ class KnowledgeSearch:
 
             candidate_text = _node_text(candidate)
             jaccard = _jaccard(node_tokens, set(_tokenize(candidate_text)))
-            if jaccard <= 0.6:
+            if jaccard <= _JACCARD_CONFLICT_THRESHOLD:
                 continue
 
             if node_type == "rule" and _is_antonym_conflict(node_text, candidate_text):
@@ -531,7 +533,4 @@ def _is_antonym_conflict(text_a: str, text_b: str) -> bool:
         ("add", "remove"),
     ]
     a, b = text_a.lower(), text_b.lower()
-    for pos, neg in antonym_pairs:
-        if (pos in a and neg in b) or (neg in a and pos in b):
-            return True
-    return False
+    return any((pos in a and neg in b) or (neg in a and pos in b) for pos, neg in antonym_pairs)
