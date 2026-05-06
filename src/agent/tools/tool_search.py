@@ -59,10 +59,6 @@ class ToolSearchTool(Tool):
             "required": ["query"],
         }
 
-    @property
-    def parallel_safe(self) -> bool:
-        return True
-
     async def execute(self, query: str = "", max_results: int = 10, **kwargs: Any) -> str:
         # Mode 1: empty query -> list all deferred tools
         if not query.strip():

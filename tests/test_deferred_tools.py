@@ -318,6 +318,14 @@ class TestToolSearchTool:
         assert "pdf" in names
         assert "tts" in names
 
+    def test_tool_search_is_not_parallel_safe(self):
+        from src.agent.tools.tool_search import ToolSearchTool
+
+        reg = ToolRegistry()
+        tool = ToolSearchTool(registry=reg)
+
+        assert tool.parallel_safe is False
+
     @pytest.mark.asyncio
     async def test_select_memory_tool_returns_recall_policy(self):
         from src.agent.tools.tool_search import ToolSearchTool
