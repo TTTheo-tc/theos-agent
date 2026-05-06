@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from src.utils.helpers import safe_filename
 
 _CHECKPOINT_BASE_KEYS = frozenset({"_type", "session_key", "status", "timestamp"})
@@ -45,7 +47,11 @@ def iter_checkpoint_rows(path: Path, checkpoint_type: str) -> Iterator[dict[str,
             line = line.strip()
             if not line:
                 continue
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                logger.warning("Skipping corrupt checkpoint row in {}", path)
+                continue
             if row.get("_type") == checkpoint_type:
                 yield row
 

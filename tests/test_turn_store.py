@@ -82,6 +82,25 @@ def test_read_checkpoint_rows_filters_type_and_ignores_empty_lines(tmp_path: Pat
     assert [row["turn_id"] for row in rows] == ["a", "c"]
 
 
+def test_read_checkpoint_rows_skips_corrupt_lines(tmp_path: Path):
+    path = tmp_path / "checkpoints.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                '{"_type":"turn_checkpoint","turn_id":"a"}',
+                "not json",
+                '{"_type":"turn_checkpoint","turn_id":"c"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = read_checkpoint_rows(path, "turn_checkpoint")
+
+    assert [row["turn_id"] for row in rows] == ["a", "c"]
+
+
 def test_read_checkpoint_rows_missing_file_returns_empty(tmp_path: Path):
     assert read_checkpoint_rows(tmp_path / "missing.jsonl", "turn_checkpoint") == []
 
@@ -93,6 +112,26 @@ def test_latest_checkpoint_row_returns_last_matching_row(tmp_path: Path):
             [
                 '{"_type":"turn_checkpoint","turn_id":"a"}',
                 '{"_type":"subagent_checkpoint","task_id":"b"}',
+                '{"_type":"turn_checkpoint","turn_id":"c"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    row = latest_checkpoint_row(path, "turn_checkpoint")
+
+    assert row is not None
+    assert row["turn_id"] == "c"
+
+
+def test_latest_checkpoint_row_skips_corrupt_lines(tmp_path: Path):
+    path = tmp_path / "checkpoints.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                '{"_type":"turn_checkpoint","turn_id":"a"}',
+                "not json",
                 '{"_type":"turn_checkpoint","turn_id":"c"}',
             ]
         )
