@@ -15,8 +15,9 @@ import asyncio
 import json
 import shutil
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha1
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -107,7 +108,7 @@ class _TaskWrite:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _coerce_metadata(value: Any) -> dict[str, Any]:
@@ -662,9 +663,7 @@ class StructuredMemoryStore:
         assert self._kg is not None
         domains = list(dict.fromkeys(routing_domains))
         fingerprint = sha1(
-            f"{normalize_rule(rule_text)}|{'|'.join(domains)}|{selected_primary or ''}".encode(
-                "utf-8"
-            )
+            f"{normalize_rule(rule_text)}|{'|'.join(domains)}|{selected_primary or ''}".encode()
         ).hexdigest()[:16]
         rule_id = f"rule-{fingerprint}"
 
@@ -840,7 +839,7 @@ class StructuredMemoryStore:
         if status != "success":
             return None
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M")
         domain_str = ", ".join(domains[:2]) or "general"
         title_short = (title or "")[:80]
         return f"[{timestamp}] {task_id} | {domain_str} | {title_short}"
@@ -907,10 +906,8 @@ class StructuredMemoryStore:
             )
             superseded_by = _legacy_ref(data.get("superseded_by"))
             if superseded_by:
-                try:
+                with suppress(Exception):
                     await kg.supersede(task_id, superseded_by)
-                except Exception:
-                    pass
 
     async def _migrate_legacy_rules(self, kg: KnowledgeGraph, rules_dir: Path) -> None:
         for path, data in _legacy_json_files(rules_dir):
@@ -929,10 +926,8 @@ class StructuredMemoryStore:
                 node_id=rule_id,
             )
             for task_id in _legacy_list(data.get("source_task_ids")):
-                try:
+                with suppress(Exception):
                     await kg.add_edge(task_id, rule_id, "derived")
-                except Exception:
-                    pass
 
     async def _migrate_legacy_research_notes(
         self,
@@ -956,10 +951,8 @@ class StructuredMemoryStore:
             )
             task_id = _legacy_ref(data.get("task_memory_id"))
             if task_id:
-                try:
+                with suppress(Exception):
                     await kg.add_edge(task_id, note_id, "produced")
-                except Exception:
-                    pass
 
     @staticmethod
     def _backup_legacy_dir(legacy_dir: Path) -> None:
