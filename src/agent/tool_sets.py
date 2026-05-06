@@ -6,6 +6,7 @@ across AgentLoop, SubagentManager, and GenVerEngine.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.agent.tools.registry import ToolRegistry
@@ -14,6 +15,73 @@ from src.agent.tools.tool_profiles import ALWAYS_ON_TOOLS, expand_groups, resolv
 if TYPE_CHECKING:
     from src.agent.tools.base import Tool
     from src.agent.tools.registration import ToolRegistrationConfig
+
+
+_FEISHU_TOOLS = {
+    "feishu_read": "FeishuReadTool",
+    "feishu_search": "FeishuSearchTool",
+    "feishu_list": "FeishuListTool",
+    "feishu_spaces": "FeishuSpacesTool",
+    "feishu_calendar": "FeishuCalendarTool",
+    "feishu_edit": "FeishuEditTool",
+    "feishu_create": "FeishuCreateTool",
+    "feishu_send": "FeishuSendTool",
+    "feishu_comments": "FeishuCommentsTool",
+    "feishu_download": "FeishuDownloadTool",
+    "feishu_info": "FeishuInfoTool",
+    "feishu_sheet": "FeishuSheetTool",
+    "feishu_task": "FeishuTaskTool",
+    "feishu_perm": "FeishuPermTool",
+    "feishu_chat": "FeishuChatTool",
+    "feishu_file": "FeishuFileTool",
+    "feishu_contact": "FeishuContactTool",
+}
+
+
+@dataclass
+class _RegistrationState:
+    registry: ToolRegistry
+    config: "ToolRegistrationConfig"
+    exec_config: object
+    profile_set: set[str] | None
+    expanded_allowed: set[str] | None
+    deny_tools: set[str]
+
+    @classmethod
+    def build(cls, registry: ToolRegistry, config: "ToolRegistrationConfig") -> "_RegistrationState":
+        from src.config.schema import ExecToolConfig
+
+        return cls(
+            registry=registry,
+            config=config,
+            exec_config=config.exec_config or ExecToolConfig(),
+            profile_set=resolve_profile(config.profile) if config.profile is not None else None,
+            expanded_allowed=expand_groups(config.allowed_tools),
+            deny_tools=config.deny_tools or set(),
+        )
+
+    @property
+    def mode(self) -> str:
+        return self.config.mode
+
+    @property
+    def is_team_mode(self) -> bool:
+        return self.mode == "team"
+
+    def should(self, name: str) -> bool:
+        if name in self.deny_tools:
+            return False
+        if self.profile_set is not None and name not in self.profile_set:
+            return False
+        if self.expanded_allowed is not None and name not in self.expanded_allowed:
+            return False
+        return True
+
+    def register(self, tool: "Tool") -> None:
+        self.registry.register(tool, deferred=tool.name not in ALWAYS_ON_TOOLS)
+
+    def register_always(self, tool: "Tool") -> None:
+        self.registry.register(tool)
 
 
 def register_standard_tools(
@@ -35,206 +103,184 @@ def register_standard_tools(
           names are in this set are registered.  ``None`` means register all
           applicable tools.  Supports group references (e.g. ``"group:fs"``).
     """
-    from src.config.schema import ExecToolConfig as _ECfg
-
-    # Extract fields from config
-    workspace = config.workspace
-    mode = config.mode
-    allowed_dir = config.allowed_dir
-    profile = config.profile
-    exec_config = config.exec_config
-    brave_api_key = config.brave_api_key
-    web_search_max_results = config.web_search_max_results
-    web_search_provider = config.web_search_provider
-    tavily_api_key = config.tavily_api_key
-    neuro_symbolic_config = config.neuro_symbolic_config
-    bus_publish = config.bus_publish
-    bus = config.bus
-    cron_service = config.cron_service
-    executor = config.executor
-    subagent_manager = config.subagent_manager
-    session_manager = config.session_manager
-    turn_store = config.turn_store
-    subagent_store = config.subagent_store
-    allowed_tools = config.allowed_tools
-    memory_index_resolver = config.memory_index_resolver
-    memory_search_enabled = config.memory_search_enabled
-    memory_search_max_results = config.memory_search_max_results
-    memory_search_min_score = config.memory_search_min_score
-    memory_recall_telemetry_enabled = config.memory_recall_telemetry_enabled
-    structured_memory_enabled = config.structured_memory_enabled
-    structured_workspace_resolver = config.structured_workspace_resolver
-    stock_config = config.stock_config
-    provider_keys = config.provider_keys
-    channel_env = config.channel_env
-    provider = config.provider
-    mcp_manager = config.mcp_manager
-    is_team_mode = mode == "team"
-
-    ec = exec_config or _ECfg()
-
-    # Profiles are opt-in. Existing mode semantics stay authoritative.
-    profile_set = resolve_profile(profile) if profile is not None else None
-
-    # Expand group references in allowed_tools
-    expanded_allowed = expand_groups(allowed_tools)
-
-    deny_tools = config.deny_tools or set()
-
-    def _should(name: str) -> bool:
-        """Check if a tool should be registered based on profile, deny list, and allowed_tools."""
-        if name in deny_tools:
-            return False
-        if profile_set is not None and name not in profile_set:
-            return False
-        if expanded_allowed is not None and name not in expanded_allowed:
-            return False
-        return True
-
-    def _reg(tool: Tool) -> None:
-        """Register tool, routing to deferred pool if not always-on."""
-        registry.register(tool, deferred=tool.name not in ALWAYS_ON_TOOLS)
-
-    # --- verifier: read-only fs + bash (autonomous verification agent) ---
-    if mode == "verifier":
-        from src.agent.tools.fs_list import ListDirTool
-        from src.agent.tools.fs_read import ReadFileTool
-        from src.agent.tools.fs_search import GlobTool, GrepTool
-        from src.agent.tools.shell import ExecTool
-
-        registry.register(ExecTool(working_dir=str(workspace), timeout=300))
-        registry.register(ReadFileTool(workspace=workspace, allowed_dir=allowed_dir))
-        registry.register(GlobTool(workspace=workspace, allowed_dir=allowed_dir))
-        registry.register(GrepTool(workspace=workspace, allowed_dir=allowed_dir))
-        registry.register(ListDirTool(workspace=workspace, allowed_dir=allowed_dir))
+    state = _RegistrationState.build(registry, config)
+    if state.mode == "verifier":
+        _register_verifier_tools(state)
         return
 
-    # --- filesystem tools ---
-    if _should("read_file"):
+    _register_filesystem_tools(state)
+    _register_notebook_tools(state)
+    _register_todo_tools(state)
+    _register_exec_tools(state)
+    _register_web_and_discovery_tools(state)
+    _register_plan_mode_tools(state)
+    _register_memory_tools(state)
+    _register_analysis_tools(state)
+    _register_browser_tools(state)
+    _register_communication_tools(state)
+    _register_nested_subagent_tools(state)
+    _register_feishu_tools(state)
+    _register_session_tools(state)
+
+
+def _register_verifier_tools(state: _RegistrationState) -> None:
+    from src.agent.tools.fs_list import ListDirTool
+    from src.agent.tools.fs_read import ReadFileTool
+    from src.agent.tools.fs_search import GlobTool, GrepTool
+    from src.agent.tools.shell import ExecTool
+
+    config = state.config
+    state.register_always(ExecTool(working_dir=str(config.workspace), timeout=300))
+    state.register_always(
+        ReadFileTool(workspace=config.workspace, allowed_dir=config.allowed_dir)
+    )
+    state.register_always(GlobTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+    state.register_always(GrepTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+    state.register_always(ListDirTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+
+
+def _register_filesystem_tools(state: _RegistrationState) -> None:
+    config = state.config
+
+    if state.should("read_file"):
         from src.agent.tools.fs_read import ReadFileTool
 
-        _reg(ReadFileTool(workspace=workspace, allowed_dir=allowed_dir))
+        state.register(ReadFileTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
 
-    if is_team_mode:
-        if _should("write_docs"):
+    if state.is_team_mode:
+        if state.should("write_docs"):
             from src.agent.tools.fs_write import DocWriteFileTool
 
-            _reg(DocWriteFileTool(workspace=workspace, allowed_dir=allowed_dir))
+            state.register(
+                DocWriteFileTool(workspace=config.workspace, allowed_dir=config.allowed_dir)
+            )
     else:
-        if _should("write_file"):
+        if state.should("write_file"):
             from src.agent.tools.fs_write import WriteFileTool
 
-            _reg(
+            state.register(
                 WriteFileTool(
-                    workspace=workspace,
-                    allowed_dir=allowed_dir,
-                    neuro_symbolic_config=neuro_symbolic_config,
+                    workspace=config.workspace,
+                    allowed_dir=config.allowed_dir,
+                    neuro_symbolic_config=config.neuro_symbolic_config,
                 )
             )
-        if _should("edit_file"):
+        if state.should("edit_file"):
             from src.agent.tools.fs_edit import EditFileTool
 
-            _reg(
+            state.register(
                 EditFileTool(
-                    workspace=workspace,
-                    allowed_dir=allowed_dir,
-                    neuro_symbolic_config=neuro_symbolic_config,
+                    workspace=config.workspace,
+                    allowed_dir=config.allowed_dir,
+                    neuro_symbolic_config=config.neuro_symbolic_config,
                 )
             )
 
-    if _should("list_dir"):
+    if state.should("list_dir"):
         from src.agent.tools.fs_list import ListDirTool
 
-        _reg(ListDirTool(workspace=workspace, allowed_dir=allowed_dir))
-    if _should("glob"):
+        state.register(ListDirTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+    if state.should("glob"):
         from src.agent.tools.fs_search import GlobTool
 
-        _reg(GlobTool(workspace=workspace, allowed_dir=allowed_dir))
-    if _should("grep"):
+        state.register(GlobTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+    if state.should("grep"):
         from src.agent.tools.fs_search import GrepTool
 
-        _reg(GrepTool(workspace=workspace, allowed_dir=allowed_dir))
+        state.register(GrepTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
 
-    if not is_team_mode and _should("multi_edit"):
+    if not state.is_team_mode and state.should("multi_edit"):
         from src.agent.tools.fs_edit import MultiEditTool
 
-        _reg(MultiEditTool(workspace=workspace, allowed_dir=allowed_dir))
+        state.register(MultiEditTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
 
-    if not is_team_mode and _should("apply_patch"):
+    if not state.is_team_mode and state.should("apply_patch"):
         from src.agent.tools.apply_patch import ApplyPatchTool
 
-        _reg(ApplyPatchTool(workspace=workspace, allowed_dir=allowed_dir))
+        state.register(ApplyPatchTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
 
-    # --- notebook tools ---
-    if _should("notebook_read"):
+
+def _register_notebook_tools(state: _RegistrationState) -> None:
+    config = state.config
+
+    if state.should("notebook_read"):
         from src.agent.tools.notebook import NotebookReadTool
 
-        _reg(NotebookReadTool(workspace=workspace, allowed_dir=allowed_dir))
-    if not is_team_mode and _should("notebook_edit"):
+        state.register(NotebookReadTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
+    if not state.is_team_mode and state.should("notebook_edit"):
         from src.agent.tools.notebook import NotebookEditTool
 
-        _reg(NotebookEditTool(workspace=workspace, allowed_dir=allowed_dir))
+        state.register(NotebookEditTool(workspace=config.workspace, allowed_dir=config.allowed_dir))
 
-    # --- todo / tasks ---
-    if mode != "subagent" and _should("todo"):
-        from src.agent.tools.todo import (
-            TaskCreateTool,
-            TaskGetTool,
-            TaskListTool,
-            TaskUpdateTool,
-            TodoTool,
-        )
 
-        _reg(TodoTool(workspace=workspace))
-        _reg(TaskCreateTool(workspace=workspace))
-        _reg(TaskListTool(workspace=workspace))
-        _reg(TaskUpdateTool(workspace=workspace))
-        _reg(TaskGetTool(workspace=workspace))
+def _register_todo_tools(state: _RegistrationState) -> None:
+    if state.mode == "subagent" or not state.should("todo"):
+        return
 
-    # --- exec ---
-    if _should("bash"):
+    from src.agent.tools.todo import (
+        TaskCreateTool,
+        TaskGetTool,
+        TaskListTool,
+        TaskUpdateTool,
+        TodoTool,
+    )
+
+    workspace = state.config.workspace
+    state.register(TodoTool(workspace=workspace))
+    state.register(TaskCreateTool(workspace=workspace))
+    state.register(TaskListTool(workspace=workspace))
+    state.register(TaskUpdateTool(workspace=workspace))
+    state.register(TaskGetTool(workspace=workspace))
+
+
+def _register_exec_tools(state: _RegistrationState) -> None:
+    config = state.config
+    exec_config = state.exec_config
+
+    if state.should("bash"):
         from src.agent.tools.shell import ExecTool, SafeExecTool
 
         exec_kwargs = dict(
-            working_dir=str(workspace),
-            timeout=ec.timeout,
-            restrict_to_workspace=allowed_dir is not None,
-            path_append=ec.path_append,
-            env_passthrough=ec.env_passthrough,
+            working_dir=str(config.workspace),
+            timeout=exec_config.timeout,
+            restrict_to_workspace=config.allowed_dir is not None,
+            path_append=exec_config.path_append,
+            env_passthrough=exec_config.env_passthrough,
         )
-        if is_team_mode:
-            _reg(SafeExecTool(**exec_kwargs))
+        if state.is_team_mode:
+            state.register(SafeExecTool(**exec_kwargs))
         else:
-            _reg(ExecTool(**exec_kwargs))
+            state.register(ExecTool(**exec_kwargs))
 
-    # --- process management ---
-    if not is_team_mode and _should("process"):
+    if not state.is_team_mode and state.should("process"):
         from src.agent.tools.process import ProcessTool
 
-        _reg(ProcessTool(working_dir=str(workspace)))
+        state.register(ProcessTool(working_dir=str(config.workspace)))
 
-    # --- gateway self-restart (owner-only, delayed kill) ---
-    if not is_team_mode and _should("gateway_restart"):
+    if not state.is_team_mode and state.should("gateway_restart"):
         from src.agent.tools.gateway_restart import GatewayRestartTool
 
-        _reg(GatewayRestartTool())
+        state.register(GatewayRestartTool())
 
-    # --- web ---
-    if _should("web_search"):
+
+def _register_web_and_discovery_tools(state: _RegistrationState) -> None:
+    config = state.config
+
+    if state.should("web_search"):
         from src.agent.tools.web_search import WebSearchTool
 
-        _reg(
+        state.register(
             WebSearchTool(
-                api_key=brave_api_key,
-                max_results=web_search_max_results,
-                provider=web_search_provider,
-                tavily_api_key=tavily_api_key,
+                api_key=config.brave_api_key,
+                max_results=config.web_search_max_results,
+                provider=config.web_search_provider,
+                tavily_api_key=config.tavily_api_key,
             )
         )
-    if _should("web_fetch"):
+    if state.should("web_fetch"):
         from src.agent.tools.web_fetch import WebFetchTool
 
-        _reg(
+        state.register(
             WebFetchTool(
                 max_chars=config.web_fetch_max_chars,
                 extractor=config.web_fetch_extractor,
@@ -246,293 +292,300 @@ def register_standard_tools(
                 blocked_domains=config.web_fetch_blocked_domains,
             )
         )
-    if _should("http_request"):
+    if state.should("http_request"):
         from src.agent.tools.web_http import HttpRequestTool
 
-        _reg(HttpRequestTool())
-    if _should("image_search"):
+        state.register(HttpRequestTool())
+    if state.should("image_search"):
         from src.agent.tools.web_image_search import ImageSearchTool
 
-        _reg(ImageSearchTool())
-    if mode != "verifier" and _should("capability_search"):
+        state.register(ImageSearchTool())
+
+    if state.should("capability_search"):
         from src.agent.tools.capability_search import CapabilitySearchTool
 
-        _reg(CapabilitySearchTool(workspace=workspace, manager=mcp_manager))
-    if mode != "verifier" and _should("tool_search"):
+        state.register(CapabilitySearchTool(workspace=config.workspace, manager=config.mcp_manager))
+    if state.should("tool_search"):
         from src.agent.tools.tool_search import ToolSearchTool
 
-        registry.register(ToolSearchTool(registry=registry))  # always-on, never deferred
-    if mode != "verifier" and _should("skill_search"):
+        state.register_always(ToolSearchTool(registry=state.registry))
+    if state.should("skill_search"):
         from src.agent.tools.skill_search import SkillSearchTool
 
-        _reg(SkillSearchTool(workspace=workspace))
-    if mode != "verifier" and mcp_manager is not None and _should("mcp_search"):
+        state.register(SkillSearchTool(workspace=config.workspace))
+    if config.mcp_manager is not None and state.should("mcp_search"):
         from src.agent.tools.mcp_search import MCPToolSearch
 
-        _reg(MCPToolSearch(workspace=workspace, manager=mcp_manager))
+        state.register(MCPToolSearch(workspace=config.workspace, manager=config.mcp_manager))
 
-    # --- plan mode tools (always-on, never deferred) ---
-    if _should("enter_plan_mode"):
+
+def _register_plan_mode_tools(state: _RegistrationState) -> None:
+    if state.should("enter_plan_mode"):
         from src.agent.tools.plan_mode import EnterPlanModeTool
 
-        registry.register(EnterPlanModeTool(registry=registry))
-    if _should("exit_plan_mode"):
+        state.register_always(EnterPlanModeTool(registry=state.registry))
+    if state.should("exit_plan_mode"):
         from src.agent.tools.plan_mode import ExitPlanModeTool
 
-        registry.register(ExitPlanModeTool(registry=registry))
+        state.register_always(ExitPlanModeTool(registry=state.registry))
 
-    # --- memory tools ---
-    if memory_search_enabled and memory_index_resolver is not None and mode not in ("verifier",):
-        if _should("memory_search"):
+
+def _register_memory_tools(state: _RegistrationState) -> None:
+    config = state.config
+    if config.memory_search_enabled and config.memory_index_resolver is not None:
+        if state.should("memory_search"):
             from src.agent.tools.memory_search import MemorySearchTool
 
-            _reg(
+            state.register(
                 MemorySearchTool(
-                    index_resolver=memory_index_resolver,
-                    workspace_resolver=structured_workspace_resolver,
-                    default_max_results=memory_search_max_results,
-                    default_min_score=memory_search_min_score,
-                    recall_telemetry_enabled=memory_recall_telemetry_enabled,
+                    index_resolver=config.memory_index_resolver,
+                    workspace_resolver=config.structured_workspace_resolver,
+                    default_max_results=config.memory_search_max_results,
+                    default_min_score=config.memory_search_min_score,
+                    recall_telemetry_enabled=config.memory_recall_telemetry_enabled,
                 )
             )
-        if _should("memory_get"):
+        if state.should("memory_get"):
             from src.agent.tools.memory_search import MemoryGetTool
 
-            _reg(MemoryGetTool(index_resolver=memory_index_resolver))
-    if (
-        structured_memory_enabled
-        and structured_workspace_resolver is not None
-        and mode not in ("verifier",)
-    ):
-        if _should("structured_memory_search"):
+            state.register(MemoryGetTool(index_resolver=config.memory_index_resolver))
+
+    if config.structured_memory_enabled and config.structured_workspace_resolver is not None:
+        if state.should("structured_memory_search"):
             from src.agent.tools.structured_memory import StructuredMemorySearchTool
 
-            _reg(
+            state.register(
                 StructuredMemorySearchTool(
-                    workspace_resolver=structured_workspace_resolver,
-                    default_max_results=memory_search_max_results,
-                    recall_telemetry_enabled=memory_recall_telemetry_enabled,
+                    workspace_resolver=config.structured_workspace_resolver,
+                    default_max_results=config.memory_search_max_results,
+                    recall_telemetry_enabled=config.memory_recall_telemetry_enabled,
                 )
             )
-        if _should("research_note_get"):
+        if state.should("research_note_get"):
             from src.agent.tools.structured_memory import ResearchNoteGetTool
 
-            _reg(ResearchNoteGetTool(workspace_resolver=structured_workspace_resolver))
-        if _should("task_memory_get"):
+            state.register(ResearchNoteGetTool(workspace_resolver=config.structured_workspace_resolver))
+        if state.should("task_memory_get"):
             from src.agent.tools.structured_memory import TaskMemoryGetTool
 
-            _reg(TaskMemoryGetTool(workspace_resolver=structured_workspace_resolver))
-        if _should("domain_rule_get"):
+            state.register(TaskMemoryGetTool(workspace_resolver=config.structured_workspace_resolver))
+        if state.should("domain_rule_get"):
             from src.agent.tools.structured_memory import DomainRuleGetTool
 
-            _reg(
+            state.register(
                 DomainRuleGetTool(
-                    workspace_resolver=structured_workspace_resolver,
-                    recall_telemetry_enabled=memory_recall_telemetry_enabled,
+                    workspace_resolver=config.structured_workspace_resolver,
+                    recall_telemetry_enabled=config.memory_recall_telemetry_enabled,
                 )
             )
 
-    # --- stock analysis ---
-    if mode in ("single", "team") and _should("stock_analysis"):
-        if stock_config and stock_config.enabled:
+
+def _register_analysis_tools(state: _RegistrationState) -> None:
+    config = state.config
+
+    if state.mode in ("single", "team") and state.should("stock_analysis"):
+        if config.stock_config and config.stock_config.enabled:
             from src.agent.tools.stock import StockAnalysisTool
 
-            _reg(
+            state.register(
                 StockAnalysisTool(
-                    stock_config=stock_config,
-                    provider_keys=provider_keys or {},
-                    brave_api_key=brave_api_key,
-                    channel_env=channel_env,
+                    stock_config=config.stock_config,
+                    provider_keys=config.provider_keys or {},
+                    brave_api_key=config.brave_api_key,
+                    channel_env=config.channel_env,
                 )
             )
 
-    # --- vendor study ---
-    if mode in ("single", "team") and _should("vendor_study"):
+    if state.mode in ("single", "team") and state.should("vendor_study"):
         from src.agent.tools.vendor_study import VendorStudyTool
 
         study_tool = VendorStudyTool()
         if study_tool.study_guide_path.exists():
-            _reg(study_tool)
+            state.register(study_tool)
 
-    # --- image analysis ---
-    if provider is not None and _should("image_analyze"):
+    if config.provider is not None and state.should("image_analyze"):
         from src.agent.tools.image import ImageAnalyzeTool
 
-        _reg(ImageAnalyzeTool(provider=provider))
+        state.register(ImageAnalyzeTool(provider=config.provider))
 
-    # --- PDF analysis ---
-    if _should("pdf"):
+    if state.should("pdf"):
         from src.agent.tools.pdf import PdfTool
 
-        _reg(PdfTool(provider=provider))
+        state.register(PdfTool(provider=config.provider))
 
-    # --- TTS ---
-    if _should("tts"):
+    if state.should("tts"):
         from src.agent.tools.tts import TtsTool
 
-        _reg(TtsTool(workspace=workspace))
+        state.register(TtsTool(workspace=config.workspace))
 
-    # --- browser automation ---
-    if _should("browser"):
-        from src.agent.tools.browser import BrowserTool
-        from src.security.autonomy import AutonomyLevel
 
-        browser_cfg = config.browser_config
-        if browser_cfg is None or getattr(browser_cfg, "enabled", True):
-            readonly = bool(
-                config.autonomy_level and config.autonomy_level == AutonomyLevel.READONLY
+def _register_browser_tools(state: _RegistrationState) -> None:
+    if not state.should("browser"):
+        return
+
+    from src.agent.tools.browser import BrowserTool
+    from src.security.autonomy import AutonomyLevel
+
+    config = state.config
+    browser_config = config.browser_config
+    if browser_config is not None and not getattr(browser_config, "enabled", True):
+        return
+
+    readonly = bool(config.autonomy_level and config.autonomy_level == AutonomyLevel.READONLY)
+    state.register(BrowserTool(workspace=config.workspace, config=browser_config, readonly=readonly))
+
+
+def _register_communication_tools(state: _RegistrationState) -> None:
+    if state.mode not in ("single", "team"):
+        return
+
+    config = state.config
+    if config.bus_publish is not None and state.should("message"):
+        from src.agent.tools.message import MessageTool
+
+        state.register(MessageTool(send_callback=config.bus_publish))
+    if config.subagent_manager is not None and state.should("agent"):
+        from src.agent.tools.spawn import AgentTool
+
+        state.register(AgentTool(manager=config.subagent_manager))
+    if config.executor is not None and state.should("subagent_wait"):
+        from src.agent.tools.subagent_wait import SubagentWaitTool
+
+        state.register(SubagentWaitTool(executor=config.executor))
+    if config.executor is not None and state.should("subagent_kill"):
+        from src.agent.tools.subagent_kill import SubagentKillTool
+
+        state.register(SubagentKillTool(executor=config.executor))
+    if config.cron_service is not None and state.should("cron"):
+        from src.agent.tools.cron import CronTool
+
+        state.register(CronTool(config.cron_service))
+
+
+def _register_nested_subagent_tools(state: _RegistrationState) -> None:
+    config = state.config
+    if state.mode != "subagent" or config.executor is None:
+        return
+
+    if state.should("agent") and config.subagent_manager is not None:
+        from src.agent.tools.spawn import AgentTool
+
+        state.register(AgentTool(manager=config.subagent_manager))
+    if state.should("subagent_wait"):
+        from src.agent.tools.subagent_wait import SubagentWaitTool
+
+        state.register(SubagentWaitTool(executor=config.executor))
+    if state.should("subagent_kill"):
+        from src.agent.tools.subagent_kill import SubagentKillTool
+
+        state.register(SubagentKillTool(executor=config.executor))
+    if state.should("subagents_list") and config.subagent_manager is not None:
+        from src.agent.tools.sessions import SubagentsListTool
+
+        state.register(SubagentsListTool(manager=config.subagent_manager))
+
+
+def _register_feishu_tools(state: _RegistrationState) -> None:
+    needed = [name for name in _FEISHU_TOOLS if state.should(name)]
+    if not needed:
+        return
+
+    config = state.config
+    app_id, app_secret, feishu_config = _resolve_feishu_credentials(config.channel_env)
+    if not app_id or not app_secret:
+        return
+
+    import src.agent.tools.feishu as feishu_tools
+    from src.feishu.client import FeishuClient
+
+    client = FeishuClient(
+        app_id=app_id,
+        app_secret=app_secret,
+        cache_dir=(config.channel_env or {}).get("feishu_cache_dir", "~/.theos/feishu_cache"),
+        token_dir=(config.channel_env or {}).get("feishu_token_dir", "~/.theos/feishu_tokens"),
+    )
+    allow_from = _resolve_feishu_allow_from(feishu_config)
+
+    for tool_name in needed:
+        tool_cls = getattr(feishu_tools, _FEISHU_TOOLS[tool_name])
+        if tool_name == "feishu_create":
+            state.register(tool_cls(client=client, allow_from=allow_from))
+        else:
+            state.register(tool_cls(client=client))
+
+    if state.should("feishu_auth"):
+        token_dir = (config.channel_env or {}).get("feishu_token_dir", "~/.theos/feishu_tokens")
+        state.register(
+            feishu_tools.FeishuAuthTool(
+                app_id=app_id,
+                app_secret=app_secret,
+                token_dir=token_dir,
             )
-            _reg(BrowserTool(workspace=workspace, config=browser_cfg, readonly=readonly))
+        )
 
-    # --- communication (only in loop modes) ---
-    if mode in ("single", "team"):
-        if bus_publish is not None and _should("message"):
-            from src.agent.tools.message import MessageTool
 
-            _reg(MessageTool(send_callback=bus_publish))
-        if subagent_manager is not None and _should("agent"):
-            from src.agent.tools.spawn import AgentTool
+def _resolve_feishu_credentials(channel_env: dict[str, str]) -> tuple[str, str, object | None]:
+    app_id = (channel_env or {}).get("feishu_app_id", "")
+    app_secret = (channel_env or {}).get("feishu_app_secret", "")
+    feishu_config = None
+    if not app_id or not app_secret:
+        try:
+            from src.config.loader import load_config
 
-            _reg(AgentTool(manager=subagent_manager))
-        if executor is not None and _should("subagent_wait"):
-            from src.agent.tools.subagent_wait import SubagentWaitTool
+            feishu_config = load_config().channels.feishu
+            app_id = app_id or feishu_config.app_id
+            app_secret = app_secret or feishu_config.app_secret
+        except Exception:
+            pass
+    return app_id, app_secret, feishu_config
 
-            _reg(SubagentWaitTool(executor=executor))
-        if executor is not None and _should("subagent_kill"):
-            from src.agent.tools.subagent_kill import SubagentKillTool
 
-            _reg(SubagentKillTool(executor=executor))
-        if cron_service is not None and _should("cron"):
-            from src.agent.tools.cron import CronTool
+def _resolve_feishu_allow_from(feishu_config: object | None) -> list[str]:
+    try:
+        return list(feishu_config.allow_from)  # type: ignore[union-attr]
+    except Exception:
+        pass
 
-            _reg(CronTool(cron_service))
+    try:
+        from src.config.loader import load_config
 
-    # Nested subagent tools — registered when mode="subagent" and allowed_tools includes them
-    if mode == "subagent" and executor is not None:
-        if _should("agent") and subagent_manager is not None:
-            from src.agent.tools.spawn import AgentTool
+        return list(load_config().channels.feishu.allow_from)
+    except Exception:
+        return []
 
-            _reg(AgentTool(manager=subagent_manager))
 
-        if _should("subagent_wait"):
-            from src.agent.tools.subagent_wait import SubagentWaitTool
+def _register_session_tools(state: _RegistrationState) -> None:
+    if state.mode not in ("single", "team"):
+        return
 
-            _reg(SubagentWaitTool(executor=executor))
+    config = state.config
+    if config.session_manager is not None:
+        if state.should("sessions_list"):
+            from src.agent.tools.sessions import SessionsListTool
 
-        if _should("subagent_kill"):
-            from src.agent.tools.subagent_kill import SubagentKillTool
-
-            _reg(SubagentKillTool(executor=executor))
-
-        if _should("subagents_list") and subagent_manager is not None:
-            from src.agent.tools.sessions import SubagentsListTool
-
-            _reg(SubagentsListTool(manager=subagent_manager))
-
-    # --- feishu knowledge tools ---
-    _feishu_tools = {
-        "feishu_read": "FeishuReadTool",
-        "feishu_search": "FeishuSearchTool",
-        "feishu_list": "FeishuListTool",
-        "feishu_spaces": "FeishuSpacesTool",
-        "feishu_calendar": "FeishuCalendarTool",
-        "feishu_edit": "FeishuEditTool",
-        "feishu_create": "FeishuCreateTool",
-        "feishu_send": "FeishuSendTool",
-        "feishu_comments": "FeishuCommentsTool",
-        "feishu_download": "FeishuDownloadTool",
-        "feishu_info": "FeishuInfoTool",
-        "feishu_sheet": "FeishuSheetTool",
-        "feishu_task": "FeishuTaskTool",
-        "feishu_perm": "FeishuPermTool",
-        "feishu_chat": "FeishuChatTool",
-        "feishu_file": "FeishuFileTool",
-        "feishu_contact": "FeishuContactTool",
-    }
-    _feishu_needed = [name for name in _feishu_tools if _should(name)]
-    if _feishu_needed:
-        # Read Feishu credentials: channel_env override > theos config
-        _fid = (channel_env or {}).get("feishu_app_id", "")
-        _fsecret = (channel_env or {}).get("feishu_app_secret", "")
-        if not _fid or not _fsecret:
-            try:
-                from src.config.loader import load_config as _load_cfg
-
-                _fs_cfg = _load_cfg().channels.feishu
-                _fid = _fid or _fs_cfg.app_id
-                _fsecret = _fsecret or _fs_cfg.app_secret
-            except Exception:
-                pass
-        if _fid and _fsecret:
-            import src.agent.tools.feishu as _feishu_mod
-            from src.feishu.client import FeishuClient
-
-            _feishu_client = FeishuClient(
-                app_id=_fid,
-                app_secret=_fsecret,
-                cache_dir=(channel_env or {}).get("feishu_cache_dir", "~/.theos/feishu_cache"),
-                token_dir=(channel_env or {}).get("feishu_token_dir", "~/.theos/feishu_tokens"),
+            state.register(
+                SessionsListTool(
+                    session_manager=config.session_manager,
+                    turn_store=config.turn_store,
+                    subagent_store=config.subagent_store,
+                )
             )
-            # Read allow_from for auto-granting permissions on created docs
-            _feishu_allow_from: list[str] = []
-            try:
-                _feishu_allow_from = _fs_cfg.allow_from  # type: ignore[union-attr]
-            except Exception:
-                try:
-                    from src.config.loader import load_config as _load_cfg2  # noqa: PLC0415
+        if state.should("sessions_history"):
+            from src.agent.tools.sessions import SessionsHistoryTool
 
-                    _feishu_allow_from = _load_cfg2().channels.feishu.allow_from
-                except Exception:
-                    pass
-
-            for tool_name in _feishu_needed:
-                cls = getattr(_feishu_mod, _feishu_tools[tool_name])
-                if tool_name == "feishu_create":
-                    _reg(cls(client=_feishu_client, allow_from=_feishu_allow_from))
-                else:
-                    _reg(cls(client=_feishu_client))
-
-            # Always register feishu_auth tool when feishu is configured
-            if _should("feishu_auth"):
-                _token_dir = (channel_env or {}).get(
-                    "feishu_token_dir", "~/.theos/feishu_tokens"
+            state.register(
+                SessionsHistoryTool(
+                    session_manager=config.session_manager,
+                    turn_store=config.turn_store,
+                    subagent_store=config.subagent_store,
                 )
-                _reg(
-                    _feishu_mod.FeishuAuthTool(
-                        app_id=_fid,
-                        app_secret=_fsecret,
-                        token_dir=_token_dir,
-                    )
-                )
+            )
 
-    # --- session orchestration ---
-    if mode in ("single", "team"):
-        if session_manager is not None:
-            if _should("sessions_list"):
-                from src.agent.tools.sessions import SessionsListTool
+    if config.bus is not None and state.should("sessions_send"):
+        from src.agent.tools.sessions import SessionsSendTool
 
-                _reg(
-                    SessionsListTool(
-                        session_manager=session_manager,
-                        turn_store=turn_store,
-                        subagent_store=subagent_store,
-                    )
-                )
-            if _should("sessions_history"):
-                from src.agent.tools.sessions import SessionsHistoryTool
+        state.register(SessionsSendTool(bus=config.bus))
+    if config.subagent_manager is not None and state.should("subagents_list"):
+        from src.agent.tools.sessions import SubagentsListTool
 
-                _reg(
-                    SessionsHistoryTool(
-                        session_manager=session_manager,
-                        turn_store=turn_store,
-                        subagent_store=subagent_store,
-                    )
-                )
-        if bus is not None and _should("sessions_send"):
-            from src.agent.tools.sessions import SessionsSendTool
-
-            _reg(SessionsSendTool(bus=bus))
-        if subagent_manager is not None and _should("subagents_list"):
-            from src.agent.tools.sessions import SubagentsListTool
-
-            _reg(SubagentsListTool(manager=subagent_manager))
+        state.register(SubagentsListTool(manager=config.subagent_manager))
