@@ -118,20 +118,8 @@ class Sanitizer:
         warnings: list[str] = []
         lower = text.lower()
 
-        # Aho-Corasick exact matches
-        if self._automaton is not None:
-            for _end_idx, (pattern, category) in self._automaton.iter(lower):
-                warnings.append(f"{category}: matched '{pattern}'")
-        else:
-            # Fallback: linear scan (slower but no dependency)
-            for pattern, category in _EXACT_PATTERNS:
-                if pattern.lower() in lower:
-                    warnings.append(f"{category}: matched '{pattern}'")
-
-        # Regex matches
-        for regex, category in _REGEX_PATTERNS:
-            if regex.search(text):
-                warnings.append(f"{category}: regex match")
+        warnings.extend(self._iter_exact_warnings(lower))
+        warnings.extend(_iter_regex_warnings(text))
 
         if not warnings:
             return SanitizedOutput(content=text)
@@ -143,3 +131,25 @@ class Sanitizer:
                 was_modified=True,
             )
         return SanitizedOutput(content=text, warnings=warnings)
+
+    def _iter_exact_warnings(self, lower: str) -> list[str]:
+        """Return warnings for exact-pattern matches in lower-cased text."""
+        warnings: list[str] = []
+        if self._automaton is not None:
+            for _end_idx, (pattern, category) in self._automaton.iter(lower):
+                warnings.append(f"{category}: matched '{pattern}'")
+            return warnings
+
+        for pattern, category in _EXACT_PATTERNS:
+            if pattern.lower() in lower:
+                warnings.append(f"{category}: matched '{pattern}'")
+        return warnings
+
+
+def _iter_regex_warnings(text: str) -> list[str]:
+    """Return warnings for regex-based injection matches."""
+    warnings: list[str] = []
+    for regex, category in _REGEX_PATTERNS:
+        if regex.search(text):
+            warnings.append(f"{category}: regex match")
+    return warnings
