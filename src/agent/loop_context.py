@@ -6,6 +6,7 @@ message construction for each LLM turn.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from src.memory.recall import MemoryRecallService
 
 _EPHEMERAL_CONTEXT_TAG = "[Ephemeral Context — not part of user history]"
+_INSTINCT_SIDECAR_RE = re.compile(r"<!-- instinct-routing:(.*?) -->")
 
 
 class TurnContextAssembler:
@@ -35,12 +37,7 @@ class TurnContextAssembler:
         self._roles = roles or {}
         self._recall_service = recall_service
         self._learning_enabled = learning_enabled
-        self._global_context = ContextBuilder(
-            workspace,
-            roles=self._roles,
-            recall_service=recall_service,
-            learning_enabled=learning_enabled,
-        )
+        self._global_context = self._new_context()
         self._cache: dict[str, ContextBuilder] = {}
 
     # -- public properties ---------------------------------------------------
@@ -62,13 +59,18 @@ class TurnContextAssembler:
         Called by ``reload_roles()``.
         """
         self._roles = roles or {}
-        self._global_context = ContextBuilder(
-            self._workspace,
+        self._global_context = self._new_context()
+        self._cache.clear()
+
+    def _new_context(self, group_workspace: Path | None = None) -> ContextBuilder:
+        """Create a ContextBuilder sharing assembler-wide roles and recall state."""
+        return ContextBuilder(
+            workspace=self._workspace,
+            group_workspace=group_workspace,
             roles=self._roles,
             recall_service=self._recall_service,
             learning_enabled=self._learning_enabled,
         )
-        self._cache.clear()
 
     # -- per-session / per-workspace context ---------------------------------
 
@@ -88,13 +90,7 @@ class TurnContextAssembler:
                     "group_workspace_resolver is required when group_memory_enabled=True"
                 )
             group_ws = group_workspace_resolver(session_key)
-            self._cache[session_key] = ContextBuilder(
-                workspace=self._workspace,  # global (skills)
-                group_workspace=group_ws,  # per-group (memory, bootstrap)
-                roles=self._roles,
-                recall_service=self._recall_service,
-                learning_enabled=self._learning_enabled,
-            )
+            self._cache[session_key] = self._new_context(group_workspace=group_ws)
         return self._cache[session_key]
 
     def get_for_workspace(
@@ -120,13 +116,7 @@ class TurnContextAssembler:
                 group_memory_enabled=group_memory_enabled,
                 group_workspace_resolver=group_workspace_resolver,
             )
-        return ContextBuilder(
-            workspace=self._workspace,
-            group_workspace=workspace,
-            roles=self._roles,
-            recall_service=self._recall_service,
-            learning_enabled=self._learning_enabled,
-        )
+        return self._new_context(group_workspace=workspace)
 
     # -- instinct extraction (static) ----------------------------------------
 
@@ -136,18 +126,9 @@ class TurnContextAssembler:
         if not hook_ctx:
             return [], None
 
-        # I7: Try structured sidecar first
-        import json
-
-        sidecar_match = re.search(r"<!-- instinct-routing:(.*?) -->", hook_ctx)
-        if sidecar_match:
-            try:
-                data = json.loads(sidecar_match.group(1))
-                domains = data.get("domains", [])
-                primary = data.get("selected_primary")
-                return domains, primary
-            except (json.JSONDecodeError, KeyError):
-                pass  # fallback to regex
+        sidecar = TurnContextAssembler._extract_instinct_sidecar(hook_ctx)
+        if sidecar is not None:
+            return sidecar.get("domains", []), sidecar.get("selected_primary")
 
         # Fallback: existing regex parsing
         domains: list[str] = []
@@ -166,16 +147,9 @@ class TurnContextAssembler:
         if not hook_ctx:
             return []
 
-        # I7: Try structured sidecar first
-        import json
-
-        sidecar_match = re.search(r"<!-- instinct-routing:(.*?) -->", hook_ctx)
-        if sidecar_match:
-            try:
-                data = json.loads(sidecar_match.group(1))
-                return data.get("skills", [])
-            except (json.JSONDecodeError, KeyError):
-                pass  # fallback to regex
+        sidecar = TurnContextAssembler._extract_instinct_sidecar(hook_ctx)
+        if sidecar is not None:
+            return sidecar.get("skills", [])
 
         # Fallback: existing regex parsing
         skills: list[str] = []
@@ -194,16 +168,21 @@ class TurnContextAssembler:
         if not hook_ctx:
             return []
 
-        import json
-
-        sidecar_match = re.search(r"<!-- instinct-routing:(.*?) -->", hook_ctx)
-        if sidecar_match:
-            try:
-                data = json.loads(sidecar_match.group(1))
-                return data.get("tools", [])
-            except (json.JSONDecodeError, KeyError):
-                pass
+        sidecar = TurnContextAssembler._extract_instinct_sidecar(hook_ctx)
+        if sidecar is not None:
+            return sidecar.get("tools", [])
         return []
+
+    @staticmethod
+    def _extract_instinct_sidecar(hook_ctx: str) -> dict[str, Any] | None:
+        sidecar_match = _INSTINCT_SIDECAR_RE.search(hook_ctx)
+        if not sidecar_match:
+            return None
+        try:
+            data = json.loads(sidecar_match.group(1))
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
 
     # -- turn message assembly -----------------------------------------------
 

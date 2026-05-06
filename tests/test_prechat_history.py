@@ -56,6 +56,14 @@ class TestPreChatHistory:
         assert domains == ["coding/general", "paper/reading"]
         assert primary == "coding/general"
 
+    def test_extract_instinct_routing_ignores_non_object_sidecar(self) -> None:
+        domains, primary = TurnContextAssembler.extract_instinct_routing(
+            "【finance/general】\n<!-- instinct-routing:[] -->"
+        )
+
+        assert domains == ["finance/general"]
+        assert primary == "finance/general"
+
     def test_extract_instinct_skills_prefers_structured_sidecar(self) -> None:
         hook_ctx = (
             "推荐 Skills（按需 read_file 加载 SKILL.md）:\n"
@@ -68,6 +76,47 @@ class TestPreChatHistory:
         skills = TurnContextAssembler.extract_instinct_skills(hook_ctx)
 
         assert skills == ["systematic-debugging", "writing-plans"]
+
+    def test_context_cache_uses_group_workspace_and_rebuild_clears_cache(
+        self, tmp_path: Path
+    ) -> None:
+        assembler = TurnContextAssembler(tmp_path)
+        group_ws = tmp_path / "groups" / "cli-chat"
+
+        def _resolve(session_key: str) -> Path:
+            assert session_key == "cli:chat"
+            return group_ws
+
+        first = assembler.get_for_session(
+            "cli:chat",
+            group_memory_enabled=True,
+            group_workspace_resolver=_resolve,
+        )
+        second = assembler.get_for_session(
+            "cli:chat",
+            group_memory_enabled=True,
+            group_workspace_resolver=_resolve,
+        )
+        transient = assembler.get_for_workspace(
+            session_key="cli:chat",
+            workspace=tmp_path / "tasks" / "run-1",
+            group_memory_enabled=True,
+            group_workspace_resolver=_resolve,
+        )
+
+        assert first is second
+        assert first.group_workspace == group_ws
+        assert transient is not first
+        assert transient.group_workspace == tmp_path / "tasks" / "run-1"
+
+        assembler.rebuild_global()
+        rebuilt = assembler.get_for_session(
+            "cli:chat",
+            group_memory_enabled=True,
+            group_workspace_resolver=_resolve,
+        )
+        assert rebuilt is not first
+        assert rebuilt.group_workspace == group_ws
 
     @pytest.mark.asyncio
     async def test_prechat_injection_is_not_persisted_in_session_history(
