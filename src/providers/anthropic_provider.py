@@ -69,6 +69,41 @@ def _chat_error_response(exc: Exception, model_name: str) -> LLMResponse:
     )
 
 
+def _mark_last_user_message_cached(
+    messages: list[dict[str, Any]],
+    marker: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Return messages with cache_control on the last user content block."""
+    new_msgs = list(messages)
+    for i in range(len(new_msgs) - 1, -1, -1):
+        if new_msgs[i].get("role") != "user":
+            continue
+
+        c = new_msgs[i]["content"]
+        if isinstance(c, str):
+            new_msgs[i] = {
+                **new_msgs[i],
+                "content": [{"type": "text", "text": c, "cache_control": marker}],
+            }
+        elif isinstance(c, list) and c:
+            nc = list(c)
+            nc[-1] = {**nc[-1], "cache_control": marker}
+            new_msgs[i] = {**new_msgs[i], "content": nc}
+        break
+    return new_msgs
+
+
+def _mark_last_tool_cached(
+    tools: list[dict[str, Any]] | None,
+    marker: dict[str, str],
+) -> list[dict[str, Any]] | None:
+    if not tools:
+        return tools
+    new_tools = list(tools)
+    new_tools[-1] = {**new_tools[-1], "cache_control": marker}
+    return new_tools
+
+
 class AnthropicProvider(LLMProvider):
     """LLM provider using the native Anthropic SDK for Claude models.
 
@@ -354,28 +389,8 @@ class AnthropicProvider(LLMProvider):
             system = list(system)
             system[-1] = {**system[-1], "cache_control": marker}
 
-        # Last user message
-        new_msgs = list(messages)
-        for i in range(len(new_msgs) - 1, -1, -1):
-            if new_msgs[i].get("role") == "user":
-                c = new_msgs[i]["content"]
-                if isinstance(c, str):
-                    new_msgs[i] = {
-                        **new_msgs[i],
-                        "content": [{"type": "text", "text": c, "cache_control": marker}],
-                    }
-                elif isinstance(c, list) and c:
-                    nc = list(c)
-                    nc[-1] = {**nc[-1], "cache_control": marker}
-                    new_msgs[i] = {**new_msgs[i], "content": nc}
-                break
-
-        # Tools
-        new_tools = tools
-        if tools:
-            new_tools = list(tools)
-            new_tools[-1] = {**new_tools[-1], "cache_control": marker}
-
+        new_msgs = _mark_last_user_message_cached(messages, marker)
+        new_tools = _mark_last_tool_cached(tools, marker)
         return system, new_msgs, new_tools
 
     async def _retry_after_auth_failure(
