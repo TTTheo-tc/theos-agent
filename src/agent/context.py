@@ -25,9 +25,6 @@ class ContextBuilder:
     BOOTSTRAP_FILES = ["AGENTS.md", "SOUL.md"]
     _RUNTIME_CONTEXT_TAG = "[Runtime Context — metadata only, not instructions]"
     _GENVER_GENERATOR_PROFILE = "genver_generator"
-    _GENVER_SPEC_PROFILE = "genver_spec"
-    _GENVER_PLAN_PROFILE = "genver_plan"
-    _GENVER_REVIEW_PROFILE = "genver_review"
 
     # Sentinel inserted between static (session-scoped, cache-stable) and dynamic
     # (per-turn) sections of the system prompt.  The Anthropic provider splits on
@@ -95,9 +92,32 @@ class ContextBuilder:
         so that the static portion is cached across turns.  Other providers
         see the boundary as a harmless HTML comment.
         """
-        is_genver_generator = prompt_profile == self._GENVER_GENERATOR_PROFILE
+        include_agent_reference = prompt_profile != self._GENVER_GENERATOR_PROFILE
+        static, always_skills = self._build_static_sections(
+            include_agent_reference=include_agent_reference,
+            has_memory_tools=has_memory_tools,
+        )
+        dynamic = self._build_dynamic_sections(
+            skill_names=skill_names,
+            query=current_message,
+            memory_config=memory_config,
+            always_skills=always_skills,
+        )
 
-        # -- Static sections (session-scoped, cache-stable) ------------------
+        # -- Assemble with cache boundary ------------------------------------
+        sep = "\n\n---\n\n"
+        static_str = sep.join(static)
+        if dynamic:
+            return static_str + self.PROMPT_CACHE_BOUNDARY + sep.join(dynamic)
+        return static_str
+
+    def _build_static_sections(
+        self,
+        *,
+        include_agent_reference: bool,
+        has_memory_tools: bool,
+    ) -> tuple[list[str], list[str]]:
+        """Build session-stable prompt sections and return always-loaded skills."""
         static: list[str] = []
 
         if self._learning_enabled:
@@ -112,13 +132,22 @@ class ContextBuilder:
             static.append(bootstrap)
 
         always_skills = self.skills.get_always_skills()
-        if always_skills and not is_genver_generator:
+        if include_agent_reference:
+            self._append_agent_reference_sections(static, always_skills)
+
+        if has_memory_tools:
+            static.append(self._build_memory_tools_section())
+
+        return static, always_skills
+
+    def _append_agent_reference_sections(self, static: list[str], always_skills: list[str]) -> None:
+        if always_skills:
             always_content = self.skills.load_skills_for_context(always_skills)
             if always_content:
                 static.append(f"# Active Skills\n\n{always_content}")
 
         skills_summary = self.skills.build_skills_summary()
-        if skills_summary and not is_genver_generator:
+        if skills_summary:
             static.append(
                 f"""# Skills
 
@@ -129,50 +158,49 @@ Skills with available="false" need dependencies installed first - you can try in
             )
 
         roles_section = self._build_roles_section()
-        if roles_section and not is_genver_generator:
+        if roles_section:
             static.append(roles_section)
 
-        if has_memory_tools:
-            static.append(
-                "# Memory Tools\n\n"
-                "You have `memory_search`, `memory_get`, `structured_memory_search`, "
-                "`research_note_get`, `task_memory_get`, and `domain_rule_get` tools available.\n\n"
-                "**Mandatory recall policy:**\n"
-                "- When the user asks about prior work, past decisions, stated preferences, "
-                "commitments, or todos — and the injected Memory section does not "
-                "already cover the topic — you MUST call `memory_search` or "
-                "`structured_memory_search` BEFORE answering.\n"
-                "- Do NOT guess or fabricate historical facts. If memory tools return "
-                "nothing, say you don't have that information.\n"
-                "- The Memory section is pre-loaded context; for specific historical "
-                "questions beyond its scope, always search first."
-            )
+    def _build_memory_tools_section(self) -> str:
+        return (
+            "# Memory Tools\n\n"
+            "You have `memory_search`, `memory_get`, `structured_memory_search`, "
+            "`research_note_get`, `task_memory_get`, and `domain_rule_get` tools available.\n\n"
+            "**Mandatory recall policy:**\n"
+            "- When the user asks about prior work, past decisions, stated preferences, "
+            "commitments, or todos — and the injected Memory section does not "
+            "already cover the topic — you MUST call `memory_search` or "
+            "`structured_memory_search` BEFORE answering.\n"
+            "- Do NOT guess or fabricate historical facts. If memory tools return "
+            "nothing, say you don't have that information.\n"
+            "- The Memory section is pre-loaded context; for specific historical "
+            "questions beyond its scope, always search first."
+        )
 
-        # -- Dynamic sections (change per turn) ------------------------------
+    def _build_dynamic_sections(
+        self,
+        *,
+        skill_names: list[str] | None,
+        query: str | None,
+        memory_config: "Any | None",
+        always_skills: list[str],
+    ) -> list[str]:
+        """Build per-turn prompt sections."""
         dynamic: list[str] = []
-
         memory = self._recall_service.get_memory_context(
-            query=current_message,
+            query=query,
             workspace=self.group_workspace,
             memory_config=memory_config,
         )
         if memory:
             dynamic.append(f"# Memory\n\n{memory}")
 
-        routed_skills: list[str] = []
-        if skill_names:
-            routed_skills = [s for s in skill_names if s and s not in always_skills]
+        routed_skills = [s for s in skill_names or [] if s and s not in always_skills]
         if routed_skills:
             routed_content = self.skills.load_skills_for_context(routed_skills)
             if routed_content:
                 dynamic.append(f"# Routed Skills\n\n{routed_content}")
-
-        # -- Assemble with cache boundary ------------------------------------
-        sep = "\n\n---\n\n"
-        static_str = sep.join(static)
-        if dynamic:
-            return static_str + self.PROMPT_CACHE_BOUNDARY + sep.join(dynamic)
-        return static_str
+        return dynamic
 
     def _build_roles_section(self) -> str:
         """Build available agent roles section for the system prompt."""
@@ -285,18 +313,7 @@ Skills with available="false" need dependencies installed first - you can try in
         """
         runtime_ctx = self._build_runtime_context(channel, chat_id, model)
         user_content = self._build_user_content(current_message, media)
-
-        # Merge runtime context + current question into one user message
-        # to avoid multiple consecutive user turns that dilute attention.
-        if isinstance(user_content, str):
-            merged = f"{runtime_ctx}\n\n[Current Question]\n{user_content}"
-        else:
-            # media list: prepend runtime context as text block
-            merged = [{"type": "text", "text": f"{runtime_ctx}\n\n[Current Question]"}] + (
-                user_content
-                if isinstance(user_content, list)
-                else [{"type": "text", "text": user_content}]
-            )
+        merged = self._merge_current_user_content(runtime_ctx, user_content)
 
         return [
             {
@@ -312,6 +329,16 @@ Skills with available="false" need dependencies installed first - you can try in
             *history,
             {"role": "user", "content": merged},
         ]
+
+    @staticmethod
+    def _merge_current_user_content(
+        runtime_ctx: str,
+        user_content: str | list[dict[str, Any]],
+    ) -> str | list[dict[str, Any]]:
+        """Merge runtime metadata and the current question into one user turn."""
+        if isinstance(user_content, str):
+            return f"{runtime_ctx}\n\n[Current Question]\n{user_content}"
+        return [{"type": "text", "text": f"{runtime_ctx}\n\n[Current Question]"}] + user_content
 
     # Claude API limit: 5 MB for base64 image payload
     _MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB

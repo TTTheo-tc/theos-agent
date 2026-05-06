@@ -67,6 +67,29 @@ def test_runtime_context_merged_into_final_user_message(tmp_path) -> None:
     assert "Return exactly: OK" in content
 
 
+def test_runtime_context_prepended_to_multimodal_user_message(tmp_path) -> None:
+    workspace = _make_workspace(tmp_path)
+    image_path = tmp_path / "photo.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\nsmall-test-image")
+    builder = ContextBuilder(workspace)
+
+    messages = builder.build_messages(
+        history=[],
+        current_message="Describe this image.",
+        media=[str(image_path)],
+        channel="cli",
+        chat_id="direct",
+    )
+
+    content = messages[-1]["content"]
+    assert isinstance(content, list)
+    assert content[0]["type"] == "text"
+    assert ContextBuilder._RUNTIME_CONTEXT_TAG in content[0]["text"]
+    assert "[Current Question]" in content[0]["text"]
+    assert content[1]["type"] == "image_url"
+    assert content[2] == {"type": "text", "text": "Describe this image."}
+
+
 def test_requested_skills_are_loaded_into_system_prompt(tmp_path) -> None:
     workspace = _make_workspace(tmp_path)
     skill_dir = workspace / "skills" / "paper-helper"
