@@ -70,8 +70,4 @@ def resolve_context_limit(model: str) -> int:
         return 200_000
     if any(k in model_lower for k in ("claude", "gemini")):
         return 200_000
-    if "gpt-4o" in model_lower or "gpt-4-turbo" in model_lower:
-        return 128_000
-    if "deepseek" in model_lower:
-        return 128_000
     return 128_000
