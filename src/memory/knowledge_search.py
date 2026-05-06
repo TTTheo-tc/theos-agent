@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -308,44 +309,74 @@ class KnowledgeSearch:
         node = await self._kg.get_node(node_id)
         if not node:
             return []
-        superseded: list[str] = []
         node_type = node["node_type"]
-        node_text = f"{node['title']} {node['content']}"
 
-        # Strategy 1: Embedding similarity (when available)
         if node.get("embedding") and self._vec_available:
-            import struct
+            superseded = await self._detect_vector_conflicts(
+                node_id=node_id,
+                node_type=node_type,
+                embedding=_unpack_embedding(node["embedding"]),
+                similarity_threshold=similarity_threshold,
+            )
+            if superseded:
+                return superseded
 
-            emb_blob = node["embedding"]
-            n_floats = len(emb_blob) // 4
-            embedding = list(struct.unpack(f"{n_floats}f", emb_blob))
-            candidates = await self._vector_search(embedding, limit=10, node_type=node_type)
-            for c in candidates:
-                if c["id"] == node_id or c.get("superseded_by"):
-                    continue
-                if c.get("score", 0) >= similarity_threshold:
-                    await self._kg.supersede(c["id"], node_id)
-                    superseded.append(c["id"])
+        if node.get("embedding"):
+            return []
 
-        # Strategy 2: Jaccard fallback
-        if not superseded and not node.get("embedding"):
-            same_type = await self._kg.list_nodes(node_type=node_type, limit=50)
-            node_tokens = set(_tokenize(node_text))
-            if node_tokens:
-                for c in same_type:
-                    if c["id"] == node_id or c.get("superseded_by"):
-                        continue
-                    c_text = f"{c['title']} {c['content']}"
-                    c_tokens = set(_tokenize(c_text))
-                    if not c_tokens:
-                        continue
-                    jaccard = len(node_tokens & c_tokens) / len(node_tokens | c_tokens)
-                    if jaccard > 0.6:
-                        if node_type == "rule" and _is_antonym_conflict(node_text, c_text):
-                            await self._kg.add_edge(node_id, c["id"], "conflicts_with")
-                        else:
-                            await self._kg.supersede(c["id"], node_id)
-                            superseded.append(c["id"])
+        return await self._detect_jaccard_conflicts(
+            node_id=node_id,
+            node_type=node_type,
+            node_text=_node_text(node),
+        )
+
+    async def _detect_vector_conflicts(
+        self,
+        *,
+        node_id: str,
+        node_type: str,
+        embedding: list[float],
+        similarity_threshold: float,
+    ) -> list[str]:
+        superseded: list[str] = []
+        candidates = await self._vector_search(embedding, limit=10, node_type=node_type)
+        for candidate in candidates:
+            candidate_id = candidate.get("id")
+            if not candidate_id or candidate_id == node_id or candidate.get("superseded_by"):
+                continue
+            if _vector_similarity(candidate) >= similarity_threshold:
+                await self._kg.supersede(candidate_id, node_id)
+                superseded.append(candidate_id)
+        return superseded
+
+    async def _detect_jaccard_conflicts(
+        self,
+        *,
+        node_id: str,
+        node_type: str,
+        node_text: str,
+    ) -> list[str]:
+        node_tokens = set(_tokenize(node_text))
+        if not node_tokens:
+            return []
+
+        superseded: list[str] = []
+        same_type = await self._kg.list_nodes(node_type=node_type, limit=50)
+        for candidate in same_type:
+            candidate_id = candidate.get("id")
+            if not candidate_id or candidate_id == node_id or candidate.get("superseded_by"):
+                continue
+
+            candidate_text = _node_text(candidate)
+            jaccard = _jaccard(node_tokens, set(_tokenize(candidate_text)))
+            if jaccard <= 0.6:
+                continue
+
+            if node_type == "rule" and _is_antonym_conflict(node_text, candidate_text):
+                await self._kg.add_edge(node_id, candidate_id, "conflicts_with")
+            else:
+                await self._kg.supersede(candidate_id, node_id)
+                superseded.append(candidate_id)
         return superseded
 
     # ------------------------------------------------------------------
@@ -357,9 +388,9 @@ class KnowledgeSearch:
         visited: set[str] = set()
         nodes: list[dict] = []
         edges: list[dict] = []
-        queue: list[tuple[str, int]] = [(root_id, 0)]
+        queue: deque[tuple[str, int]] = deque([(root_id, 0)])
         while queue:
-            cid, depth = queue.pop(0)
+            cid, depth = queue.popleft()
             if cid in visited:
                 continue
             visited.add(cid)
@@ -466,6 +497,31 @@ def _merge_results(
 
     merged = sorted(by_id.values(), key=lambda r: r["final_score"], reverse=True)
     return merged
+
+
+def _node_text(node: dict[str, Any]) -> str:
+    return f"{node.get('title', '')} {node.get('content', '')}"
+
+
+def _unpack_embedding(blob: bytes) -> list[float]:
+    import struct
+
+    n_floats = len(blob) // 4
+    return list(struct.unpack(f"{n_floats}f", blob))
+
+
+def _vector_similarity(candidate: dict[str, Any]) -> float:
+    value = candidate.get("vec_score", candidate.get("score", 0.0))
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _jaccard(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    return len(left & right) / len(left | right)
 
 
 def _tokenize(text: str) -> list[str]:

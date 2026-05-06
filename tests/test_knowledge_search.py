@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from src.memory.knowledge_graph import KnowledgeGraph
@@ -171,18 +173,43 @@ class TestConflict:
 
     async def test_vector_similarity_supersedes(self, ks):
         kg, search = ks
-        if not search._vec_available:
-            pytest.skip("sqlite-vec not installed")
-        vec = [0.5] * 128
         old = await kg.add_node(node_type="task", title="old task")
-        await kg.set_embedding(old, vec, "test")
         new = await kg.add_node(node_type="task", title="new task")
-        await kg.set_embedding(new, vec, "test")
-        # With identical embeddings, score should be very high
-        # but detect_conflicts checks c.get("score") which may not be set
-        # by _vector_search (it uses "vec_score"). So this may not supersede.
-        # The test validates the path runs without error.
-        await search.detect_conflicts(new)
+        await kg.set_embedding(new, [0.5] * 4, "test")
+        search._vec_available = True
+        search._vector_search = AsyncMock(  # type: ignore[method-assign]
+            return_value=[{"id": old, "vec_score": 0.91, "superseded_by": None}]
+        )
+
+        superseded = await search.detect_conflicts(new)
+
+        assert superseded == [old]
+        old_node = await kg.get_node(old)
+        assert old_node["superseded_by"] == new
+
+    async def test_vector_similarity_ignores_low_vec_score(self, ks):
+        kg, search = ks
+        old = await kg.add_node(
+            node_type="task",
+            title="deploy production server step by step",
+            content="deploy production server step by step guide",
+        )
+        new = await kg.add_node(
+            node_type="task",
+            title="deploy production server step by step guide updated",
+            content="deploy production server step by step guide updated",
+        )
+        await kg.set_embedding(new, [0.5] * 4, "test")
+        search._vec_available = True
+        search._vector_search = AsyncMock(  # type: ignore[method-assign]
+            return_value=[{"id": old, "vec_score": 0.2, "superseded_by": None}]
+        )
+
+        superseded = await search.detect_conflicts(new)
+
+        assert superseded == []
+        old_node = await kg.get_node(old)
+        assert old_node["superseded_by"] is None
 
 
 # ---------------------------------------------------------------------------
