@@ -129,6 +129,40 @@ def _stream_error_delta(exc: Exception, model: str) -> StreamDelta:
     )
 
 
+def _record_stream_tool_delta(tc_accum: dict[int, dict[str, str]], tc_delta: Any) -> None:
+    idx = tc_delta.index
+    if idx not in tc_accum:
+        tc_accum[idx] = {"name": "", "arguments": "", "id": ""}
+
+    fn = getattr(tc_delta, "function", None)
+    if fn:
+        if getattr(fn, "name", None):
+            tc_accum[idx]["name"] = fn.name
+        if getattr(fn, "arguments", None):
+            tc_accum[idx]["arguments"] += fn.arguments
+
+    tc_id = getattr(tc_delta, "id", None)
+    if tc_id:
+        tc_accum[idx]["id"] = tc_id
+
+
+def _build_stream_tool_calls(tc_accum: dict[int, dict[str, str]]) -> list[ToolCallRequest]:
+    tool_calls: list[ToolCallRequest] = []
+    for idx in sorted(tc_accum):
+        entry = tc_accum[idx]
+        name = entry["name"]
+        raw_args = entry["arguments"]
+        if name:
+            tool_calls.append(
+                ToolCallRequest(
+                    id=entry["id"] or _short_tool_id(),
+                    name=name,
+                    arguments=_parse_tool_arguments(raw_args) if raw_args else {},
+                )
+            )
+    return tool_calls
+
+
 class OpenAICompatProvider(LLMProvider):
     """Direct OpenAI-compatible provider for custom endpoints.
 
@@ -380,18 +414,7 @@ class OpenAICompatProvider(LLMProvider):
                 tc_deltas = getattr(delta, "tool_calls", None)
                 if tc_deltas:
                     for tc_delta in tc_deltas:
-                        idx = tc_delta.index
-                        if idx not in tc_accum:
-                            tc_accum[idx] = {"name": "", "arguments": "", "id": ""}
-                        fn = getattr(tc_delta, "function", None)
-                        if fn:
-                            if getattr(fn, "name", None):
-                                tc_accum[idx]["name"] = fn.name
-                            if getattr(fn, "arguments", None):
-                                tc_accum[idx]["arguments"] += fn.arguments
-                        tc_id = getattr(tc_delta, "id", None)
-                        if tc_id:
-                            tc_accum[idx]["id"] = tc_id
+                        _record_stream_tool_delta(tc_accum, tc_delta)
 
                 # --- Final chunk detection ---
                 if choice.finish_reason is not None:
@@ -402,19 +425,7 @@ class OpenAICompatProvider(LLMProvider):
                     final_usage = _usage_dict(chunk.usage, include_cache=True)
 
             # Build complete tool calls from accumulated deltas
-            tool_calls: list[ToolCallRequest] = []
-            for idx in sorted(tc_accum):
-                entry = tc_accum[idx]
-                name = entry["name"]
-                raw_args = entry["arguments"]
-                if name:
-                    tool_calls.append(
-                        ToolCallRequest(
-                            id=entry["id"] or _short_tool_id(),
-                            name=name,
-                            arguments=_parse_tool_arguments(raw_args) if raw_args else {},
-                        )
-                    )
+            tool_calls = _build_stream_tool_calls(tc_accum)
 
             # Text-based tool call fallback for allowlisted providers
             full_content = "".join(accumulated_content) if accumulated_content else None
