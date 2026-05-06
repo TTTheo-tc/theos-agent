@@ -190,8 +190,6 @@ class KnowledgeSearch:
 
         db = self._kg._db
         rows = await db.fetchall(sql, tuple(params))
-        if not rows:
-            return []
 
         # row_factory=aiosqlite.Row is set in KG.connect(), so dict(row) works
         results: list[dict[str, Any]] = []
@@ -285,8 +283,6 @@ class KnowledgeSearch:
         )
 
         rows = await db.fetchall(sql, tuple(params))
-        if not rows:
-            return []
 
         results: list[dict[str, Any]] = []
         for row in rows:
