@@ -245,7 +245,7 @@ async def ingest_recall_to_kg(workspace: Path) -> int:
     except (json.JSONDecodeError, OSError):
         return 0
 
-    from src.memory.structured import StructuredMemoryStore
+    from src.memory.structured import StructuredMemoryStore, _coerce_metadata
 
     updated = 0
     store = StructuredMemoryStore(workspace)
@@ -261,13 +261,7 @@ async def ingest_recall_to_kg(workspace: Path) -> int:
             if existing is None:
                 continue
 
-            meta = existing.get("metadata") or "{}"
-            if isinstance(meta, str):
-                try:
-                    meta = json.loads(meta)
-                except (json.JSONDecodeError, TypeError):
-                    meta = {}
-
+            meta = _coerce_metadata(existing.get("metadata"))
             meta["recall_count"] = data.get("recall_count", 0)
             meta["last_recalled_at"] = data.get("last_recalled_at", "")
             meta["distinct_recall_queries"] = len(data.get("distinct_query_hashes", []))

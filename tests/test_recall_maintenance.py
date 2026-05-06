@@ -500,3 +500,57 @@ class TestFoldRecallJournal:
         targets = json.loads((tmp_path / "memory" / "instinct" / "recall_targets.json").read_text())
         assert result.rule_ids[0] in targets
         assert targets[result.rule_ids[0]]["recall_count"] == 1
+
+
+class TestIngestRecallToKg:
+    @pytest.mark.asyncio
+    async def test_ingest_tolerates_invalid_existing_rule_metadata(self, tmp_path):
+        from src.memory.recall_maintenance import ingest_recall_to_kg
+        from src.memory.structured import StructuredMemoryStore, _coerce_metadata
+
+        store = StructuredMemoryStore(tmp_path)
+        try:
+            await store.ensure_kg()
+            assert store._kg is not None
+            rule_id = await store._kg.add_node(
+                node_type="rule",
+                title="Always use pytest.",
+                content="Always use pytest.",
+                metadata={"old": True},
+            )
+            await store._kg._db.execute(
+                "UPDATE kg_nodes SET metadata = ? WHERE id = ?",
+                ("{bad json", rule_id),
+            )
+        finally:
+            await store.close()
+
+        targets_path = tmp_path / "memory" / "instinct" / "recall_targets.json"
+        targets_path.parent.mkdir(parents=True, exist_ok=True)
+        targets_path.write_text(
+            json.dumps(
+                {
+                    rule_id: {
+                        "recall_count": 2,
+                        "last_recalled_at": "2026-04-14T10:00:00",
+                        "distinct_query_hashes": ["h1", "h2"],
+                        "distinct_days": ["2026-04-14"],
+                    }
+                }
+            )
+        )
+
+        assert await ingest_recall_to_kg(tmp_path) == 1
+
+        store = StructuredMemoryStore(tmp_path)
+        try:
+            await store.ensure_kg()
+            node = await store.get_domain_rule(rule_id)
+            assert node is not None
+            meta = _coerce_metadata(node["metadata"])
+        finally:
+            await store.close()
+
+        assert meta["recall_count"] == 2
+        assert meta["distinct_recall_queries"] == 2
+        assert meta["distinct_recall_days"] == 1
