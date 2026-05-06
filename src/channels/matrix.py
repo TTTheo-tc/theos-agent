@@ -686,7 +686,6 @@ class MatrixChannel(BaseChannel):
 
     async def _fetch_media_attachment(
         self,
-        room: MatrixRoom,
         event: MatrixMediaEvent,
     ) -> tuple[dict[str, Any] | None, str]:
         """Download, decrypt if needed, and persist a Matrix attachment."""
@@ -761,7 +760,7 @@ class MatrixChannel(BaseChannel):
     async def _on_media_message(self, room: MatrixRoom, event: MatrixMediaEvent) -> None:
         if event.sender == self.config.user_id or not self._should_process_message(room, event):
             return
-        attachment, marker = await self._fetch_media_attachment(room, event)
+        attachment, marker = await self._fetch_media_attachment(event)
         parts: list[str] = []
         if isinstance(body := getattr(event, "body", None), str) and body.strip():
             parts.append(body.strip())

@@ -301,7 +301,7 @@ class FeishuChannel(BaseChannel):
         return OutboundMessage(
             channel=msg.channel,
             chat_id=msg.chat_id,
-            content="⏳ 正在处理中，请稍候...",  # noqa: RUF001
+            content="⏳ 正在处理中，请稍候...",
             reply_to=msg.reply_to,
             media=list(msg.media),
             metadata=metadata,
