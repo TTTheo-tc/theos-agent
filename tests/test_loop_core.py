@@ -138,6 +138,46 @@ async def test_assistant_tool_call_message_format():
     ]
 
 
+async def test_tool_call_arguments_fallback_to_string_for_non_json_values():
+    class NonJson:
+        def __str__(self) -> str:
+            return "non-json"
+
+    provider = AsyncMock()
+    provider.chat = AsyncMock(
+        side_effect=[
+            LLMResponse(
+                content="checking",
+                tool_calls=[
+                    ToolCallRequest(
+                        id="call_1",
+                        name="test",
+                        arguments={"value": NonJson()},
+                    )
+                ],
+                finish_reason="tool_calls",
+            ),
+            LLMResponse(content="done", finish_reason="stop"),
+        ]
+    )
+    messages = [{"role": "user", "content": "hi"}]
+
+    content, used, msgs, usage = await run_tool_loop(
+        provider=provider,
+        tools=MockToolRegistry(),
+        messages=messages,
+        model="test-model",
+        temperature=0.7,
+        max_tokens=4096,
+        max_iterations=5,
+    )
+
+    assistant_calls = [msg for msg in messages if msg.get("role") == "assistant" and msg.get("tool_calls")]
+    assert content == "done"
+    assert used == ["test"]
+    assert assistant_calls[0]["tool_calls"][0]["function"]["arguments"] == '{"value": "non-json"}'
+
+
 def test_scrub_credentials_applied_to_log_args():
     args = '{"headers": {"Authorization": "Bearer sk-ant-secret12345678"}}'
     scrubbed = scrub_credentials(args[:200])

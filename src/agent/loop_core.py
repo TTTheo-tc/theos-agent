@@ -138,11 +138,20 @@ def _tool_call_dicts(tool_calls: list[ToolCallRequest]) -> list[dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": tc.name,
-                "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+                "arguments": _json_args(tc.arguments),
             },
         }
         for tc in tool_calls
     ]
+
+
+def _json_args(arguments: dict[str, Any], *, sort_keys: bool = False) -> str:
+    return json.dumps(
+        arguments,
+        ensure_ascii=False,
+        sort_keys=sort_keys,
+        default=str,
+    )
 
 
 def _plan_unique_tool_calls(
@@ -157,7 +166,7 @@ def _plan_unique_tool_calls(
     for i, tc in enumerate(tool_calls):
         tool_obj = tools.get(tc.name)
         if tool_obj and tool_obj.dedupe_within_turn:
-            sig = f"{tc.name}:{json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False)}"
+            sig = f"{tc.name}:{_json_args(tc.arguments, sort_keys=True)}"
             if sig in dedup_map:
                 duplicate_map[i] = dedup_map[sig]
                 logger.info("[ToolLoop] Dedup: call {} is duplicate of {}", i, dedup_map[sig])
@@ -395,7 +404,7 @@ async def run_tool_loop(
                     preflight = _preflight_tasks.get(tc_item.id)
                     if preflight is not None:
                         return await preflight
-                    args_str = json.dumps(tc_item.arguments, ensure_ascii=False)
+                    args_str = _json_args(tc_item.arguments)
                     logger.info(
                         "Tool call: {}({})", tc_item.name, scrub_credentials(args_str[:200])
                     )
@@ -421,7 +430,7 @@ async def run_tool_loop(
                 # -- Sequential branch (original path) --
                 for idx in unique_indices:
                     tc = response.tool_calls[idx]
-                    args_str = json.dumps(tc.arguments, ensure_ascii=False)
+                    args_str = _json_args(tc.arguments)
                     logger.info("Tool call: {}({})", tc.name, scrub_credentials(args_str[:200]))
                     t0 = time.monotonic()
 
