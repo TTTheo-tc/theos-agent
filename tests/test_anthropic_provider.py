@@ -629,6 +629,24 @@ class TestErrorHandling:
         assert result.error_type == "AuthenticationError"
         assert provider._client.messages.create.call_count == 2
 
+    async def test_rate_limit_error(self, provider):
+        """Rate limit errors return error_type='RateLimitError'."""
+        from anthropic import RateLimitError
+
+        provider._client.messages.create.side_effect = RateLimitError(
+            message="Too many requests",
+            response=MagicMock(status_code=429),
+            body={"error": {"message": "Too many requests"}},
+        )
+
+        result = await provider.chat(
+            messages=[{"role": "user", "content": "Hi"}],
+        )
+
+        assert result.error_type == "RateLimitError"
+        assert result.finish_reason == "error"
+        assert "rate limited" in result.content.lower()
+
     async def test_generic_error(self, provider):
         """Generic exceptions are caught and returned as error responses."""
         provider._client.messages.create.side_effect = RuntimeError("Connection failed")

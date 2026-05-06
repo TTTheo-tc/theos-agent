@@ -38,6 +38,37 @@ def _parse_tool_input(raw: Any) -> dict[str, Any]:
     return parse_tool_arguments_object(raw)
 
 
+def _chat_error_response(exc: Exception, model_name: str) -> LLMResponse:
+    import anthropic as _anthropic
+
+    err_msg = short_error_message(exc)
+    if isinstance(exc, _anthropic.AuthenticationError):
+        logger.error("Anthropic auth failed (model={}): {}", model_name, err_msg)
+        return LLMResponse(
+            content=(
+                f"Error calling LLM (authentication failed): {err_msg}\n\n"
+                "API key may be expired or invalid. Check your provider credentials."
+            ),
+            finish_reason="error",
+            error_type="AuthenticationError",
+        )
+
+    if isinstance(exc, _anthropic.RateLimitError):
+        logger.warning("Anthropic rate limited (model={}): {}", model_name, err_msg)
+        return LLMResponse(
+            content=f"Error calling LLM (rate limited): {err_msg}",
+            finish_reason="error",
+            error_type="RateLimitError",
+        )
+
+    logger.warning("Anthropic call failed (model={}): {}", model_name, err_msg)
+    return LLMResponse(
+        content=f"Error calling LLM: {err_msg}",
+        finish_reason="error",
+        error_type=type(exc).__name__,
+    )
+
+
 class AnthropicProvider(LLMProvider):
     """LLM provider using the native Anthropic SDK for Claude models.
 
@@ -515,33 +546,7 @@ class AnthropicProvider(LLMProvider):
                 if retry_exc is not None:
                     e = retry_exc
 
-            err_msg = short_error_message(e)
-
-            if isinstance(e, _anthropic.AuthenticationError):
-                logger.error("Anthropic auth failed (model={}): {}", model_name, err_msg)
-                return LLMResponse(
-                    content=(
-                        f"Error calling LLM (authentication failed): {err_msg}\n\n"
-                        "API key may be expired or invalid. Check your provider credentials."
-                    ),
-                    finish_reason="error",
-                    error_type="AuthenticationError",
-                )
-
-            if isinstance(e, _anthropic.RateLimitError):
-                logger.warning("Anthropic rate limited (model={}): {}", model_name, err_msg)
-                return LLMResponse(
-                    content=f"Error calling LLM (rate limited): {err_msg}",
-                    finish_reason="error",
-                    error_type="RateLimitError",
-                )
-
-            logger.warning("Anthropic call failed (model={}): {}", model_name, err_msg)
-            return LLMResponse(
-                content=f"Error calling LLM: {err_msg}",
-                finish_reason="error",
-                error_type=type(e).__name__,
-            )
+            return _chat_error_response(e, model_name)
 
     async def _do_stream(self, kwargs: dict[str, Any]) -> AsyncIterator[StreamDelta]:
         """Internal stream implementation (extracted for auth-retry reuse)."""
