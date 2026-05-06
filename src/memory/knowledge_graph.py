@@ -68,6 +68,11 @@ CREATE INDEX IF NOT EXISTS idx_kg_edges_to         ON kg_edges(to_id);
 # ---------------------------------------------------------------------------
 
 _IMPORTANCE_KEYWORDS = {"must", "always", "never", "critical"}
+_BASE_IMPORTANCE = {
+    "rule": 0.45,
+    "task": 0.35,
+    "research": 0.30,
+}
 _NODE_UPDATE_COLUMNS = {
     "node_type",
     "title",
@@ -90,15 +95,7 @@ def compute_importance(node_type: str, text: str, occurrence_count: int = 1) -> 
     * Keyword boosts for "must", "always", "never", "critical".
     * Higher for rules with high occurrence count.
     """
-    base: float
-    if node_type == "rule":
-        base = 0.45
-    elif node_type == "task":
-        base = 0.35
-    elif node_type == "research":
-        base = 0.30
-    else:
-        base = 0.25
+    base = _BASE_IMPORTANCE.get(node_type, 0.25)
 
     # Keyword boost
     lowered = text.lower()
