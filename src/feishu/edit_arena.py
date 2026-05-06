@@ -117,8 +117,8 @@ class EditArena:
         Returns:
             Configured EditArena ready for staging edits.
         """
-        from src.feishu.api import parse_url  # noqa: PLC0415
-        from src.feishu.utils import read_json  # noqa: PLC0415
+        from src.feishu.api import parse_url
+        from src.feishu.utils import read_json
 
         fs.ensure_token()
 
@@ -445,7 +445,7 @@ class EditArena:
             )
 
         # Step 4: Execute in reverse index order
-        from src.feishu.api_write import (  # noqa: PLC0415
+        from src.feishu.api_write import (
             create_descendant_blocks,
             delete_blocks,
             markdown_to_blocks_with_fallback,
@@ -755,9 +755,9 @@ def _apply_table_cell_patches(
     Returns:
         Number of cells patched.
     """
-    import time as _time  # noqa: PLC0415
+    import time as _time
 
-    from src.feishu.api_write import update_block_text  # noqa: PLC0415
+    from src.feishu.api_write import update_block_text
 
     old_grid = _parse_html_table_cells(old_chunk)
     new_grid = _parse_html_table_cells(new_chunk)

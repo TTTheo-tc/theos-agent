@@ -40,6 +40,23 @@ def _top_blocks(children_ids: list[str], descendants: list[dict]) -> list[dict]:
     return [b for b in descendants if b["block_id"] in id_set]
 
 
+def _table_rows(table: dict, descendants: list[dict]) -> list[list[str]]:
+    by_id = {b["block_id"]: b for b in descendants}
+    col_size = table["table"]["property"]["column_size"]
+    cells = []
+    for cell_id in table["children"]:
+        cell = by_id[cell_id]
+        text_block = by_id[cell["children"][0]]
+        cells.append(
+            "".join(
+                e["text_run"]["content"]
+                for e in text_block["text"]["elements"]
+                if "text_run" in e
+            )
+        )
+    return [cells[i : i + col_size] for i in range(0, len(cells), col_size)]
+
+
 # ---------------------------------------------------------------------------
 # Paragraph
 # ---------------------------------------------------------------------------
@@ -277,7 +294,7 @@ class TestLargeTableRowSplit:
         header = "| " + " | ".join(f"H{i}" for i in range(3)) + " |"
         sep = "| " + " | ".join("---" for _ in range(3)) + " |"
         data_rows = ["| " + " | ".join(f"r{r}c{c}" for c in range(3)) + " |" for r in range(14)]
-        md = "\n".join([header, sep] + data_rows)
+        md = "\n".join([header, sep, *data_rows])
         ids, desc = markdown_to_feishu_blocks(md)
         tables = _blocks_by_type(desc, BLOCK_TABLE)
         # 15 total rows, max 9 per table -> 2 tables
@@ -306,6 +323,15 @@ class TestLargeTableColSplit:
         assert len(tables) == 2
         col_sizes = sorted(t["table"]["property"]["column_size"] for t in tables)
         assert col_sizes == [4, 9]
+        rows = [_table_rows(table, desc) for table in tables]
+        assert rows[0] == [
+            [f"H{i}" for i in range(9)],
+            [f"d{i}" for i in range(9)],
+        ]
+        assert rows[1] == [
+            ["H0", "H9", "H10", "H11"],
+            ["d0", "d9", "d10", "d11"],
+        ]
 
 
 class TestLargeTableCompoundSplit:
@@ -316,7 +342,7 @@ class TestLargeTableCompoundSplit:
         header = "| " + " | ".join(f"H{i}" for i in range(ncols)) + " |"
         sep = "| " + " | ".join("---" for _ in range(ncols)) + " |"
         data_rows = ["| " + " | ".join(f"r{r}c{c}" for c in range(ncols)) + " |" for r in range(14)]
-        md = "\n".join([header, sep] + data_rows)
+        md = "\n".join([header, sep, *data_rows])
         ids, desc = markdown_to_feishu_blocks(md)
         tables = _blocks_by_type(desc, BLOCK_TABLE)
         # 2 col groups x 2 row groups = 4 tables

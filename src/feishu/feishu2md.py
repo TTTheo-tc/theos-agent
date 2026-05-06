@@ -230,11 +230,7 @@ class FeishuParser:
         if not elements:
             return ""
 
-        result = []
-        for element in elements:
-            if element:  # 检查元素不为空
-                result.append(self.parse_text_element(element))
-        return "".join(result)
+        return "".join(self.parse_text_element(element) for element in elements if element)
 
     def parse_text_element(self, element: dict) -> str:
         """解析单个文本元素"""
@@ -271,7 +267,7 @@ class FeishuParser:
             content = element["equation"].get("content", "")
             return f"${content.rstrip()}$"
         # Generic fallback: try to extract any text content from unknown elements
-        for _key, value in element.items():
+        for value in element.values():
             if isinstance(value, dict):
                 # Try common text field names
                 for text_field in ["content", "text", "name", "title", "value"]:
@@ -1163,7 +1159,7 @@ def feishu2md(
         if "title" in feishu_doc and "body" in feishu_doc:
             # 旧版文档
 
-            from .feishu2md_old import feishu2md_old  # noqa: PLC0415
+            from .feishu2md_old import feishu2md_old
 
             return feishu2md_old(feishu_doc)
         feishu_doc = [feishu_doc]

@@ -469,11 +469,7 @@ class _Converter:
                 if inline_tok and inline_tok.type == "inline":
                     # Check for todo checkbox
                     content = inline_tok.content or ""
-                    if (
-                        content.startswith("[ ] ")
-                        or content.startswith("[x] ")
-                        or content.startswith("[X] ")
-                    ):
+                    if content.startswith(("[ ] ", "[x] ", "[X] ")):
                         actual_block_type = BLOCK_TODO
                         todo_done = content[1] in ("x", "X")
                         # Strip the checkbox prefix from content
@@ -740,8 +736,7 @@ class _Converter:
                 chunk_rows: list[list[list[dict]]] = []
                 if header_row:
                     chunk_rows.append([header_row[c] for c in col_group])
-                for ri in row_group:
-                    chunk_rows.append([data_rows[ri][c] for c in col_group])
+                chunk_rows.extend([data_rows[ri][c] for c in col_group] for ri in row_group)
                 self._emit_table_block(chunk_rows, has_header=header_row is not None)
 
     def _emit_table_block(self, rows: list[list[list[dict]]], has_header: bool) -> None:
@@ -805,7 +800,7 @@ def _split_column_groups(num_cols: int, max_cols: int) -> list[list[int]]:
     col = max_cols
     while col < num_cols:
         end = min(col + max_cols - 1, num_cols)  # -1 because col 0 is included
-        group = [0] + list(range(col, end))
+        group = [0, *range(col, end)]
         groups.append(group)
         col = end
     return groups
