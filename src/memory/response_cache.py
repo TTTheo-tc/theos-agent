@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import time
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from src.store.database import Database
@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_rc_accessed ON response_cache(accessed_at);
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class ResponseCache:
@@ -102,8 +102,8 @@ class ResponseCache:
         except ValueError:
             return True
         if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        age = (datetime.now(timezone.utc) - created).total_seconds()
+            created = created.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - created).total_seconds()
         return age >= self._ttl
 
     async def _touch_warm(self, key: str) -> None:
