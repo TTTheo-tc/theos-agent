@@ -7,7 +7,6 @@ import string
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-import json_repair
 import openai
 from loguru import logger
 from openai import AsyncOpenAI
@@ -19,6 +18,7 @@ from src.providers.base import (
     ToolCallRequest,
 )
 from src.providers.errors import short_error_message
+from src.providers.tool_args import parse_tool_arguments_object
 from src.providers.tool_call_parser import FALLBACK_PROVIDER_ALLOWLIST, parse_tool_calls_from_text
 
 if TYPE_CHECKING:
@@ -40,9 +40,7 @@ def _short_tool_id() -> str:
 
 
 def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
-    if isinstance(raw, str):
-        raw = json_repair.loads(raw)
-    return raw if isinstance(raw, dict) else {}
+    return parse_tool_arguments_object(raw)
 
 
 def _usage_dict(usage: Any, *, include_cache: bool = False) -> dict[str, int]:

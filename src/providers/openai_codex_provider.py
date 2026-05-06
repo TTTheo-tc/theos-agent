@@ -11,6 +11,7 @@ import httpx
 from loguru import logger
 
 from src.providers.base import LLMProvider, LLMResponse, ToolCallRequest
+from src.providers.tool_args import parse_tool_arguments_object
 
 DEFAULT_CODEX_URL = "https://chatgpt.com/backend-api/codex/responses"
 DEFAULT_ORIGINATOR = "theos"
@@ -300,11 +301,7 @@ def _usage_from_response(resp_usage: dict[str, Any]) -> dict[str, int]:
 
 
 def _parse_function_call_arguments(args_raw: str) -> dict[str, Any]:
-    try:
-        args = json.loads(args_raw)
-    except Exception:
-        return {"raw": args_raw}
-    return args if isinstance(args, dict) else {"raw": args_raw}
+    return parse_tool_arguments_object(args_raw, preserve_raw=True, repair_json=False)
 
 
 async def _iter_sse(response: httpx.Response) -> AsyncGenerator[dict[str, Any], None]:

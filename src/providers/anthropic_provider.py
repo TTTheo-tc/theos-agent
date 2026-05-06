@@ -12,7 +12,6 @@ import string
 from collections.abc import AsyncIterator
 from typing import Any
 
-import json_repair
 from loguru import logger
 
 from src.providers.base import (
@@ -22,6 +21,7 @@ from src.providers.base import (
     ToolCallRequest,
 )
 from src.providers.errors import short_error_message
+from src.providers.tool_args import parse_tool_arguments_object
 
 _ALNUM = string.ascii_letters + string.digits
 
@@ -35,9 +35,7 @@ def _gen_tool_id() -> str:
 
 
 def _parse_tool_input(raw: Any) -> dict[str, Any]:
-    if isinstance(raw, str):
-        raw = json_repair.loads(raw)
-    return raw if isinstance(raw, dict) else {}
+    return parse_tool_arguments_object(raw)
 
 
 class AnthropicProvider(LLMProvider):
