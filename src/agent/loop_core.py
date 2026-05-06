@@ -66,7 +66,7 @@ def _default_add_assistant(
     messages: list[dict],
     content: str | None,
     tool_call_dicts: list[dict] | None,
-    reasoning_content: str | None,
+    _reasoning_content: str | None,
 ) -> list[dict]:
     msg: dict[str, Any] = {"role": "assistant", "content": content or ""}
     if tool_call_dicts:
