@@ -30,11 +30,54 @@ _ALLOWED_MSG_KEYS = frozenset(
     {"role", "content", "tool_calls", "tool_call_id", "name", "reasoning_content"}
 )
 _ALNUM = string.ascii_letters + string.digits
+_USAGE_KEYS = ("prompt_tokens", "completion_tokens", "total_tokens")
+_CACHE_USAGE_KEYS = ("cache_creation_input_tokens", "cache_read_input_tokens")
 
 
 def _short_tool_id() -> str:
     """Generate a 9-char alphanumeric ID compatible with all providers (incl. Mistral)."""
     return "".join(secrets.choice(_ALNUM) for _ in range(9))
+
+
+def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, str):
+        raw = json_repair.loads(raw)
+    return raw if isinstance(raw, dict) else {}
+
+
+def _usage_dict(usage: Any, *, include_cache: bool = False) -> dict[str, int]:
+    if not usage:
+        return {}
+
+    result = {key: getattr(usage, key, 0) or 0 for key in _USAGE_KEYS}
+    if include_cache:
+        for key in _CACHE_USAGE_KEYS:
+            val = getattr(usage, key, 0) or 0
+            if val:
+                result[key] = val
+    return result
+
+
+def _recover_text_tool_calls(
+    content: str | None,
+    provider_name: str | None,
+    *,
+    streamed: bool = False,
+) -> tuple[str | None, list[ToolCallRequest]]:
+    if not content or provider_name not in FALLBACK_PROVIDER_ALLOWLIST:
+        return content, []
+
+    parsed = parse_tool_calls_from_text(content)
+    if not parsed:
+        return content, []
+
+    logger.debug(
+        "Recovered {} tool call(s) from {}text for provider {!r}",
+        len(parsed),
+        "streamed " if streamed else "",
+        provider_name,
+    )
+    return None, parsed
 
 
 class OpenAICompatProvider(LLMProvider):
@@ -173,45 +216,27 @@ class OpenAICompatProvider(LLMProvider):
 
         tool_calls: list[ToolCallRequest] = []
         for tc in msg.tool_calls or []:
-            args = tc.function.arguments
-            if isinstance(args, str):
-                args = json_repair.loads(args)
-            if not isinstance(args, dict):
-                args = {}
             tool_calls.append(
-                ToolCallRequest(id=tc.id or _short_tool_id(), name=tc.function.name, arguments=args)
+                ToolCallRequest(
+                    id=tc.id or _short_tool_id(),
+                    name=tc.function.name,
+                    arguments=_parse_tool_arguments(tc.function.arguments),
+                )
             )
 
         content = msg.content
 
         # Text-based tool-call fallback for allowlisted providers
-        if not tool_calls and content and self._provider_name in FALLBACK_PROVIDER_ALLOWLIST:
-            parsed = parse_tool_calls_from_text(content)
-            if parsed:
-                logger.debug(
-                    "Recovered {} tool call(s) from text for provider {!r}",
-                    len(parsed),
-                    self._provider_name,
-                )
-                tool_calls = parsed
-                content = None
+        if not tool_calls:
+            content, tool_calls = _recover_text_tool_calls(content, self._provider_name)
 
         reasoning_content = getattr(msg, "reasoning_content", None) or None
-
-        u = response.usage
-        usage: dict[str, int] = {}
-        if u:
-            usage = {
-                "prompt_tokens": getattr(u, "prompt_tokens", 0) or 0,
-                "completion_tokens": getattr(u, "completion_tokens", 0) or 0,
-                "total_tokens": getattr(u, "total_tokens", 0) or 0,
-            }
 
         return LLMResponse(
             content=content,
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason or "stop",
-            usage=usage,
+            usage=_usage_dict(response.usage),
             reasoning_content=reasoning_content,
         )
 
@@ -313,13 +338,9 @@ class OpenAICompatProvider(LLMProvider):
             async for chunk in response_stream:
                 if not chunk.choices:
                     # Usage-only final chunk (no choices)
-                    if hasattr(chunk, "usage") and chunk.usage:
-                        u = chunk.usage
-                        final_usage = {
-                            "prompt_tokens": getattr(u, "prompt_tokens", 0) or 0,
-                            "completion_tokens": getattr(u, "completion_tokens", 0) or 0,
-                            "total_tokens": getattr(u, "total_tokens", 0) or 0,
-                        }
+                    usage = _usage_dict(getattr(chunk, "usage", None), include_cache=True)
+                    if usage:
+                        final_usage = usage
                     continue
 
                 choice = chunk.choices[0]
@@ -359,20 +380,7 @@ class OpenAICompatProvider(LLMProvider):
 
                 # --- Usage (sometimes on final chunk) ---
                 if hasattr(chunk, "usage") and chunk.usage:
-                    u = chunk.usage
-                    final_usage = {
-                        "prompt_tokens": getattr(u, "prompt_tokens", 0) or 0,
-                        "completion_tokens": getattr(u, "completion_tokens", 0) or 0,
-                        "total_tokens": getattr(u, "total_tokens", 0) or 0,
-                    }
-                    # Capture cache usage tokens if present (OpenRouter, etc.)
-                    for cache_key in (
-                        "cache_creation_input_tokens",
-                        "cache_read_input_tokens",
-                    ):
-                        val = getattr(u, cache_key, 0) or 0
-                        if val:
-                            final_usage[cache_key] = val
+                    final_usage = _usage_dict(chunk.usage, include_cache=True)
 
             # Build complete tool calls from accumulated deltas
             tool_calls: list[ToolCallRequest] = []
@@ -381,33 +389,22 @@ class OpenAICompatProvider(LLMProvider):
                 name = entry["name"]
                 raw_args = entry["arguments"]
                 if name:
-                    args = json_repair.loads(raw_args) if raw_args else {}
-                    if not isinstance(args, dict):
-                        args = {}
                     tool_calls.append(
                         ToolCallRequest(
                             id=entry["id"] or _short_tool_id(),
                             name=name,
-                            arguments=args,
+                            arguments=_parse_tool_arguments(raw_args) if raw_args else {},
                         )
                     )
 
             # Text-based tool call fallback for allowlisted providers
             full_content = "".join(accumulated_content) if accumulated_content else None
-            if (
-                not tool_calls
-                and full_content
-                and self._provider_name in FALLBACK_PROVIDER_ALLOWLIST
-            ):
-                parsed = parse_tool_calls_from_text(full_content)
-                if parsed:
-                    logger.debug(
-                        "Recovered {} tool call(s) from streamed text for provider {!r}",
-                        len(parsed),
-                        self._provider_name,
-                    )
-                    tool_calls = parsed
-                    full_content = None
+            if not tool_calls:
+                full_content, tool_calls = _recover_text_tool_calls(
+                    full_content,
+                    self._provider_name,
+                    streamed=True,
+                )
 
             # When tool_calls present, omit content (loop_core.py uses accumulated_content)
             yield StreamDelta(

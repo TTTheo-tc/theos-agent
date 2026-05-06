@@ -116,6 +116,22 @@ class TestChat:
         assert tc.arguments == {"path": "/tmp/a.txt"}
         assert result.finish_reason == "tool_calls"
 
+    @pytest.mark.parametrize("raw_arguments", ['["not", "an", "object"]', "", "not json"])
+    @pytest.mark.asyncio
+    async def test_tool_call_arguments_must_be_object(self, raw_arguments):
+        """Non-object tool arguments are sanitized to an empty dict."""
+        provider = _make_provider()
+        mock_tc = _mock_tool_call(name="read_file", arguments=raw_arguments)
+        mock_resp = _mock_response(content=None, tool_calls=[mock_tc], finish_reason="tool_calls")
+        mock_create = AsyncMock(return_value=mock_resp)
+
+        with patch.object(provider._client.chat.completions, "create", mock_create):
+            result = await provider.chat(
+                messages=[{"role": "user", "content": "read a file"}],
+            )
+
+        assert result.tool_calls[0].arguments == {}
+
     @pytest.mark.asyncio
     async def test_usage_tracking(self):
         """Usage stats from the response are propagated."""
@@ -415,6 +431,159 @@ class TestStreaming:
         assert tc.arguments == {"path": "/tmp"}
         assert tc.id == "call_123"
         assert final.finish_reason == "tool_calls"
+
+    @pytest.mark.asyncio
+    async def test_stream_tool_call_arguments_must_be_object(self):
+        """Streamed non-object tool arguments are sanitized to an empty dict."""
+        provider = _make_provider()
+        chunks = [
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id="call_123",
+                                    function=SimpleNamespace(
+                                        name="read_file",
+                                        arguments='["not", "an", "object"]',
+                                    ),
+                                )
+                            ],
+                            reasoning_content=None,
+                        ),
+                        finish_reason="tool_calls",
+                    )
+                ],
+                usage=None,
+            )
+        ]
+        mock_create = AsyncMock(return_value=_make_async_iter(chunks))
+
+        with patch.object(provider._client.chat.completions, "create", mock_create):
+            deltas: list[StreamDelta] = []
+            async for delta in provider.chat_stream(
+                messages=[{"role": "user", "content": "read"}],
+            ):
+                deltas.append(delta)
+
+        assert deltas[0].tool_calls[0].arguments == {}
+
+    @pytest.mark.asyncio
+    async def test_stream_text_tool_call_fallback(self):
+        """Allowlisted providers recover text tool calls from streamed content."""
+        from src.providers.registry import ProviderSpec
+
+        spec = ProviderSpec(name="deepseek", keywords=("deepseek",), env_key="DEEPSEEK_API_KEY")
+        provider = _make_provider(spec=spec)
+        chunks = [
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content='<tool_call>{"name": "search", "arguments": {"q": "hi"}}</tool_call>',
+                            tool_calls=None,
+                            reasoning_content=None,
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=None,
+            )
+        ]
+        mock_create = AsyncMock(return_value=_make_async_iter(chunks))
+
+        with patch.object(provider._client.chat.completions, "create", mock_create):
+            deltas: list[StreamDelta] = []
+            async for delta in provider.chat_stream(
+                messages=[{"role": "user", "content": "search"}],
+            ):
+                deltas.append(delta)
+
+        assert len(deltas) == 2
+        assert deltas[0].content.startswith("<tool_call>")
+        final = deltas[1]
+        assert final.is_final is True
+        assert final.content is None
+        assert final.tool_calls[0].name == "search"
+        assert final.tool_calls[0].arguments == {"q": "hi"}
+
+    @pytest.mark.asyncio
+    async def test_stream_usage_only_chunk_preserves_cache_tokens(self):
+        """Usage-only stream chunks keep cache usage fields when present."""
+        provider = _make_provider()
+        chunks = [
+            SimpleNamespace(
+                choices=[],
+                usage=SimpleNamespace(
+                    prompt_tokens=10,
+                    completion_tokens=5,
+                    total_tokens=15,
+                    cache_creation_input_tokens=3,
+                    cache_read_input_tokens=7,
+                ),
+            )
+        ]
+        mock_create = AsyncMock(return_value=_make_async_iter(chunks))
+
+        with patch.object(provider._client.chat.completions, "create", mock_create):
+            deltas: list[StreamDelta] = []
+            async for delta in provider.chat_stream(
+                messages=[{"role": "user", "content": "hi"}],
+            ):
+                deltas.append(delta)
+
+        assert len(deltas) == 1
+        assert deltas[0].is_final is True
+        assert deltas[0].usage == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "cache_creation_input_tokens": 3,
+            "cache_read_input_tokens": 7,
+        }
+
+    @pytest.mark.asyncio
+    async def test_stream_choice_chunk_preserves_cache_tokens(self):
+        """Choice-bearing stream chunks keep cache usage fields when present."""
+        provider = _make_provider()
+        chunks = [
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content="ok", tool_calls=None, reasoning_content=None
+                        ),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=SimpleNamespace(
+                    prompt_tokens=8,
+                    completion_tokens=2,
+                    total_tokens=10,
+                    cache_creation_input_tokens=1,
+                    cache_read_input_tokens=4,
+                ),
+            )
+        ]
+        mock_create = AsyncMock(return_value=_make_async_iter(chunks))
+
+        with patch.object(provider._client.chat.completions, "create", mock_create):
+            deltas: list[StreamDelta] = []
+            async for delta in provider.chat_stream(
+                messages=[{"role": "user", "content": "hi"}],
+            ):
+                deltas.append(delta)
+
+        assert deltas[-1].usage == {
+            "prompt_tokens": 8,
+            "completion_tokens": 2,
+            "total_tokens": 10,
+            "cache_creation_input_tokens": 1,
+            "cache_read_input_tokens": 4,
+        }
 
     @pytest.mark.asyncio
     async def test_stream_error_yields_final_delta(self):
