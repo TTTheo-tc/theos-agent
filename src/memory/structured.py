@@ -40,6 +40,9 @@ from src.memory.structured_models import (
 )
 from src.utils.tokenize import tokenize_query
 
+_NODE_TYPE_ALIASES = {"research_note": "research"}
+_DISPLAY_TYPE_ALIASES = {"research": "research_note"}
+
 
 @dataclass
 class RecordTaskResult:
@@ -72,6 +75,78 @@ def _coerce_metadata(value: Any) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _search_node_types(object_type: str) -> list[str | None]:
+    if object_type == "all":
+        return [None]
+    return [_NODE_TYPE_ALIASES.get(object_type, object_type)]
+
+
+def _split_domains(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [domain for domain in value.split(",") if domain]
+    if isinstance(value, list):
+        return [str(domain) for domain in value if domain]
+    return []
+
+
+def _domain_preference_boost(
+    *,
+    prefer_domain: str | None,
+    domains: list[str],
+    selected_primary: str | None,
+) -> float:
+    if not prefer_domain:
+        return 0.0
+
+    preferred = prefer_domain.lower()
+    lowered = [domain.lower() for domain in domains]
+    boost = 0.0
+    if preferred in lowered:
+        boost += 3.0
+    elif any(domain.startswith(preferred.split("/", 1)[0] + "/") for domain in lowered):
+        boost += 1.0
+    if selected_primary and str(selected_primary).lower() == preferred:
+        boost += 2.0
+    return boost
+
+
+def _search_result_from_row(
+    row: dict[str, Any],
+    *,
+    prefer_domain: str | None,
+) -> dict[str, Any]:
+    node_type_raw = row.get("node_type", "")
+    display_type = _DISPLAY_TYPE_ALIASES.get(node_type_raw, node_type_raw)
+    meta = _coerce_metadata(row.get("metadata"))
+    domains = _split_domains(row.get("domains", ""))
+    selected_primary = meta.get("selected_primary")
+    score = float(row.get("final_score", 0.0)) + _domain_preference_boost(
+        prefer_domain=prefer_domain,
+        domains=domains,
+        selected_primary=selected_primary,
+    )
+
+    title = row.get("title", "")[:200]
+    summary = ""
+    if node_type_raw == "task":
+        summary = str(meta.get("user_message", ""))[:500]
+    elif node_type_raw == "rule":
+        summary = f"domains={', '.join(domains)} occurrences={meta.get('occurrence_count', 0)}"
+    elif node_type_raw == "research":
+        summary = str(meta.get("summary", ""))[:500]
+
+    return {
+        "object_type": display_type,
+        "id": row.get("id"),
+        "title": title,
+        "summary": summary,
+        "score": round(score, 2),
+        "created_at": row.get("created_at", ""),
+        "domains": domains,
+        "selected_primary": selected_primary,
+    }
 
 
 class StructuredMemoryStore:
@@ -331,15 +406,6 @@ class StructuredMemoryStore:
         assert self._search is not None
         assert self._kg is not None
 
-        # Translate legacy object_type names to KG node_type
-        type_map = {"research_note": "research"}
-        reverse_type_map = {"research": "research_note"}
-
-        if object_type == "all":
-            search_types: list[str | None] = [None]  # None = all types
-        else:
-            search_types = [type_map.get(object_type, object_type)]
-
         # Try to embed the query for hybrid search
         query_embedding: list[float] | None = None
         if self._embedding_provider:
@@ -349,63 +415,22 @@ class StructuredMemoryStore:
                 logger.debug("Query embedding failed, falling back to FTS-only")
 
         all_results: list[dict[str, Any]] = []
-        for nt in search_types:
+        for node_type in _search_node_types(object_type):
             if query_embedding:
                 results = await self._search.hybrid_search(
                     query,
                     query_embedding=query_embedding,
                     limit=max_results * 3,
-                    node_type=nt,
+                    node_type=node_type,
                 )
             else:
-                results = await self._search.fts_search(query, node_type=nt, limit=max_results * 3)
+                results = await self._search.fts_search(
+                    query,
+                    node_type=node_type,
+                    limit=max_results * 3,
+                )
             for row in results:
-                node_type_raw = row.get("node_type", "")
-                display_type = reverse_type_map.get(node_type_raw, node_type_raw)
-                meta = _coerce_metadata(row.get("metadata"))
-                domains_raw = row.get("domains", "")
-                domains_list = (
-                    [d for d in domains_raw.split(",") if d]
-                    if isinstance(domains_raw, str)
-                    else domains_raw
-                )
-                selected_primary = meta.get("selected_primary") if isinstance(meta, dict) else None
-
-                # Apply domain preference boost
-                score = row.get("final_score", 0.0)
-                if prefer_domain and isinstance(meta, dict):
-                    pd = prefer_domain.lower()
-                    lowered = [d.lower() for d in domains_list]
-                    if pd in lowered:
-                        score += 3.0
-                    elif any(d.startswith(pd.split("/", 1)[0] + "/") for d in lowered):
-                        score += 1.0
-                    if selected_primary and str(selected_primary).lower() == pd:
-                        score += 2.0
-
-                # Build display title / summary
-                title = row.get("title", "")[:200]
-                summary = ""
-                if node_type_raw == "task":
-                    summary = (meta.get("user_message", "") if isinstance(meta, dict) else "")[:500]
-                elif node_type_raw == "rule":
-                    occ = meta.get("occurrence_count", 0) if isinstance(meta, dict) else 0
-                    summary = f"domains={', '.join(domains_list)} occurrences={occ}"
-                elif node_type_raw == "research":
-                    summary = (meta.get("summary", "") if isinstance(meta, dict) else "")[:500]
-
-                all_results.append(
-                    {
-                        "object_type": display_type,
-                        "id": row.get("id"),
-                        "title": title,
-                        "summary": summary,
-                        "score": round(score, 2),
-                        "created_at": row.get("created_at", ""),
-                        "domains": domains_list,
-                        "selected_primary": selected_primary,
-                    }
-                )
+                all_results.append(_search_result_from_row(row, prefer_domain=prefer_domain))
 
         all_results.sort(key=lambda item: (item["score"], item.get("created_at", "")), reverse=True)
         if len(all_results) > 1:
