@@ -487,7 +487,8 @@ def _register_nested_subagent_tools(state: _RegistrationState) -> None:
 
 def _register_feishu_tools(state: _RegistrationState) -> None:
     needed = [name for name in _FEISHU_TOOLS if state.should(name)]
-    if not needed:
+    auth_needed = state.should("feishu_auth")
+    if not needed and not auth_needed:
         return
 
     config = state.config
@@ -496,24 +497,26 @@ def _register_feishu_tools(state: _RegistrationState) -> None:
         return
 
     import src.agent.tools.feishu as feishu_tools
-    from src.feishu.client import FeishuClient
 
-    client = FeishuClient(
-        app_id=app_id,
-        app_secret=app_secret,
-        cache_dir=(config.channel_env or {}).get("feishu_cache_dir", "~/.theos/feishu_cache"),
-        token_dir=(config.channel_env or {}).get("feishu_token_dir", "~/.theos/feishu_tokens"),
-    )
-    allow_from = _resolve_feishu_allow_from(feishu_config)
+    if needed:
+        from src.feishu.client import FeishuClient
 
-    for tool_name in needed:
-        tool_cls = getattr(feishu_tools, _FEISHU_TOOLS[tool_name])
-        if tool_name == "feishu_create":
-            state.register(tool_cls(client=client, allow_from=allow_from))
-        else:
-            state.register(tool_cls(client=client))
+        client = FeishuClient(
+            app_id=app_id,
+            app_secret=app_secret,
+            cache_dir=(config.channel_env or {}).get("feishu_cache_dir", "~/.theos/feishu_cache"),
+            token_dir=(config.channel_env or {}).get("feishu_token_dir", "~/.theos/feishu_tokens"),
+        )
+        allow_from = _resolve_feishu_allow_from(feishu_config)
 
-    if state.should("feishu_auth"):
+        for tool_name in needed:
+            tool_cls = getattr(feishu_tools, _FEISHU_TOOLS[tool_name])
+            if tool_name == "feishu_create":
+                state.register(tool_cls(client=client, allow_from=allow_from))
+            else:
+                state.register(tool_cls(client=client))
+
+    if auth_needed:
         token_dir = (config.channel_env or {}).get("feishu_token_dir", "~/.theos/feishu_tokens")
         state.register(
             feishu_tools.FeishuAuthTool(

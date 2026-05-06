@@ -112,6 +112,24 @@ class TestFeishuToolReviewFixes:
 
         assert "feishu_read" in registry.tool_names
 
+    def test_feishu_auth_registers_without_client_tool(self, tmp_path):
+        from src.agent.tool_sets import register_standard_tools
+        from src.agent.tools.registration import ToolRegistrationConfig
+        from src.agent.tools.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        config = ToolRegistrationConfig(
+            workspace=tmp_path,
+            channel_env={"feishu_app_id": "id", "feishu_app_secret": "secret"},
+            allowed_tools={"feishu_auth"},
+        )
+
+        with patch("src.feishu.client.FeishuClient") as feishu_client:
+            register_standard_tools(registry, config)
+
+        assert "feishu_auth" in registry.tool_names
+        feishu_client.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # P0: feishu_create uses edit_page instead of create_descendant_blocks
