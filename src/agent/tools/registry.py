@@ -291,17 +291,14 @@ class ToolRegistry:
         self,
         tool: Tool,
         name: str,
-        params: dict[str, Any],
-        risk: str,
         approved_params: dict[str, Any],
         *,
         modified: bool,
     ) -> tuple[dict[str, Any], str | None]:
         if modified:
-            params = approved_params
-            risk = self._assess_risk(tool, params)
-            if autonomy_error := self._autonomy_error(name, params, risk):
-                return params, autonomy_error
+            risk = self._assess_risk(tool, approved_params)
+            if autonomy_error := self._autonomy_error(name, approved_params, risk):
+                return approved_params, autonomy_error
         return approved_params, None
 
     @staticmethod
@@ -351,8 +348,6 @@ class ToolRegistry:
             params, approved_error = self._params_after_approval(
                 tool,
                 name,
-                params,
-                risk,
                 approved_params,
                 modified=modified,
             )
