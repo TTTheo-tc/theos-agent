@@ -37,3 +37,27 @@ def test_subagent_store_marks_inflight_tasks_interrupted(tmp_path: Path):
     assert interrupted.status == "interrupted"
     assert interrupted.metadata["interrupted_from"] == "running"
     assert interrupted.metadata["task"] == "scan repo"
+
+
+def test_subagent_store_keeps_rows_read_before_corrupt_line(tmp_path: Path):
+    store = SubagentStore(tmp_path)
+    path = store._get_path("cli:direct")
+    path.write_text(
+        "\n".join(
+            [
+                (
+                    '{"_type":"subagent_checkpoint","session_key":"cli:direct",'
+                    '"task_id":"sub-1","status":"running","timestamp":"2026-01-01T00:00:00Z"}'
+                ),
+                "not json",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    active = store.active_for_session("cli:direct")
+
+    assert len(active) == 1
+    assert active[0].task_id == "sub-1"
+    assert active[0].status == "running"

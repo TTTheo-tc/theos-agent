@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +23,25 @@ def checkpoint_metadata(row: dict[str, Any], id_key: str) -> dict[str, Any]:
     """Extract user metadata from a checkpoint row."""
     reserved = _CHECKPOINT_BASE_KEYS | {id_key}
     return {key: value for key, value in row.items() if key not in reserved}
+
+
+def iter_checkpoint_rows(path: Path, checkpoint_type: str) -> Iterator[dict[str, Any]]:
+    """Read checkpoint rows of *checkpoint_type* from a JSONL file."""
+    if not path.exists():
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if row.get("_type") == checkpoint_type:
+                yield row
+
+
+def read_checkpoint_rows(path: Path, checkpoint_type: str) -> list[dict[str, Any]]:
+    """Read all checkpoint rows of *checkpoint_type* from a JSONL file."""
+    return list(iter_checkpoint_rows(path, checkpoint_type))
 
 
 def jsonable_metadata(metadata: dict[str, Any]) -> dict[str, Any]:

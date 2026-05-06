@@ -10,7 +10,12 @@ from typing import Any
 
 from loguru import logger
 
-from src.session.checkpoint_utils import checkpoint_metadata, checkpoint_path, jsonable_metadata
+from src.session.checkpoint_utils import (
+    checkpoint_metadata,
+    checkpoint_path,
+    iter_checkpoint_rows,
+    jsonable_metadata,
+)
 from src.utils.helpers import ensure_dir
 
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "timed_out", "cancelled", "interrupted"})
@@ -102,21 +107,12 @@ class SubagentStore:
         return self._latest_by_task_from_path(path)
 
     def _latest_by_task_from_path(self, path: Path) -> dict[str, SubagentCheckpoint]:
-        if not path.exists():
-            return {}
         latest: dict[str, SubagentCheckpoint] = {}
         try:
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    row = json.loads(line)
-                    if row.get("_type") != "subagent_checkpoint":
-                        continue
-                    cp = self._from_row(row)
-                    if cp is not None:
-                        latest[cp.task_id] = cp
+            for row in iter_checkpoint_rows(path, "subagent_checkpoint"):
+                cp = self._from_row(row)
+                if cp is not None:
+                    latest[cp.task_id] = cp
         except Exception:
             logger.opt(exception=True).warning("Failed to read subagent checkpoints from {}", path)
         return latest

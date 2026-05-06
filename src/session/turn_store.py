@@ -10,7 +10,12 @@ from typing import Any
 
 from loguru import logger
 
-from src.session.checkpoint_utils import checkpoint_metadata, checkpoint_path, jsonable_metadata
+from src.session.checkpoint_utils import (
+    checkpoint_metadata,
+    checkpoint_path,
+    jsonable_metadata,
+    read_checkpoint_rows,
+)
 from src.utils.helpers import ensure_dir
 
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "interrupted"})
@@ -103,18 +108,9 @@ class TurnStore:
         return marked
 
     def _latest_from_path(self, path: Path) -> TurnCheckpoint | None:
-        if not path.exists():
-            return None
         try:
-            latest_row: dict[str, Any] | None = None
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    row = json.loads(line)
-                    if row.get("_type") == "turn_checkpoint":
-                        latest_row = row
+            rows = read_checkpoint_rows(path, "turn_checkpoint")
+            latest_row = rows[-1] if rows else None
             return self._from_row(latest_row) if latest_row else None
         except Exception:
             logger.opt(exception=True).warning("Failed to read turn checkpoints from {}", path)
