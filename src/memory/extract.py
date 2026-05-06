@@ -89,7 +89,7 @@ persisting, respond with a short message and do NOT call the tool.
 
 async def extract_durable_facts(
     messages: list[dict[str, Any]],
-    provider: "LLMProvider",
+    provider: LLMProvider,
     model: str,
     *,
     max_messages: int = 20,
@@ -155,7 +155,7 @@ async def extract_durable_facts(
     ]
 
 
-def merge_extracted_facts(store: "MemoryStore", facts: list[dict[str, Any]]) -> int:
+def merge_extracted_facts(store: MemoryStore, facts: list[dict[str, Any]]) -> int:
     """Merge extracted facts into MEMORY.md.
 
     Deduplicates (case-insensitive), adds ``<!-- updated: YYYY-MM-DD -->``
