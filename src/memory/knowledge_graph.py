@@ -68,6 +68,20 @@ CREATE INDEX IF NOT EXISTS idx_kg_edges_to         ON kg_edges(to_id);
 # ---------------------------------------------------------------------------
 
 _IMPORTANCE_KEYWORDS = {"must", "always", "never", "critical"}
+_NODE_UPDATE_COLUMNS = {
+    "node_type",
+    "title",
+    "content",
+    "tags",
+    "domains",
+    "importance",
+    "created_at",
+    "updated_at",
+    "superseded_by",
+    "metadata",
+    "embedding",
+    "embedding_model",
+}
 
 
 def compute_importance(node_type: str, text: str, occurrence_count: int = 1) -> float:
@@ -128,6 +142,33 @@ def _join_list(items: list[str] | None) -> str:
     if not items:
         return ""
     return ",".join(s.strip() for s in items if s and s.strip())
+
+
+def _json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if not isinstance(value, str):
+        return {}
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _metadata_json(existing: dict[str, Any] | None, patch: Any) -> str:
+    if existing is None:
+        return patch if isinstance(patch, str) else json.dumps(patch, ensure_ascii=False)
+
+    metadata = _json_dict(existing.get("metadata") or "{}")
+    metadata.update(_json_dict(patch))
+    return json.dumps(metadata, ensure_ascii=False)
+
+
+def _validate_update_columns(fields: dict[str, Any]) -> None:
+    bad_cols = set(fields) - _NODE_UPDATE_COLUMNS
+    if bad_cols:
+        raise ValueError(f"Invalid column names: {bad_cols}")
 
 
 class KnowledgeGraph:
@@ -208,57 +249,18 @@ class KnowledgeGraph:
         if not fields:
             return
 
-        # Handle metadata merge
+        fields = dict(fields)
         if "metadata" in fields:
             existing = await self.get_node(node_id)
-            if existing is not None:
-                old_meta_raw = existing.get("metadata") or "{}"
-                if isinstance(old_meta_raw, str):
-                    try:
-                        old_meta = json.loads(old_meta_raw)
-                    except (json.JSONDecodeError, TypeError):
-                        old_meta = {}
-                else:
-                    old_meta = dict(old_meta_raw)
-                new_partial = fields["metadata"]
-                if isinstance(new_partial, str):
-                    try:
-                        new_partial = json.loads(new_partial)
-                    except (json.JSONDecodeError, TypeError):
-                        new_partial = {}
-                old_meta.update(new_partial)
-                fields["metadata"] = json.dumps(old_meta, ensure_ascii=False)
-            else:
-                # Node doesn't exist -- serialise whatever was given
-                meta_val = fields["metadata"]
-                if not isinstance(meta_val, str):
-                    fields["metadata"] = json.dumps(meta_val, ensure_ascii=False)
+            fields["metadata"] = _metadata_json(existing, fields["metadata"])
 
-        # Always bump updated_at
         fields["updated_at"] = _now_iso()
+        _validate_update_columns(fields)
 
-        allowed_columns = {
-            "node_type",
-            "title",
-            "content",
-            "tags",
-            "domains",
-            "importance",
-            "created_at",
-            "updated_at",
-            "superseded_by",
-            "metadata",
-            "embedding",
-            "embedding_model",
-        }
-        bad_cols = set(fields) - allowed_columns
-        if bad_cols:
-            raise ValueError(f"Invalid column names: {bad_cols}")
-
-        set_clauses = ", ".join(f"{col} = ?" for col in fields)
+        set_clause = ", ".join(f"{col} = ?" for col in fields)
         values = list(fields.values()) + [node_id]
         await self._db.execute(
-            f"UPDATE kg_nodes SET {set_clauses} WHERE id = ?",
+            f"UPDATE kg_nodes SET {set_clause} WHERE id = ?",
             tuple(values),
         )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 from datetime import datetime, timedelta, timezone
 
@@ -43,6 +44,41 @@ class TestNodeCRUD:
         await kg.update_node(nid, title="new title")
         node = await kg.get_node(nid)
         assert node["title"] == "new title"
+
+    async def test_update_node_merges_metadata(self, kg):
+        nid = await kg.add_node(
+            node_type="rule",
+            title="rule",
+            metadata={"source_task_ids": ["task-1"], "confidence": 0.6},
+        )
+
+        await kg.update_node(nid, metadata={"confidence": 0.7, "last_seen_at": "now"})
+
+        node = await kg.get_node(nid)
+        meta = json.loads(node["metadata"])
+        assert meta == {
+            "source_task_ids": ["task-1"],
+            "confidence": 0.7,
+            "last_seen_at": "now",
+        }
+
+    async def test_update_node_tolerates_invalid_existing_metadata(self, kg):
+        nid = await kg.add_node(node_type="rule", title="rule", metadata={"old": True})
+        await kg._db.execute(
+            "UPDATE kg_nodes SET metadata = ? WHERE id = ?",
+            ("{bad json", nid),
+        )
+
+        await kg.update_node(nid, metadata={"fixed": True})
+
+        node = await kg.get_node(nid)
+        assert json.loads(node["metadata"]) == {"fixed": True}
+
+    async def test_update_node_rejects_invalid_columns(self, kg):
+        nid = await kg.add_node(node_type="rule", title="rule")
+
+        with pytest.raises(ValueError, match="Invalid column names"):
+            await kg.update_node(nid, nope="bad")
 
     async def test_supersede(self, kg):
         old = await kg.add_node(node_type="task", title="old")
