@@ -80,12 +80,12 @@ LeakDetector
     |-- Aho-Corasick automaton (prefix patterns: sk-ant-, ghp_, AKIA, ...)
     |-- Regex patterns (JWT, Bearer, DB connection strings)
     |-- High-entropy token detection (opt-in, Shannon entropy threshold)
-    |-- Actions: BLOCK / REDACT / WARN
+    |-- Actions: BLOCK / REDACT
 
 PolicyEngine
     |-- PolicyRule: id, pattern, severity, action
     |-- Default rules: SYS_FILE_ACCESS, PRIVATE_KEY_REF, ENV_FILE_ACCESS, DESTRUCTIVE_CMD
-    |-- Actions: BLOCK / REVIEW / WARN / SANITIZE
+    |-- Actions: BLOCK / REVIEW / WARN
 ```
 
 ## Data Flow

@@ -24,7 +24,6 @@ class PolicyAction(Enum):
     WARN = "warn"
     BLOCK = "block"
     REVIEW = "review"  # Route to human approval
-    SANITIZE = "sanitize"
 
 
 @dataclass

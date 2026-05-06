@@ -29,7 +29,6 @@ class LeakAction(Enum):
 
     BLOCK = "block"  # Reject entirely
     REDACT = "redact"  # Replace with [REDACTED]
-    WARN = "warn"  # Log but allow
 
 
 @dataclass
