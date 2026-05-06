@@ -114,7 +114,7 @@ class ToolRegistry:
 
     def has(self, name: str) -> bool:
         """Check if a tool is registered (in either pool)."""
-        return name in self._tools or name in self._deferred
+        return name in self
 
     def activate(self, name: str) -> bool:
         """Move a deferred tool into the active pool.
@@ -371,12 +371,13 @@ class ToolRegistry:
     @property
     def tool_names(self) -> list[str]:
         """Get list of registered tool names (both active and deferred)."""
-        all_names = dict.fromkeys(list(self._tools.keys()) + list(self._deferred.keys()))
-        return list(all_names)
+        return list(self._all_tool_names())
 
     def __len__(self) -> int:
-        all_names = set(self._tools) | set(self._deferred)
-        return len(all_names)
+        return len(self._all_tool_names())
 
     def __contains__(self, name: str) -> bool:
         return name in self._tools or name in self._deferred
+
+    def _all_tool_names(self) -> dict[str, None]:
+        return dict.fromkeys((*self._tools.keys(), *self._deferred.keys()))
