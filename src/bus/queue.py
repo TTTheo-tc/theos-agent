@@ -52,6 +52,7 @@ class MessageBus:
     def _drop_oldest(queue: asyncio.Queue[T]) -> None:
         with suppress(asyncio.QueueEmpty):
             queue.get_nowait()
+            queue.task_done()
 
     async def consume_outbound(self) -> OutboundMessage:
         """Consume the next outbound message (blocks until available)."""
