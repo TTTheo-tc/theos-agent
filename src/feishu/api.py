@@ -441,7 +441,7 @@ def search_docs(
         List of result dicts with title_highlighted, summary_highlighted,
         entity_type, result_meta, etc.
     """
-    import httpx  # noqa: PLC0415
+    import httpx
 
     headers = feishu_auth_header()
     url = "https://open.feishu.cn/open-apis/search/v2/doc_wiki/search"

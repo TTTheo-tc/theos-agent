@@ -224,7 +224,7 @@ def upload_file(
     Returns:
         Uploaded file metadata dict with ``file_token``.
     """
-    import os  # noqa: PLC0415
+    import os
 
     _rate_limiter.wait()
     option = _request_option()
@@ -811,8 +811,8 @@ def convert_markdown_to_blocks(client: lark.Client, markdown: str) -> dict:
     # Convert is a stateless API that works with tenant token.
     # User tokens may lack the docx:document.block:convert scope,
     # so we explicitly use a tenant token here.
-    from lark_oapi.core.model.request_option import RequestOption as _ReqOption  # noqa: PLC0415
-    from lark_oapi.core.token.manager import TokenManager as _TokMgr  # noqa: PLC0415
+    from lark_oapi.core.model.request_option import RequestOption as _ReqOption
+    from lark_oapi.core.token.manager import TokenManager as _TokMgr
 
     try:
         tenant_token = _TokMgr.get_self_tenant_token(client.config)
@@ -846,7 +846,7 @@ def markdown_to_blocks(markdown: str) -> dict:
         Dict with ``children_id`` and ``descendants`` keys, ready for
         :func:`create_descendant_blocks`.
     """
-    from src.feishu.md2blocks import markdown_to_feishu_blocks  # noqa: PLC0415
+    from src.feishu.md2blocks import markdown_to_feishu_blocks
 
     children_ids, descendants = markdown_to_feishu_blocks(markdown)
     return {"children_id": children_ids, "descendants": descendants}
@@ -865,7 +865,7 @@ def markdown_to_blocks_with_fallback(client: lark.Client, markdown: str) -> dict
     Returns:
         Dict with ``children_id`` and ``descendants`` keys.
     """
-    from loguru import logger  # noqa: PLC0415
+    from loguru import logger
 
     try:
         result = markdown_to_blocks(markdown)
@@ -1338,9 +1338,9 @@ def _feishu_http_json(
     action: str,
     **kwargs,
 ) -> dict:
-    import httpx  # noqa: PLC0415
+    import httpx
 
-    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header  # noqa: PLC0415
+    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header
 
     headers = kwargs.pop("headers", None)
     if headers is None:
@@ -1376,9 +1376,9 @@ def upload_media_for_import(
     Returns:
         file_token (valid ~5 minutes).
     """
-    from pathlib import Path  # noqa: PLC0415
+    from pathlib import Path
 
-    from src.feishu.api import feishu_auth_header  # noqa: PLC0415
+    from src.feishu.api import feishu_auth_header
 
     _rate_limiter.wait()
     url = "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all"
@@ -1538,9 +1538,9 @@ def _patch_block_with_retry(
     Returns:
         API response data dict.
     """
-    import httpx  # noqa: PLC0415
+    import httpx
 
-    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header  # noqa: PLC0415
+    from src.feishu.api import DEFAULT_TIMEOUT, feishu_auth_header
 
     url = f"https://open.feishu.cn/open-apis/docx/v1/documents/" f"{document_id}/blocks/{block_id}"
     headers = feishu_auth_header()

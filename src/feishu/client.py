@@ -32,7 +32,7 @@ _TTL_USER = 864000  # 10 days
 
 def _ck(prefix: str, token: str) -> str:
     """Filesystem-safe cache key with short hash prefix."""
-    h = hashlib.md5(token.encode()).hexdigest()[:6]  # noqa: S324
+    h = hashlib.md5(token.encode(), usedforsecurity=False).hexdigest()[:6]
     return f"{prefix}_{h}_{token}"
 
 
@@ -131,7 +131,7 @@ class FeishuClient:
 
     def output_prefix(self, label: str, token: str) -> str:
         """File prefix for cache artefacts (EditArena compatibility)."""
-        h = hashlib.md5(token.encode()).hexdigest()[:6]  # noqa: S324
+        h = hashlib.md5(token.encode(), usedforsecurity=False).hexdigest()[:6]
         d = self._cache_dir / label
         d.mkdir(parents=True, exist_ok=True)
         return str(d / f"{h}_{token}")
@@ -203,7 +203,7 @@ class FeishuClient:
         return str(self._cache_dir / f"{ck}.json"), info
 
     def _info_bitable(self, url: str, app_token: str) -> dict:
-        from src.feishu.extra.bitable import info_bitable, parse_bitable_url  # noqa: PLC0415
+        from src.feishu.extra.bitable import info_bitable, parse_bitable_url
 
         bi = info_bitable(app_token)
         p = parse_bitable_url(url)
@@ -358,7 +358,7 @@ class FeishuClient:
     def _bitable_md(
         self, url: str, app_token: str, max_age: int | None, force_refresh: bool
     ) -> str:
-        from src.feishu.extra.bitable import (  # noqa: PLC0415
+        from src.feishu.extra.bitable import (
             bitable2md,
             list_bitable_fields,
             list_bitable_records,
@@ -492,7 +492,7 @@ class FeishuClient:
         if not has_single and not has_batch:
             return {"error": "invalid_args", "detail": "Provide old_string/new_string or edits"}
 
-        from src.feishu.edit_arena import EditArena  # noqa: PLC0415
+        from src.feishu.edit_arena import EditArena
 
         arena = EditArena.from_url(self, url)
 
@@ -784,16 +784,15 @@ class FeishuClient:
         receive_id, receive_id_type = self._resolve_recipient(user_or_chat)
         elements: list[dict] = [{"tag": "markdown", "content": content}]
         if buttons:
-            actions = []
-            for btn in buttons:
-                actions.append(
-                    {
-                        "tag": "button",
-                        "text": {"tag": "plain_text", "content": btn.get("text", "Click")},
-                        "url": btn.get("url", ""),
-                        "type": btn.get("type", "primary"),
-                    }
-                )
+            actions = [
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": btn.get("text", "Click")},
+                    "url": btn.get("url", ""),
+                    "type": btn.get("type", "primary"),
+                }
+                for btn in buttons
+            ]
             elements.append({"tag": "action", "actions": actions})
         card = {
             "config": {"wide_screen_mode": True},
@@ -1093,7 +1092,7 @@ class FeishuClient:
     @staticmethod
     def _default_day_range() -> tuple[str, str]:
         """Return (start, end) RFC3339 timestamps for today in local timezone."""
-        from datetime import datetime  # noqa: PLC0415
+        from datetime import datetime
 
         now = datetime.now().astimezone()
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1393,7 +1392,7 @@ class FeishuClient:
             Dict with token, url, type of the imported document.
             If moved to wiki, also includes wiki_token.
         """
-        import os  # noqa: PLC0415
+        import os
 
         self.ensure_token()
 
