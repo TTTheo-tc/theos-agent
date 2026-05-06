@@ -349,6 +349,32 @@ class TestFoldRecallJournal:
         targets = json.loads((tmp_path / "memory" / "instinct" / "recall_targets.json").read_text())
         assert targets["rule-z"]["recall_count"] >= 1
 
+    def test_fold_rebuilds_when_targets_invalid_but_checkpoint_valid(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        journal = _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": "kg_rule",
+                    "target_id": "rule-invalid-targets",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": 0.7,
+                },
+            ],
+        )
+        instinct_dir = tmp_path / "memory" / "instinct"
+        (instinct_dir / "recall_targets.json").write_text("[]")
+        (instinct_dir / "recall_targets.checkpoint.json").write_text(
+            json.dumps({"byte_offset": journal.stat().st_size})
+        )
+
+        fold_recall_journal(tmp_path)
+
+        targets = json.loads((instinct_dir / "recall_targets.json").read_text())
+        assert targets["rule-invalid-targets"]["recall_count"] == 1
+
     def test_fold_caps_hashes_and_days(self, tmp_path):
         from src.memory.recall_maintenance import fold_recall_journal
 

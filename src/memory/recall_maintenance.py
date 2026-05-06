@@ -51,16 +51,6 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
-def _load_json_object(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
 def _read_json_object(path: Path) -> tuple[dict[str, Any], bool]:
     if not path.exists():
         return {}, False
@@ -209,7 +199,7 @@ def _fold_recall_journal_locked(workspace: Path) -> int:
     targets_path = workspace / _TARGETS_REL
     checkpoint_path = workspace / _CHECKPOINT_REL
 
-    targets = _load_json_object(targets_path)
+    targets, _targets_valid = _read_json_object(targets_path)
     offset, checkpoint_valid = _checkpoint_offset(checkpoint_path, targets)
     if targets and not checkpoint_valid:
         targets = {}
