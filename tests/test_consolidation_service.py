@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -91,6 +92,217 @@ class TestConsolidationServiceProviderCall:
         messages = call_kwargs["messages"]
         assert messages[0]["role"] == "system"
         assert "memory consolidation" in messages[0]["content"].lower()
+
+    @pytest.mark.asyncio
+    async def test_skips_provider_when_window_not_exceeded(self, tmp_path: Path) -> None:
+        scope = _make_scope(tmp_path)
+        service = MemoryConsolidationService(scope=scope)
+        provider = _make_provider()
+        session = _make_session("test:no-op", 5)
+        store = MemoryStore(tmp_path)
+
+        result = await service.consolidate(
+            session=session,
+            provider=provider,
+            model="test-model",
+            store=store,
+            memory_window=50,
+        )
+
+        assert result is True
+        provider.chat.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_accepts_json_string_tool_arguments(self, tmp_path: Path) -> None:
+        scope = _make_scope(tmp_path)
+        service = MemoryConsolidationService(scope=scope)
+        session = _make_session("test:json-args", 30)
+        store = MemoryStore(tmp_path)
+        provider = MagicMock()
+        provider.chat = AsyncMock(
+            return_value=LLMResponse(
+                content="calling save_memory",
+                tool_calls=[
+                    ToolCallRequest(
+                        id="tc1",
+                        name="save_memory",
+                        arguments=json.dumps(
+                            {
+                                "history_entry": "[2026-03-22] JSON args.",
+                                "memory_update": "## Facts\nJSON arguments handled.",
+                            }
+                        ),
+                    )
+                ],
+            )
+        )
+
+        result = await service.consolidate(
+            session=session,
+            provider=provider,
+            model="test-model",
+            store=store,
+            memory_window=50,
+        )
+
+        assert result is True
+        assert "JSON args." in store.history_file.read_text(encoding="utf-8")
+        assert "JSON arguments handled." in store.read_long_term()
+
+    @pytest.mark.asyncio
+    async def test_malformed_json_tool_arguments_use_fallback(self, tmp_path: Path) -> None:
+        scope = _make_scope(tmp_path)
+        service = MemoryConsolidationService(scope=scope)
+        session = _make_session("test:bad-json", 30)
+        store = MemoryStore(tmp_path)
+        provider = MagicMock()
+        provider.chat = AsyncMock(
+            return_value=LLMResponse(
+                content="calling save_memory",
+                tool_calls=[
+                    ToolCallRequest(
+                        id="tc1",
+                        name="save_memory",
+                        arguments="{bad-json",
+                    )
+                ],
+            )
+        )
+
+        result = await service.consolidate(
+            session=session,
+            provider=provider,
+            model="test-model",
+            store=store,
+            memory_window=50,
+        )
+
+        assert result is True
+        history = store.history_file.read_text(encoding="utf-8")
+        assert "Archived" in history
+        assert "messages" in history
+
+    @pytest.mark.asyncio
+    async def test_empty_history_entry_uses_fallback_archive(self, tmp_path: Path) -> None:
+        scope = _make_scope(tmp_path)
+        service = MemoryConsolidationService(scope=scope)
+        session = _make_session("test:empty-history", 30)
+        store = MemoryStore(tmp_path)
+        provider = _make_provider(
+            tool_call_args={
+                "history_entry": "   ",
+                "memory_update": "",
+            }
+        )
+
+        result = await service.consolidate(
+            session=session,
+            provider=provider,
+            model="test-model",
+            store=store,
+            memory_window=50,
+        )
+
+        assert result is True
+        history = store.history_file.read_text(encoding="utf-8")
+        assert "Archived" in history
+        assert "messages" in history
+
+    @pytest.mark.asyncio
+    async def test_consolidation_uses_planned_offsets_when_session_grows(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        scope = _make_scope(tmp_path)
+        service = MemoryConsolidationService(scope=scope)
+        session = _make_session("test:grows", 30)
+        store = MemoryStore(tmp_path)
+        rows = [{"id": idx} for idx in range(1, 63)]
+
+        async def _chat(**_kwargs):
+            session.add_message("user", "new-msg")
+            session.add_message("assistant", "new-response")
+            return LLMResponse(
+                content="calling save_memory",
+                tool_calls=[
+                    ToolCallRequest(
+                        id="tc1",
+                        name="save_memory",
+                        arguments={
+                            "history_entry": "[2026-03-22] Planned offset.",
+                            "memory_update": "## Facts\nOffset preserved.",
+                        },
+                    )
+                ],
+            )
+
+        async def _get_unconsolidated(_session_key: str, *, limit: int = 500):
+            return rows[:limit]
+
+        provider = MagicMock()
+        provider.chat = AsyncMock(side_effect=_chat)
+        short_term = AsyncMock()
+        short_term.get_unconsolidated = AsyncMock(side_effect=_get_unconsolidated)
+        short_term.mark_consolidated = AsyncMock()
+
+        result = await service.consolidate(
+            session=session,
+            provider=provider,
+            model="test-model",
+            store=store,
+            memory_window=50,
+            short_term_store=short_term,
+            session_key="test:grows",
+        )
+
+        assert result is True
+        assert len(session.messages) == 62
+        assert session.last_consolidated == 35
+        short_term.get_unconsolidated.assert_awaited_once_with("test:grows", limit=35)
+        short_term.mark_consolidated.assert_awaited_once_with("test:grows", 35)
+
+    @pytest.mark.asyncio
+    async def test_archive_all_uses_snapshot_when_session_grows(self, tmp_path: Path) -> None:
+        scope = _make_scope(tmp_path)
+        service = MemoryConsolidationService(scope=scope)
+        session = _make_session("test:archive-snapshot", 3)
+        store = MemoryStore(tmp_path)
+        rows = [{"id": idx} for idx in range(1, 9)]
+
+        async def _chat(**_kwargs):
+            session.add_message("user", "new-msg")
+            session.add_message("assistant", "new-response")
+            return LLMResponse(content="no tool call", tool_calls=[])
+
+        async def _get_unconsolidated(_session_key: str, *, limit: int = 500):
+            return rows[:limit]
+
+        provider = MagicMock()
+        provider.chat = AsyncMock(side_effect=_chat)
+        short_term = AsyncMock()
+        short_term.get_unconsolidated = AsyncMock(side_effect=_get_unconsolidated)
+        short_term.mark_consolidated = AsyncMock()
+
+        result = await service.consolidate(
+            session=session,
+            provider=provider,
+            model="test-model",
+            store=store,
+            archive_all=True,
+            short_term_store=short_term,
+            session_key="test:archive-snapshot",
+        )
+
+        assert result is True
+        assert len(session.messages) == 8
+        assert session.last_consolidated == 0
+        history = store.history_file.read_text(encoding="utf-8")
+        assert "Archived 6 messages" in history
+        short_term.get_unconsolidated.assert_awaited_once_with(
+            "test:archive-snapshot",
+            limit=6,
+        )
+        short_term.mark_consolidated.assert_awaited_once_with("test:archive-snapshot", 6)
 
 
 class TestConsolidationServiceRetry:
@@ -263,12 +475,7 @@ class TestPersistConsolidationResult:
         store = MemoryStore(tmp_path)
 
         short_term = AsyncMock()
-        short_term.get_unconsolidated = AsyncMock(
-            side_effect=[
-                [{"id": 1}],  # first call (limit=1)
-                [{"id": 1}, {"id": 2}, {"id": 3}],  # second call (all)
-            ]
-        )
+        short_term.get_unconsolidated = AsyncMock(return_value=[{"id": 1}, {"id": 2}, {"id": 3}])
         short_term.mark_consolidated = AsyncMock()
 
         await service._persist_consolidation_result(
@@ -283,7 +490,39 @@ class TestPersistConsolidationResult:
             session_key="test:sqlite",
         )
 
+        short_term.get_unconsolidated.assert_awaited_once_with("test:sqlite", limit=50)
         short_term.mark_consolidated.assert_awaited_once_with("test:sqlite", 3)
+
+    @pytest.mark.asyncio
+    async def test_sqlite_marking_does_not_include_kept_tail(self, tmp_path: Path) -> None:
+        scope = _make_scope(tmp_path)
+        service = MemoryConsolidationService(scope=scope)
+        session = _make_session("test:sqlite-tail", 30)
+        store = MemoryStore(tmp_path)
+        rows = [{"id": idx} for idx in range(1, 61)]
+
+        short_term = AsyncMock()
+
+        async def _get_unconsolidated(_session_key: str, *, limit: int = 500):
+            return rows[:limit]
+
+        short_term.get_unconsolidated = AsyncMock(side_effect=_get_unconsolidated)
+        short_term.mark_consolidated = AsyncMock()
+
+        await service._persist_consolidation_result(
+            session,
+            store=store,
+            archive_all=False,
+            keep_count=10,
+            current_memory="",
+            history_entry="test",
+            memory_update=None,
+            short_term_store=short_term,
+            session_key="test:sqlite-tail",
+        )
+
+        short_term.get_unconsolidated.assert_awaited_once_with("test:sqlite-tail", limit=50)
+        short_term.mark_consolidated.assert_awaited_once_with("test:sqlite-tail", 50)
 
     @pytest.mark.asyncio
     async def test_syncs_memory_index(self, tmp_path: Path) -> None:

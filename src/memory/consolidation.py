@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -55,6 +56,22 @@ _SAVE_MEMORY_TOOL = [
         },
     }
 ]
+_MAX_CONSOLIDATION_ATTEMPTS = 2
+_MESSAGE_PROMPT_LIMIT = 1000
+_MESSAGE_PROMPT_HEAD = 500
+_MESSAGE_PROMPT_TAIL = 500
+
+
+@dataclass(frozen=True)
+class _ConsolidationPlan:
+    old_messages: list[dict[str, Any]]
+    keep_count: int
+    archive_all: bool
+    target_last_consolidated: int
+
+    @property
+    def archived_count(self) -> int:
+        return len(self.old_messages)
 
 
 def _validate_memory_update(old: str, new: str) -> tuple[bool, str]:
@@ -173,41 +190,172 @@ class MemoryConsolidationService:
 
         Returns True on success (including no-op), False on failure.
         """
-        if archive_all:
-            old_messages = session.messages
-            keep_count = 0
-            logger.info("Memory consolidation (archive_all): {} messages", len(session.messages))
-        else:
-            keep_count = memory_window // 2
-            if len(session.messages) <= keep_count:
-                return True
-            if len(session.messages) - session.last_consolidated <= 0:
-                return True
-            old_messages = session.messages[session.last_consolidated : -keep_count]
-            if not old_messages:
-                return True
-            logger.info(
-                "Memory consolidation: {} to consolidate, {} keep", len(old_messages), keep_count
-            )
-
-        lines = []
-        for m in old_messages:
-            if not m.get("content"):
-                continue
-            tools = f" [tools: {', '.join(m['tools_used'])}]" if m.get("tools_used") else ""
-            content = m["content"]
-            if len(content) > 1000:
-                content = content[:500] + " ... [truncated] ... " + content[-500:]
-            lines.append(f"[{m.get('timestamp', '?')[:16]}] {m['role'].upper()}{tools}: {content}")
+        plan = self._consolidation_plan(
+            session,
+            archive_all=archive_all,
+            memory_window=memory_window,
+        )
+        if plan is None:
+            return True
+        self._log_consolidation_plan(plan, total_messages=len(session.messages))
 
         current_memory = store.read_long_term()
         history_context = self._gather_recent_history(store)
+        prompt = self._build_consolidation_prompt(
+            old_messages=plan.old_messages,
+            current_memory=current_memory,
+            history_context=history_context,
+        )
+
+        response = await self._call_provider(provider=provider, model=model, prompt=prompt)
+        if response is None:
+            return False
+
+        if not response.has_tool_calls:
+            logger.warning(
+                "Memory consolidation: LLM did not call save_memory, using fallback archive"
+            )
+            return await self._persist_fallback(
+                session,
+                store=store,
+                plan=plan,
+                current_memory=current_memory,
+                short_term_store=short_term_store,
+                session_key=session_key,
+                memory_index=memory_index,
+            )
+
+        args = self._coerce_save_memory_args(response.tool_calls[0].arguments)
+        if args is None:
+            logger.warning(
+                "Memory consolidation: malformed save_memory arguments, using fallback archive"
+            )
+            return await self._persist_fallback(
+                session,
+                store=store,
+                plan=plan,
+                current_memory=current_memory,
+                short_term_store=short_term_store,
+                session_key=session_key,
+                memory_index=memory_index,
+            )
+
+        parsed_args = self._parse_save_memory_args(
+            args,
+            current_memory=current_memory,
+        )
+        if parsed_args is None:
+            logger.warning(
+                "Memory consolidation: missing history_entry, using fallback archive"
+            )
+            return await self._persist_fallback(
+                session,
+                store=store,
+                plan=plan,
+                current_memory=current_memory,
+                short_term_store=short_term_store,
+                session_key=session_key,
+                memory_index=memory_index,
+            )
+        history_entry, memory_update = parsed_args
+
+        return await self._persist_consolidation_result(
+            session,
+            store=store,
+            archive_all=plan.archive_all,
+            keep_count=plan.keep_count,
+            target_last_consolidated=plan.target_last_consolidated,
+            archived_count=plan.archived_count,
+            current_memory=current_memory,
+            history_entry=history_entry,
+            memory_update=memory_update,
+            short_term_store=short_term_store,
+            session_key=session_key,
+            memory_index=memory_index,
+        )
+
+    @staticmethod
+    def _consolidation_plan(
+        session: "Session",
+        *,
+        archive_all: bool,
+        memory_window: int,
+    ) -> _ConsolidationPlan | None:
+        if archive_all:
+            return _ConsolidationPlan(
+                old_messages=list(session.messages),
+                keep_count=0,
+                archive_all=True,
+                target_last_consolidated=0,
+            )
+
+        keep_count = memory_window // 2
+        if len(session.messages) <= keep_count:
+            return None
+        if len(session.messages) - session.last_consolidated <= 0:
+            return None
+
+        old_messages = session.messages[session.last_consolidated : -keep_count]
+        if not old_messages:
+            return None
+        return _ConsolidationPlan(
+            old_messages=old_messages,
+            keep_count=keep_count,
+            archive_all=False,
+            target_last_consolidated=len(session.messages) - keep_count,
+        )
+
+    @staticmethod
+    def _log_consolidation_plan(plan: _ConsolidationPlan, *, total_messages: int) -> None:
+        if plan.archive_all:
+            logger.info("Memory consolidation (archive_all): {} messages", total_messages)
+            return
+        logger.info(
+            "Memory consolidation: {} to consolidate, {} keep",
+            len(plan.old_messages),
+            plan.keep_count,
+        )
+
+    @staticmethod
+    def _format_prompt_message(message: dict[str, Any]) -> str | None:
+        content = message.get("content")
+        if not content:
+            return None
+        if isinstance(content, str) and len(content) > _MESSAGE_PROMPT_LIMIT:
+            content = (
+                content[:_MESSAGE_PROMPT_HEAD]
+                + " ... [truncated] ... "
+                + content[-_MESSAGE_PROMPT_TAIL:]
+            )
+        tools = (
+            f" [tools: {', '.join(message['tools_used'])}]"
+            if message.get("tools_used")
+            else ""
+        )
+        timestamp = str(message.get("timestamp", "?"))[:16]
+        role = str(message.get("role", "unknown")).upper()
+        return f"[{timestamp}] {role}{tools}: {content}"
+
+    @classmethod
+    def _format_conversation(cls, messages: list[dict[str, Any]]) -> str:
+        lines = [line for message in messages if (line := cls._format_prompt_message(message))]
+        return "\n".join(lines)
+
+    @classmethod
+    def _build_consolidation_prompt(
+        cls,
+        *,
+        old_messages: list[dict[str, Any]],
+        current_memory: str,
+        history_context: str,
+    ) -> str:
         cross_session_rule = (
             "\n- **Project-wide awareness**: consider the recent project activity log when consolidating — it provides broader context beyond the current conversation."
             if history_context
             else ""
         )
-        prompt = f"""Process this conversation and call the save_memory tool with your consolidation.
+        conversation = cls._format_conversation(old_messages)
+        return f"""Process this conversation and call the save_memory tool with your consolidation.
 
 ## Rules
 - **Merge, don't append**: update existing sections in place rather than duplicating information.
@@ -220,96 +368,102 @@ class MemoryConsolidationService:
 {current_memory or "(empty)"}
 {history_context}
 ## Conversation to Process
-{chr(10).join(lines)}"""
+{conversation}"""
 
-        max_attempts = 2
-        for attempt in range(1, max_attempts + 1):
+    @staticmethod
+    async def _call_provider(
+        *,
+        provider: "LLMProvider",
+        model: str,
+        prompt: str,
+    ) -> Any | None:
+        for attempt in range(1, _MAX_CONSOLIDATION_ATTEMPTS + 1):
             try:
-                response = await provider.chat(
+                return await provider.chat(
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation.",
+                            "content": (
+                                "You are a memory consolidation agent. "
+                                "Call the save_memory tool with your consolidation "
+                                "of the conversation."
+                            ),
                         },
                         {"role": "user", "content": prompt},
                     ],
                     tools=_SAVE_MEMORY_TOOL,
                     model=model,
                 )
-                break  # success
             except Exception:
-                if attempt < max_attempts:
+                if attempt < _MAX_CONSOLIDATION_ATTEMPTS:
                     logger.warning(
                         "Memory consolidation LLM call failed, retrying (attempt {}/{})",
                         attempt,
-                        max_attempts,
+                        _MAX_CONSOLIDATION_ATTEMPTS,
                     )
                     continue
                 logger.opt(exception=True).warning(
-                    "Memory consolidation failed after {} attempts", max_attempts
+                    "Memory consolidation failed after {} attempts",
+                    _MAX_CONSOLIDATION_ATTEMPTS,
                 )
-                return False
+                return None
+        return None
 
-        if not response.has_tool_calls:
-            logger.warning(
-                "Memory consolidation: LLM did not call save_memory, using fallback archive"
-            )
-            return await self._persist_consolidation_result(
-                session,
-                store=store,
-                archive_all=archive_all,
-                keep_count=keep_count,
-                current_memory=current_memory,
-                history_entry=store._build_fallback_history_entry(old_messages),
-                memory_update=current_memory,
-                short_term_store=short_term_store,
-                session_key=session_key,
-                memory_index=memory_index,
-            )
+    @staticmethod
+    def _coerce_save_memory_args(raw_args: Any) -> dict[str, Any] | None:
+        if isinstance(raw_args, str):
+            try:
+                raw_args = json.loads(raw_args)
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return raw_args if isinstance(raw_args, dict) else None
 
-        args = response.tool_calls[0].arguments
-        # Some providers return arguments as a JSON string instead of dict
-        if isinstance(args, str):
-            args = json.loads(args)
-        if not isinstance(args, dict):
-            logger.warning(
-                "Memory consolidation: unexpected arguments type {}, using fallback archive",
-                type(args).__name__,
-            )
-            return await self._persist_consolidation_result(
-                session,
-                store=store,
-                archive_all=archive_all,
-                keep_count=keep_count,
-                current_memory=current_memory,
-                history_entry=store._build_fallback_history_entry(old_messages),
-                memory_update=current_memory,
-                short_term_store=short_term_store,
-                session_key=session_key,
-                memory_index=memory_index,
-            )
-
-        if entry := args.get("history_entry"):
-            if not isinstance(entry, str):
-                entry = json.dumps(entry, ensure_ascii=False)
-            history_entry = entry
+    @staticmethod
+    def _parse_save_memory_args(
+        args: dict[str, Any],
+        *,
+        current_memory: str,
+    ) -> tuple[str, str] | None:
+        entry = args.get("history_entry")
+        if isinstance(entry, str):
+            history_entry = entry.strip()
+        elif entry:
+            history_entry = json.dumps(entry, ensure_ascii=False)
         else:
-            history_entry = None
-        if update := args.get("memory_update"):
-            if not isinstance(update, str):
-                update = json.dumps(update, ensure_ascii=False)
-            memory_update = update
+            return None
+        if not history_entry:
+            return None
+
+        update = args.get("memory_update")
+        if isinstance(update, str):
+            memory_update = update if update.strip() else current_memory
+        elif update:
+            memory_update = json.dumps(update, ensure_ascii=False)
         else:
             memory_update = current_memory
+        return history_entry, memory_update
 
+    async def _persist_fallback(
+        self,
+        session: "Session",
+        *,
+        store: "MemoryStore",
+        plan: _ConsolidationPlan,
+        current_memory: str,
+        short_term_store: Any = None,
+        session_key: str | None = None,
+        memory_index: "MemoryIndex | None" = None,
+    ) -> bool:
         return await self._persist_consolidation_result(
             session,
             store=store,
-            archive_all=archive_all,
-            keep_count=keep_count,
+            archive_all=plan.archive_all,
+            keep_count=plan.keep_count,
+            target_last_consolidated=plan.target_last_consolidated,
+            archived_count=plan.archived_count,
             current_memory=current_memory,
-            history_entry=history_entry,
-            memory_update=memory_update,
+            history_entry=store._build_fallback_history_entry(plan.old_messages),
+            memory_update=current_memory,
             short_term_store=short_term_store,
             session_key=session_key,
             memory_index=memory_index,
@@ -328,6 +482,8 @@ class MemoryConsolidationService:
         short_term_store: Any = None,
         session_key: str | None = None,
         memory_index: "MemoryIndex | None" = None,
+        target_last_consolidated: int | None = None,
+        archived_count: int | None = None,
     ) -> bool:
         """Write consolidation artifacts and advance session offsets."""
         # Validate proposed memory update before persisting. A bad LLM output
@@ -347,15 +503,26 @@ class MemoryConsolidationService:
         if memory_update is not None and memory_update != current_memory:
             store.write_long_term(memory_update)
 
-        session.last_consolidated = 0 if archive_all else len(session.messages) - keep_count
+        archived_count = self._archived_message_count(
+            session,
+            archive_all=archive_all,
+            keep_count=keep_count,
+            planned_count=archived_count,
+        )
+        session.last_consolidated = (
+            target_last_consolidated
+            if target_last_consolidated is not None
+            else (0 if archive_all else len(session.messages) - keep_count)
+        )
 
         if short_term_store and session_key:
             try:
-                uncons = await short_term_store.get_unconsolidated(session_key, limit=1)
-                if uncons:
-                    all_uncons = await short_term_store.get_unconsolidated(session_key)
-                    if all_uncons:
-                        await short_term_store.mark_consolidated(session_key, all_uncons[-1]["id"])
+                rows = await short_term_store.get_unconsolidated(
+                    session_key,
+                    limit=max(archived_count, 0),
+                )
+                if rows:
+                    await short_term_store.mark_consolidated(session_key, rows[-1]["id"])
             except Exception:
                 logger.opt(exception=True).warning("Failed to mark consolidated in SQLite")
 
@@ -371,3 +538,17 @@ class MemoryConsolidationService:
             session.last_consolidated,
         )
         return True
+
+    @staticmethod
+    def _archived_message_count(
+        session: "Session",
+        *,
+        archive_all: bool,
+        keep_count: int,
+        planned_count: int | None = None,
+    ) -> int:
+        if planned_count is not None:
+            return planned_count
+        if archive_all:
+            return len(session.messages)
+        return max(len(session.messages) - keep_count - session.last_consolidated, 0)
