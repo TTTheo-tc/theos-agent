@@ -226,6 +226,41 @@ class TestMessageConversion:
         assert tool_use_blocks[0]["id"] == "call_1"
         assert tool_use_blocks[0]["input"] == {"path": "/tmp/test.py"}
 
+    @pytest.mark.parametrize(
+        ("raw_arguments", "expected"),
+        [
+            ({"path": "/tmp/test.py"}, {"path": "/tmp/test.py"}),
+            ('{"path": "/tmp/test.py",}', {"path": "/tmp/test.py"}),
+            ('["not", "an", "object"]', {}),
+            ("", {}),
+            ("not json", {}),
+            ("123", {}),
+            ("null", {}),
+            (None, {}),
+        ],
+    )
+    def test_tool_call_arguments_must_be_object(self, provider, raw_arguments, expected):
+        """Assistant tool_call arguments are sanitized to Anthropic object input."""
+        messages = [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": raw_arguments,
+                        },
+                    }
+                ],
+            }
+        ]
+        _, msgs = provider._convert_messages(messages)
+        tool_use_blocks = [b for b in msgs[0]["content"] if b["type"] == "tool_use"]
+
+        assert tool_use_blocks[0]["input"] == expected
+
     def test_tool_result_to_user_message(self, provider):
         """Tool results → user message with tool_result block."""
         messages = [
@@ -801,6 +836,50 @@ class TestChatStream:
         assert final.tool_calls[0].name == "write_file"
         assert final.tool_calls[0].arguments == {"path": "/tmp/f.txt"}
         assert final.tool_calls[0].id == "toolu_stream1"
+
+    async def test_tool_streaming_arguments_must_be_object(self, provider):
+        """Streamed tool arguments are sanitized to an empty dict when not an object."""
+        events = [
+            FakeContentBlockStartEvent(
+                content_block=FakeToolUseStartBlock(id="toolu_stream1", name="write_file"),
+                index=0,
+            ),
+            FakeContentBlockDeltaEvent(
+                delta=FakeInputJSONDelta(partial_json='["not", "an", "object"]'),
+                index=0,
+            ),
+            FakeContentBlockStopEvent(index=0),
+            FakeMessageDeltaEvent(
+                delta=FakeMessageDeltaStop(stop_reason="tool_use"),
+                usage=FakeMessageDeltaUsage(output_tokens=20),
+            ),
+        ]
+
+        mock_stream = AsyncMock()
+        mock_stream.__aenter__ = AsyncMock(return_value=mock_stream)
+        mock_stream.__aexit__ = AsyncMock(return_value=False)
+        mock_stream.__aiter__ = lambda self: self
+        mock_stream._events = iter(events)
+
+        async def _anext(self):
+            try:
+                return next(self._events)
+            except StopIteration:
+                raise StopAsyncIteration
+
+        mock_stream.__anext__ = _anext
+        provider._client.messages.stream.return_value = mock_stream
+
+        deltas = []
+        async for delta in provider.chat_stream(
+            messages=[{"role": "user", "content": "Write a file"}],
+        ):
+            deltas.append(delta)
+
+        tool_ready = [delta for delta in deltas if delta.tool_ready]
+        assert len(tool_ready) == 1
+        assert tool_ready[0].tool_ready[0].arguments == {}
+        assert deltas[-1].tool_calls[0].arguments == {}
 
     async def test_thinking_streaming(self, provider):
         """Thinking deltas yield StreamDelta(reasoning_content=...)."""

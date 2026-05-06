@@ -34,6 +34,12 @@ def _gen_tool_id() -> str:
     return "toolu_" + "".join(secrets.choice(_ALNUM) for _ in range(22))
 
 
+def _parse_tool_input(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, str):
+        raw = json_repair.loads(raw)
+    return raw if isinstance(raw, dict) else {}
+
+
 class AnthropicProvider(LLMProvider):
     """LLM provider using the native Anthropic SDK for Claude models.
 
@@ -185,15 +191,12 @@ class AnthropicProvider(LLMProvider):
             if not isinstance(tc, dict):
                 continue
             func = tc.get("function", {})
-            args = func.get("arguments", "{}")
-            if isinstance(args, str):
-                args = json_repair.loads(args)
             blocks.append(
                 {
                     "type": "tool_use",
                     "id": tc.get("id") or _gen_tool_id(),
                     "name": func.get("name", ""),
-                    "input": args,
+                    "input": _parse_tool_input(func.get("arguments", "{}")),
                 }
             )
 
@@ -574,13 +577,10 @@ class AnthropicProvider(LLMProvider):
                 elif event_type == "content_block_stop":
                     if current_tool is not None:
                         raw_args = current_tool["input_json"]
-                        args = json_repair.loads(raw_args) if raw_args else {}
-                        if not isinstance(args, dict):
-                            args = {}
                         tc = ToolCallRequest(
                             id=current_tool["id"],
                             name=current_tool["name"],
-                            arguments=args,
+                            arguments=_parse_tool_input(raw_args) if raw_args else {},
                         )
                         tool_calls.append(tc)
                         current_tool = None
