@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -62,6 +63,12 @@ def _make_manager_with_channel(
     return manager, mock_channel
 
 
+async def _cancel_dispatch_task(dispatch_task: asyncio.Task[None]) -> None:
+    dispatch_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await dispatch_task
+
+
 @pytest.mark.asyncio
 async def test_send_failure_logs_structured_context() -> None:
     """Failed send should log routing metadata without leaking content."""
@@ -79,11 +86,7 @@ async def test_send_failure_logs_structured_context() -> None:
     with patch("src.channels.manager.logger.opt", return_value=warning_logger) as mock_opt:
         dispatch_task = asyncio.create_task(manager._dispatch_outbound())
         await asyncio.sleep(0.05)
-        dispatch_task.cancel()
-        try:
-            await dispatch_task
-        except asyncio.CancelledError:
-            pass
+        await _cancel_dispatch_task(dispatch_task)
 
     mock_opt.assert_called_once_with(exception=True)
     warning_logger.warning.assert_called_once()
@@ -113,11 +116,7 @@ async def test_dispatcher_does_not_retry_on_failure() -> None:
 
     dispatch_task = asyncio.create_task(manager._dispatch_outbound())
     await asyncio.sleep(0.05)
-    dispatch_task.cancel()
-    try:
-        await dispatch_task
-    except asyncio.CancelledError:
-        pass
+    await _cancel_dispatch_task(dispatch_task)
 
     # Should only have been called once — no retry
     assert mock_channel.send.await_count == 1
@@ -140,11 +139,7 @@ async def test_progress_suppressed_when_channel_disables_internal_progress() -> 
 
     dispatch_task = asyncio.create_task(manager._dispatch_outbound())
     await asyncio.sleep(0.05)
-    dispatch_task.cancel()
-    try:
-        await dispatch_task
-    except asyncio.CancelledError:
-        pass
+    await _cancel_dispatch_task(dispatch_task)
 
     mock_channel.send.assert_not_awaited()
 
@@ -172,11 +167,7 @@ async def test_progress_can_be_rewritten_to_generic_keepalive() -> None:
 
     dispatch_task = asyncio.create_task(manager._dispatch_outbound())
     await asyncio.sleep(0.05)
-    dispatch_task.cancel()
-    try:
-        await dispatch_task
-    except asyncio.CancelledError:
-        pass
+    await _cancel_dispatch_task(dispatch_task)
 
     mock_channel.send.assert_awaited_once_with(rewritten)
 
@@ -207,11 +198,7 @@ async def test_rewritten_keepalive_respects_send_progress_flag() -> None:
 
     dispatch_task = asyncio.create_task(manager._dispatch_outbound())
     await asyncio.sleep(0.05)
-    dispatch_task.cancel()
-    try:
-        await dispatch_task
-    except asyncio.CancelledError:
-        pass
+    await _cancel_dispatch_task(dispatch_task)
 
     mock_channel.transform_progress_message.assert_not_called()
     mock_channel.send.assert_not_awaited()
@@ -233,11 +220,7 @@ async def test_progress_delivered_when_channel_supports_internal_progress() -> N
 
     dispatch_task = asyncio.create_task(manager._dispatch_outbound())
     await asyncio.sleep(0.05)
-    dispatch_task.cancel()
-    try:
-        await dispatch_task
-    except asyncio.CancelledError:
-        pass
+    await _cancel_dispatch_task(dispatch_task)
 
     mock_channel.send.assert_awaited_once_with(msg)
 

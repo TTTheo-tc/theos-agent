@@ -33,7 +33,7 @@ class BaseChannel(ABC):
 
     name: str = "base"
 
-    def __init__(self, config: Any, bus: MessageBus, owner_ids: list[str] | None = None):
+    def __init__(self, config: Any, bus: MessageBus, owner_ids: list[str] | None = None) -> None:
         """
         Initialize the channel.
 

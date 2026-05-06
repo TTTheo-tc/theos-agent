@@ -27,7 +27,12 @@ class ChannelManager:
     - Route outbound messages
     """
 
-    def __init__(self, config: Config, bus: MessageBus, dashboard: DashboardWriter | None = None):
+    def __init__(
+        self,
+        config: Config,
+        bus: MessageBus,
+        dashboard: DashboardWriter | None = None,
+    ) -> None:
         self.config = config
         self.bus = bus
         self.dashboard = dashboard
