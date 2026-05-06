@@ -109,6 +109,7 @@ class TurnLifecycle:
         Only fires when no policies are installed — when policies are present,
         they own failure handling via ``after_failure``.
         """
+        del turn
         asyncio.create_task(
             self.agent.hooks.run_post_chat(
                 msg.session_key,

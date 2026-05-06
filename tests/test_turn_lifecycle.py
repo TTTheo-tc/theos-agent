@@ -189,6 +189,7 @@ async def test_lifecycle_retry():
     call_count = 0
 
     async def _process_side_effect(msg, turn_id=None):
+        del msg
         nonlocal call_count
         call_count += 1
         assert turn_id is not None
@@ -209,6 +210,7 @@ async def test_lifecycle_retry():
     mock_policy.close = AsyncMock()
 
     def _should_retry(turn, error):
+        del turn, error
         nonlocal should_retry_idx
         result = should_retry_results[should_retry_idx]
         should_retry_idx += 1
@@ -217,6 +219,7 @@ async def test_lifecycle_retry():
     mock_policy.should_retry = MagicMock(side_effect=_should_retry)
 
     async def _on_retry(turn, msg, error, attempt):
+        del turn, msg, error
         retry_calls.append(attempt)
 
     mock_policy.on_retry = AsyncMock(side_effect=_on_retry)
@@ -469,6 +472,7 @@ async def test_retry_hooks_only_run_for_retry_owners():
     call_count = 0
 
     async def _process_side_effect(msg, **kwargs):
+        del msg, kwargs
         nonlocal call_count
         call_count += 1
         if call_count == 1:

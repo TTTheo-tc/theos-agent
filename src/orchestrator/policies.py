@@ -35,6 +35,7 @@ class ExecutionPolicy:
 
     def can_execute(self, turn: TurnRecord, msg: InboundMessage) -> bool:
         """Return True when this policy wants to own execution for this turn."""
+        del turn, msg
         return False
 
     async def execute(self, turn: TurnRecord, msg: InboundMessage) -> Any:
@@ -54,6 +55,7 @@ class ExecutionPolicy:
 
     def should_retry(self, turn: TurnRecord, error: Exception) -> bool:
         """Pure retry decision. Must not mutate state or fire side effects."""
+        del turn, error
         return False
 
     async def close(self) -> None:
@@ -68,6 +70,7 @@ class GenVerExecutionPolicy(ExecutionPolicy):
 
     def can_execute(self, turn: TurnRecord, msg: InboundMessage) -> bool:
         """Use GenVer only for code-shaped requests while the agent is in GenVer mode."""
+        del turn
         if not self._agent.is_genver:
             return False
         from src.agent.loop_genver import GenVerHandler
@@ -217,6 +220,7 @@ class OrchestratorPolicy(ExecutionPolicy):
 
     def should_retry(self, turn: TurnRecord, error: Exception) -> bool:
         """Decision-only: can this turn retry? No side effects."""
+        del error
         task = self._get_task(turn)
         return task is not None and task.can_retry
 
@@ -224,6 +228,7 @@ class OrchestratorPolicy(ExecutionPolicy):
         self, turn: TurnRecord, msg: InboundMessage, error: Exception, attempt: int
     ) -> None:
         """Retry side effects: state transitions + per-attempt post-chat hook."""
+        del attempt
         task = self._get_task(turn)
         if not task:
             return
@@ -256,6 +261,7 @@ class OrchestratorPolicy(ExecutionPolicy):
 
     async def after_success(self, turn: TurnRecord, msg: InboundMessage, response: Any) -> None:
         """Handle successful execution: genver handoff, review gate, approval."""
+        del msg
         task = self._get_task(turn)
         if not task:
             return
@@ -289,6 +295,7 @@ class OrchestratorPolicy(ExecutionPolicy):
 
     async def after_failure(self, turn: TurnRecord, msg: InboundMessage, error: Exception) -> None:
         """Terminal failure only — all retries exhausted."""
+        del msg
         task = self._get_task(turn)
         if not task:
             return
