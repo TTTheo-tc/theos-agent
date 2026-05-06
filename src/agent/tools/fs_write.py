@@ -13,6 +13,60 @@ from src.utils.path import resolve_path as _resolve_path
 if TYPE_CHECKING:
     from src.agent.tools.context import ToolContext
 
+_DIFF_LIMIT = 2000
+
+
+def _resolve_write_path(
+    target: str,
+    workspace: Path | None,
+    allowed_dir: Path | None,
+    *,
+    kind: str,
+) -> tuple[Path | None, str | None]:
+    raw_policy_error = policy_error(target, kind=kind)
+    if raw_policy_error:
+        return None, raw_policy_error
+    try:
+        fp = _resolve_path(target, workspace, allowed_dir)
+    except PermissionError as e:
+        return None, f"Error: {e}"
+    resolved_policy_error = policy_error(str(fp), kind=kind)
+    if resolved_policy_error:
+        return None, resolved_policy_error
+    return fp, None
+
+
+def _read_existing_content(fp: Path) -> str | None:
+    try:
+        return fp.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, ValueError):
+        return None
+
+
+def _truncate_diff(diff_text: str) -> str:
+    if len(diff_text) <= _DIFF_LIMIT:
+        return diff_text
+    return diff_text[:_DIFF_LIMIT] + "\n... (diff truncated)"
+
+
+def _format_write_result(fp: Path, *, old_content: str | None, content: str, is_new: bool) -> str:
+    if is_new:
+        return f"Created {fp} ({len(content)} bytes)"
+    if old_content is None:
+        return f"Successfully wrote {fp} ({len(content)} bytes)"
+
+    diff_lines = list(
+        difflib.unified_diff(
+            old_content.splitlines(keepends=True),
+            content.splitlines(keepends=True),
+            fromfile=str(fp),
+            tofile=str(fp),
+        )
+    )
+    if not diff_lines:
+        return f"Successfully wrote {fp} (no changes)"
+    return _truncate_diff("".join(diff_lines))
+
 
 class WriteFileTool(ContextAwareTool):
     """Write content to a file, creating parent directories if needed."""
@@ -131,64 +185,35 @@ class WriteFileTool(ContextAwareTool):
         if not target:
             return "Error: file_path is required"
         try:
-            raw_policy_error = policy_error(target, kind="File write")
-            if raw_policy_error:
-                return raw_policy_error
-            fp = _resolve_path(target, self._workspace, self._allowed_dir)
-            resolved_policy_error = policy_error(str(fp), kind="File write")
-            if resolved_policy_error:
-                return resolved_policy_error
-
+            fp, error = _resolve_write_path(
+                target,
+                self._workspace,
+                self._allowed_dir,
+                kind="File write",
+            )
+            if error:
+                return error
+            assert fp is not None
             resolved = str(fp)
 
-            # --- read-before-write enforcement ---
             if fp.exists() and not self.has_read(session_key, resolved):
                 return (
                     f"Error: You must read {target} before overwriting it. "
                     "Use read_file first to see current contents."
                 )
 
-            # --- mtime staleness detection ---
             staleness = self.check_staleness(session_key, resolved)
             if staleness:
                 return staleness
 
-            # Read old content before writing (for diff)
             is_new = not fp.exists()
-            old_content: str | None = ""
-            if not is_new:
-                try:
-                    old_content = fp.read_text(encoding="utf-8")
-                except (UnicodeDecodeError, ValueError):
-                    old_content = None  # skip diff for non-UTF-8 files
+            old_content = "" if is_new else _read_existing_content(fp)
 
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
 
-            # Update read state so subsequent writes don't require re-read.
             self.record_read(session_key, resolved, fp.stat().st_mtime)
-
-            if is_new:
-                return f"Created {fp} ({len(content)} bytes)"
-
-            if old_content is None:
-                return f"Successfully wrote {fp} ({len(content)} bytes)"
-
-            # Generate unified diff for existing files
-            diff_lines = list(
-                difflib.unified_diff(
-                    old_content.splitlines(keepends=True),
-                    content.splitlines(keepends=True),
-                    fromfile=str(fp),
-                    tofile=str(fp),
-                )
-            )
-            if not diff_lines:
-                return f"Successfully wrote {fp} (no changes)"
-            diff_text = "".join(diff_lines)
-            if len(diff_text) > 2000:
-                diff_text = diff_text[:2000] + "\n... (diff truncated)"
-            return diff_text
+            return _format_write_result(fp, old_content=old_content, content=content, is_new=is_new)
         except PermissionError as e:
             return f"Error: {e}"
         except Exception as e:

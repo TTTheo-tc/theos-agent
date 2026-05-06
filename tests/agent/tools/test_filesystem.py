@@ -15,8 +15,9 @@ def tmp_workspace(tmp_path):
 
 async def test_doc_write_allows_docs_md(tmp_workspace):
     tool = DocWriteFileTool(workspace=tmp_workspace)
-    result = await tool.execute("docs/plans/test.md", "# hello")
+    result = await tool.execute("docs/plans/test.md", content="# hello")
     assert "Created" in result or "Successfully wrote" in result
+    assert (tmp_workspace / "docs" / "plans" / "test.md").read_text(encoding="utf-8") == "# hello"
 
 
 async def test_doc_write_blocks_non_md(tmp_workspace):
