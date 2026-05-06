@@ -54,7 +54,7 @@ class Session:
     _TOOL_RESULT_HEAD_CHARS = 500  # keep first N chars
     _TOOL_RESULT_TAIL_CHARS = 500  # keep last N chars
     # Only trim when the result is meaningfully longer than what we'd keep.
-    # head + tail + placeholder ≈ 1050, so fire at ~2× that to avoid
+    # head + tail + placeholder is about 1050, so fire at ~2x that to avoid
     # trimming results that would barely shrink.
     _TOOL_RESULT_TRIM_THRESHOLD = 2000
     _HISTORY_TOOL_CALL_ARGS_MAX_CHARS = 500
@@ -112,7 +112,6 @@ class Session:
             tail = content[-self._TOOL_RESULT_TAIL_CHARS :]
             entry["content"] = f"{head}\n\n... [{name} result trimmed] ...\n\n{tail}"
         return entry
-
 
     def clear(self) -> None:
         """Clear all messages and reset session to initial state."""
@@ -229,7 +228,7 @@ class SessionManager:
             updated_at = None
             last_consolidated = 0
 
-            with open(path, encoding="utf-8") as f:
+            with path.open(encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -332,7 +331,7 @@ class SessionManager:
             return
 
         # Append only: new messages + trailing metadata snapshot.
-        with open(path, "a", encoding="utf-8") as f:
+        with path.open("a", encoding="utf-8") as f:
             for msg in new_msgs:
                 f.write(json.dumps(self._scrub_message_for_persist(msg), ensure_ascii=False) + "\n")
             f.write(json.dumps(self._metadata_dict(session), ensure_ascii=False) + "\n")
@@ -343,7 +342,7 @@ class SessionManager:
     def _write_full(self, session: Session, path: Path) -> None:
         """Full rewrite: atomic write via temp file."""
         tmp = path.with_suffix(".jsonl.tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
+        with tmp.open("w", encoding="utf-8") as f:
             f.write(json.dumps(self._metadata_dict(session), ensure_ascii=False) + "\n")
             for msg in session.messages:
                 f.write(json.dumps(self._scrub_message_for_persist(msg), ensure_ascii=False) + "\n")
@@ -362,7 +361,7 @@ class SessionManager:
             "last_consolidated": session.last_consolidated,
         }
 
-    def _put_cache(self, session: "Session") -> None:
+    def _put_cache(self, session: Session) -> None:
         """Insert into cache, evicting oldest if over capacity."""
         self._cache[session.key] = session
         self._cache.move_to_end(session.key)
@@ -394,7 +393,7 @@ class SessionManager:
         for path in self.sessions_dir.glob("*.jsonl"):
             try:
                 # Read latest metadata snapshot (supports append-only metadata tails).
-                with open(path, encoding="utf-8") as f:
+                with path.open(encoding="utf-8") as f:
                     data = None
                     for line in f:
                         line = line.strip()

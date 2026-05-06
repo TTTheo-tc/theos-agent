@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,12 +29,12 @@ def checkpoint_metadata(row: dict[str, Any], id_key: str) -> dict[str, Any]:
 
 def checkpoint_timestamp() -> str:
     """Return the canonical UTC checkpoint timestamp string."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def append_checkpoint_row(path: Path, row: dict[str, Any]) -> None:
     """Append one checkpoint row to a JSONL file."""
-    with open(path, "a", encoding="utf-8") as f:
+    with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
@@ -42,7 +42,7 @@ def iter_checkpoint_rows(path: Path, checkpoint_type: str) -> Iterator[dict[str,
     """Read checkpoint rows of *checkpoint_type* from a JSONL file."""
     if not path.exists():
         return
-    with open(path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:

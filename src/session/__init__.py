@@ -2,4 +2,4 @@
 
 from src.session.manager import Session, SessionManager
 
-__all__ = ["SessionManager", "Session"]
+__all__ = ["Session", "SessionManager"]

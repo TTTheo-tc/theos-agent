@@ -27,9 +27,9 @@ class SessionRuntimeState:
     """Combined durable recovery state for one session."""
 
     session_key: str
-    latest_turn: "TurnCheckpoint | None"
-    active_background: list["SubagentCheckpoint"]
-    recent_background: list["SubagentCheckpoint"]
+    latest_turn: TurnCheckpoint | None
+    active_background: list[SubagentCheckpoint]
+    recent_background: list[SubagentCheckpoint]
     recoverable: bool
     runtime_state: str | None
     next_step: str | None
@@ -38,8 +38,8 @@ class SessionRuntimeState:
 def build_session_runtime_state(
     session_key: str,
     *,
-    turn_store: "TurnStore | None" = None,
-    subagent_store: "SubagentStore | None" = None,
+    turn_store: TurnStore | None = None,
+    subagent_store: SubagentStore | None = None,
     recent_background_limit: int = 3,
 ) -> SessionRuntimeState:
     """Build a factual recovery summary from durable turn/background state."""
@@ -70,8 +70,8 @@ def build_session_runtime_state(
 
 
 def infer_resume_next_step(
-    checkpoint: "TurnCheckpoint | None",
-    active_background: list["SubagentCheckpoint"],
+    checkpoint: TurnCheckpoint | None,
+    active_background: list[SubagentCheckpoint],
 ) -> str | None:
     """Suggest the narrowest factual next step based on durable state."""
     if checkpoint is None:
@@ -99,8 +99,8 @@ def infer_resume_next_step(
 
 
 def _runtime_state_label(
-    checkpoint: "TurnCheckpoint | None",
-    active_background: list["SubagentCheckpoint"],
+    checkpoint: TurnCheckpoint | None,
+    active_background: list[SubagentCheckpoint],
 ) -> str | None:
     if checkpoint is not None:
         return checkpoint.status
