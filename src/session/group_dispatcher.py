@@ -65,23 +65,25 @@ class PerGroupDispatcher:
 
     def cancel_group(self, group_id: str) -> bool:
         """Cancel the running worker and clear the queue for a specific group."""
-        cancelled = False
-
-        if group_id in self._queues:
-            q = self._queues[group_id]
-            while not q.empty():
-                try:
-                    q.get_nowait()
-                    q.task_done()
-                except asyncio.QueueEmpty:
-                    break
+        self._drain_queue(group_id)
 
         task = self._workers.get(group_id)
-        if task and not task.done():
+        cancelled = bool(task and not task.done())
+        if cancelled:
             task.cancel()
-            cancelled = True
 
         return cancelled
+
+    def _drain_queue(self, group_id: str) -> None:
+        queue = self._queues.get(group_id)
+        if queue is None:
+            return
+        while True:
+            try:
+                queue.get_nowait()
+                queue.task_done()
+            except asyncio.QueueEmpty:
+                return
 
     async def _worker(self, group_id: str) -> None:
         """Drain the queue for *group_id* until it is idle for WORKER_IDLE_TIMEOUT."""

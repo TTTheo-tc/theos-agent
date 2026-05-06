@@ -139,6 +139,39 @@ class TestDispatch:
         finally:
             await _cleanup_loop(loop)
 
+    @pytest.mark.asyncio
+    async def test_cancel_group_drains_pending_messages(self):
+        from src.bus.events import InboundMessage
+        from src.session.group_dispatcher import PerGroupDispatcher
+
+        started = asyncio.Event()
+        release = asyncio.Event()
+        processed = []
+
+        async def process(msg):
+            started.set()
+            await release.wait()
+            processed.append(msg.content)
+
+        dispatcher = PerGroupDispatcher(process)
+        msg1 = InboundMessage(channel="test", sender_id="u1", chat_id="c1", content="a")
+        msg2 = InboundMessage(channel="test", sender_id="u1", chat_id="c1", content="b")
+
+        await dispatcher.dispatch(msg1)
+        await dispatcher.dispatch(msg2)
+        await asyncio.wait_for(started.wait(), timeout=1.0)
+
+        cancelled = dispatcher.cancel_group(msg1.session_key)
+        release.set()
+        await asyncio.gather(
+            dispatcher._workers[msg1.session_key],
+            return_exceptions=True,
+        )
+
+        assert cancelled is True
+        assert dispatcher._queues[msg1.session_key].empty()
+        assert processed == []
+
 
 class TestSubagentCancellation:
     @pytest.mark.asyncio
