@@ -146,7 +146,7 @@ cat > "{payload_path}"
     def test_hook_env_includes_workspace(self, tmp_path: Path) -> None:
         env = HookRunner._hook_env(tmp_path)
 
-        assert env["ARIESCLAW_WORKSPACE"] == str(tmp_path)
+        assert env["THEOS_WORKSPACE"] == str(tmp_path)
 
 
 @pytest.mark.asyncio

@@ -32,7 +32,7 @@ if (!userInput) process.exit(0);
 const REPO_ROOT   = path.resolve(__dirname, '..', '..');
 const DOMAINS_DIR = path.join(REPO_ROOT, 'instinct', 'domains');
 const SKILLS_DIR  = path.join(REPO_ROOT, 'skills');
-const WORKSPACE   = process.env.ARIESCLAW_WORKSPACE
+const WORKSPACE   = process.env.THEOS_WORKSPACE
                     || path.join(os.homedir(), '.theos', 'workspace');
 const MEMORY_DIR  = path.join(WORKSPACE, 'memory', 'instinct');
 const MAX_HITS    = Math.max(1, Number(process.env.INSTINCT_TOP_K || 4));

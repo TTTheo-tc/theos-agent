@@ -76,7 +76,7 @@ TheOS does not inject `instinct/core.md`, instantiate `HookRunner`, or execute
 - **pre-chat** (`runner.py:47`): Receives user message on stdin, returns context to inject (stdout). Timeout: 10s. The standard hook calls `reflex.js` with the user message.
 - **post-chat** (`runner.py:62`): Receives JSON payload on stdin (session_key, response, error, status, tools_used, usage, duration_ms, routing_domains, artifacts, tests). Fire-and-forget, timeout 15s. The standard hook calls `reflect.js --mode post-task`.
 
-Scripts run with `cwd` set to the hook's parent directory and `ARIESCLAW_WORKSPACE` in the environment.
+Scripts run with `cwd` set to the hook's parent directory and `THEOS_WORKSPACE` in the environment.
 
 ### Reflex (instinct/scripts/reflex.js)
 

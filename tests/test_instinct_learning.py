@@ -17,7 +17,7 @@ def _run_node(
     stdin: str | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> str:
-    env = {**os.environ, "ARIESCLAW_WORKSPACE": str(workspace), **(extra_env or {})}
+    env = {**os.environ, "THEOS_WORKSPACE": str(workspace), **(extra_env or {})}
     proc = subprocess.run(
         ["node", script, *args],
         input=stdin,

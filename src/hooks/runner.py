@@ -141,7 +141,7 @@ class HookRunner:
     def _hook_env(workspace: Path | None = None) -> dict[str, str]:
         env = {**os.environ}
         if workspace:
-            env["ARIESCLAW_WORKSPACE"] = str(workspace)
+            env["THEOS_WORKSPACE"] = str(workspace)
         return env
 
     @staticmethod

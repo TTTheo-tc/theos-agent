@@ -18,7 +18,7 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
-const WORKSPACE  = process.env.ARIESCLAW_WORKSPACE
+const WORKSPACE  = process.env.THEOS_WORKSPACE
                    || path.join(os.homedir(), '.theos', 'workspace');
 const MEMORY_DIR = path.join(WORKSPACE, 'memory', 'instinct');
 
