@@ -40,7 +40,7 @@ class Verifier:
         verifier_commands: list[str],
         verifier_max_iterations: int,
         max_tokens: int = 16384,
-    ):
+    ) -> None:
         self.workspace = workspace
         self.agentfs = agentfs
         self._provider = verifier_provider

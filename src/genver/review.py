@@ -81,7 +81,7 @@ class PhaseReviewProtocol:
         max_iterations: int = 20,
         gen_tools: ToolRegistry | None = None,
         ver_tools: ToolRegistry | None = None,
-    ):
+    ) -> None:
         self.phase = phase
         self.artifact_name = artifact_name
         self.store = store

@@ -83,7 +83,7 @@ class GenVerPipeline:
         on_progress: ProgressFn | None = None,
         tool_context: Any = None,
         ask_user: AskUserFn | None = None,
-    ):
+    ) -> None:
         self.config = config
         self.provider = provider
         self.workspace = workspace

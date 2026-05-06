@@ -72,7 +72,7 @@ class GenVerLoop:
         tool_context: Any = None,
         ask_user: AskUserFn | None = None,
         pipeline_mode: bool = False,
-    ):
+    ) -> None:
         self.config = config
         self.provider = provider
         self.workspace = workspace
