@@ -83,24 +83,8 @@ class FeishuParser:
             return self.parse_page_block(block)
         if block_type == 2:  # text
             return self.parse_text_block(block.get("text", {}))
-        if block_type == 3:  # heading1
-            return self.parse_heading_block(block, 1)
-        if block_type == 4:  # heading2
-            return self.parse_heading_block(block, 2)
-        if block_type == 5:  # heading3
-            return self.parse_heading_block(block, 3)
-        if block_type == 6:  # heading4
-            return self.parse_heading_block(block, 4)
-        if block_type == 7:  # heading5
-            return self.parse_heading_block(block, 5)
-        if block_type == 8:  # heading6
-            return self.parse_heading_block(block, 6)
-        if block_type == 9:  # heading7
-            return self.parse_heading_block(block, 7)
-        if block_type == 10:  # heading8
-            return self.parse_heading_block(block, 8)
-        if block_type == 11:  # heading9
-            return self.parse_heading_block(block, 9)
+        if isinstance(block_type, int) and 3 <= block_type <= 11:  # heading1..heading9
+            return self.parse_heading_block(block, block_type - 2)
         if block_type == 12:  # bullet
             return self.parse_bullet_block(block, indent_level)
         if block_type == 13:  # ordered
@@ -605,29 +589,12 @@ class FeishuParser:
 
     def parse_grid_block(self, block: dict) -> str:
         """解析 grid（多列布局）- Markdown 无法做并排，按顺序渲染各列"""
-        children = block.get("children", [])
-        result = []
-        for child_id in children:
-            if child_id not in self.block_map:
-                continue
-            child_block = self.block_map[child_id]
-            child_content = self.parse_block(child_block, 0)
-            if child_content.strip():
-                result.append(child_content)
+        result = self._parse_child_parts(block.get("children", []), 0)
         return "\n\n".join(result) + "\n" if result else ""
 
     def parse_grid_column_block(self, block: dict) -> str:
         """解析 grid column - 直接渲染列内内容"""
-        children = block.get("children", [])
-        result = []
-        for child_id in children:
-            if child_id not in self.block_map:
-                continue
-            child_block = self.block_map[child_id]
-            child_content = self.parse_block(child_block, 0)
-            if child_content.strip():
-                result.append(child_content)
-        return "\n".join(result)
+        return "\n".join(self._parse_child_parts(block.get("children", []), 0))
 
     def parse_iframe_block(self, block: dict) -> str:
         """解析 iframe block - 嵌入内容，尝试提取 URL"""
@@ -793,17 +760,7 @@ class FeishuParser:
         2   预览视图，在当前页面直接预览插入的 Block 内容，而不需要打开新的页面
         3   内联视图
         """
-        children = block.get("children", [])
-        result = []
-        for child_id in children:
-            if child_id not in self.block_map:
-                continue
-            child_block = self.block_map[child_id]
-            child_content = self.parse_block(child_block, 0)
-            if child_content.strip():
-                result.append(child_content)
-
-        return "\n".join(result)
+        return "\n".join(self._parse_child_parts(block.get("children", []), 0))
 
     def parse_quote_container_block(self, block: dict) -> str:
         children = block.get("children", [])
@@ -1045,19 +1002,19 @@ class FeishuParser:
             return f"<{url}>"
         return ""
 
-    def __children_content(self, children: list[str]) -> list[str]:
+    def _parse_child_parts(self, children: list[str], indent_level: int) -> list[str]:
         result = []
         for child_id in children:
             if child_id not in self.block_map:
                 continue
             child_block = self.block_map[child_id]
-            child_content = self.parse_block(child_block, 0)
+            child_content = self.parse_block(child_block, indent_level)
             if child_content.strip():
                 result.append(child_content)
         return result
 
     def parse_source_synced_block(self, block: dict) -> str:
-        result = self.__children_content(block.get("children", []))
+        result = self._parse_child_parts(block.get("children", []), 0)
         result = "\n".join(result)
         _id = block["block_id"]
         _class = "source_synced"

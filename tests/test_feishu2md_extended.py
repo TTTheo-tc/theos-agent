@@ -29,6 +29,29 @@ class TestDividerBlock:
 
 
 # ---------------------------------------------------------------------------
+# Heading range (types 3-11)
+# ---------------------------------------------------------------------------
+
+
+class TestHeadingBlocks:
+    @pytest.mark.parametrize(
+        "block_type,key,expected",
+        [
+            (3, "heading1", "# H1"),
+            (11, "heading9", "######### H9"),
+        ],
+    )
+    def test_heading_range_mapping(self, block_type, key, expected):
+        block = {
+            "block_id": f"h{block_type}",
+            "block_type": block_type,
+            key: {"elements": [{"text_run": {"content": expected.rsplit(" ", 1)[-1]}}]},
+        }
+        parser = _make_parser([block])
+        assert parser.parse_block(block) == expected
+
+
+# ---------------------------------------------------------------------------
 # ChatCard (type 20)
 # ---------------------------------------------------------------------------
 
@@ -143,11 +166,52 @@ class TestGridBlocks:
         assert "<grid>" not in result
         assert "<grid_column>" not in result
 
+    def test_grid_and_column_keep_existing_separators(self):
+        left = {
+            "block_id": "gc1c1",
+            "block_type": 2,
+            "text": {"elements": [{"text_run": {"content": "Left"}}]},
+        }
+        right = {
+            "block_id": "gc2c1",
+            "block_type": 2,
+            "text": {"elements": [{"text_run": {"content": "Right"}}]},
+        }
+        col1 = {"block_id": "gc1", "block_type": 25, "children": ["gc1c1"]}
+        col2 = {"block_id": "gc2", "block_type": 25, "children": ["gc2c1"]}
+        grid = {"block_id": "g1", "block_type": 24, "children": ["gc1", "missing", "gc2"]}
+        parser = _make_parser([grid, col1, col2, left, right])
+
+        assert parser.parse_block(col1) == "Left\n"
+        assert parser.parse_block(grid) == "Left\n\n\nRight\n\n"
+
     def test_empty_grid(self):
         grid = {"block_id": "g2", "block_type": 24, "children": []}
         parser = _make_parser([grid])
         result = parser.parse_block(grid)
         assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# View (type 33)
+# ---------------------------------------------------------------------------
+
+
+class TestViewBlock:
+    def test_view_keeps_existing_child_separator(self):
+        first = {
+            "block_id": "v_c1",
+            "block_type": 2,
+            "text": {"elements": [{"text_run": {"content": "First"}}]},
+        }
+        second = {
+            "block_id": "v_c2",
+            "block_type": 2,
+            "text": {"elements": [{"text_run": {"content": "Second"}}]},
+        }
+        block = {"block_id": "v1", "block_type": 33, "children": ["v_c1", "missing", "v_c2"]}
+        parser = _make_parser([block, first, second])
+        assert parser.parse_block(block) == "First\n\nSecond\n"
 
 
 # ---------------------------------------------------------------------------
@@ -630,6 +694,7 @@ class TestSourceSyncedBlock:
         parser = _make_parser([block, child])
         result = parser.parse_block(block)
         assert "synced content" in result
+        assert result == '<div id="ss1" class="source_synced">synced content\n</div>'
 
 
 # ---------------------------------------------------------------------------
