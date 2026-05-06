@@ -30,7 +30,7 @@ def _jaccard(a: set[str], b: set[str]) -> float:
         return 0.0
     inter = len(a & b)
     union = len(a | b)
-    return inter / union if union else 0.0
+    return inter / union
 
 
 def mmr_rerank(
