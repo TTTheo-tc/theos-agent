@@ -7,7 +7,7 @@ import re
 import threading
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from loguru import logger
 
@@ -208,9 +208,7 @@ def _extract_post_content(content_json: dict) -> tuple[str, list[str]]:
             for element in block:
                 if isinstance(element, dict):
                     tag = element.get("tag")
-                    if tag == "text":
-                        text_parts.append(element.get("text", ""))
-                    elif tag == "a":
+                    if tag in ("text", "a"):
                         text_parts.append(element.get("text", ""))
                     elif tag == "at":
                         text_parts.append(f"@{element.get('user_name', 'user')}")
@@ -303,7 +301,7 @@ class FeishuChannel(BaseChannel):
         return OutboundMessage(
             channel=msg.channel,
             chat_id=msg.chat_id,
-            content="⏳ 正在处理中，请稍候...",
+            content="⏳ 正在处理中，请稍候...",  # noqa: RUF001
             reply_to=msg.reply_to,
             media=list(msg.media),
             metadata=metadata,
@@ -328,16 +326,18 @@ class FeishuChannel(BaseChannel):
         self._client = make_client(self.config.app_id, self.config.app_secret)
 
         # Create event handler
-        _noop = lambda data: None  # noqa: E731
+        def noop(_data: Any) -> None:
+            return None
+
         event_handler = (
             lark.EventDispatcherHandler.builder(
                 self.config.encrypt_key or "",
                 self.config.verification_token or "",
             )
             .register_p2_im_message_receive_v1(self._on_message_sync)
-            .register_p2_im_message_message_read_v1(_noop)
-            .register_p2_im_message_reaction_created_v1(_noop)
-            .register_p2_im_message_reaction_deleted_v1(_noop)
+            .register_p2_im_message_message_read_v1(noop)
+            .register_p2_im_message_reaction_created_v1(noop)
+            .register_p2_im_message_reaction_deleted_v1(noop)
             .build()
         )
 
@@ -475,7 +475,7 @@ class FeishuChannel(BaseChannel):
         code_blocks = []
         for m in self._CODE_BLOCK_RE.finditer(content):
             code_blocks.append(m.group(1))
-            protected = protected.replace(m.group(1), f"\x00CODE{len(code_blocks)-1}\x00", 1)
+            protected = protected.replace(m.group(1), f"\x00CODE{len(code_blocks) - 1}\x00", 1)
 
         elements = []
         last_end = 0
@@ -505,9 +505,19 @@ class FeishuChannel(BaseChannel):
 
         return elements or [{"tag": "markdown", "content": content}]
 
-    _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tiff", ".tif"}
-    _AUDIO_EXTS = {".opus"}
-    _FILE_TYPE_MAP = {
+    _IMAGE_EXTS: ClassVar[set[str]] = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".webp",
+        ".ico",
+        ".tiff",
+        ".tif",
+    }
+    _AUDIO_EXTS: ClassVar[set[str]] = {".opus"}
+    _FILE_TYPE_MAP: ClassVar[dict[str, str]] = {
         ".opus": "opus",
         ".mp4": "mp4",
         ".pdf": "pdf",

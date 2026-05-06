@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import deque
+from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
+from importlib import import_module
 from typing import Any
 
 import httpx
@@ -27,8 +29,7 @@ except ImportError:
     SOCKETIO_AVAILABLE = False
 
 try:
-    import msgpack  # noqa: F401
-
+    import_module("msgpack")
     MSGPACK_AVAILABLE = True
 except ImportError:
     MSGPACK_AVAILABLE = False
@@ -115,7 +116,7 @@ def _make_synthetic_event(
         payload["authorInfo"] = _safe_dict(author_info)
     return {
         "type": "message.add",
-        "timestamp": timestamp or datetime.utcnow().isoformat(),
+        "timestamp": timestamp or datetime.now(UTC).replace(tzinfo=None).isoformat(),
         "payload": payload,
     }
 
@@ -296,10 +297,8 @@ class MochatChannel(BaseChannel):
         await self._cancel_delay_timers()
 
         if self._socket:
-            try:
+            with suppress(Exception):
                 await self._socket.disconnect()
-            except Exception:
-                pass
             self._socket = None
 
         if self._cursor_save_task:
@@ -407,7 +406,7 @@ class MochatChannel(BaseChannel):
             await self._ensure_fallback_workers()
 
         @client.event
-        async def connect_error(data: Any) -> None:
+        def connect_error(data: Any) -> None:
             logger.error("Mochat websocket connect error: {}", data)
 
         @client.on("claw.session.events")
@@ -442,10 +441,8 @@ class MochatChannel(BaseChannel):
             return True
         except Exception:
             logger.opt(exception=True).warning("Failed to connect Mochat websocket")
-            try:
+            with suppress(Exception):
                 await client.disconnect()
-            except Exception:
-                pass
             self._socket = None
             return False
 
@@ -945,7 +942,7 @@ class MochatChannel(BaseChannel):
                 json.dumps(
                     {
                         "schemaVersion": 1,
-                        "updatedAt": datetime.utcnow().isoformat(),
+                        "updatedAt": datetime.now(UTC).replace(tzinfo=None).isoformat(),
                         "cursors": self._session_cursor,
                     },
                     ensure_ascii=False,
