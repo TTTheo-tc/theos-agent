@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -39,6 +40,22 @@ _MICROCOMPACT_HEAD_CHARS = 500
 _MICROCOMPACT_TAIL_CHARS = 500
 _MICROCOMPACT_TRIGGER_RATIO = 0.6
 _MICROCOMPACT_KEEP_RECENT_USER_TURNS = 2
+
+
+@dataclass(frozen=True)
+class _CompactionBudget:
+    estimated_tokens: int
+    context_limit: int
+    threshold: int
+    micro_threshold: int
+
+    @property
+    def should_microcompact(self) -> bool:
+        return self.estimated_tokens > self.micro_threshold
+
+    @property
+    def should_compact(self) -> bool:
+        return self.estimated_tokens > self.threshold
 
 
 def _find_safe_cut(
@@ -265,6 +282,27 @@ def _pre_compaction_gap(
     if len(gap_msgs) < 2:
         return None
     return gap_msgs
+
+
+def _compaction_range(messages: list[dict]) -> tuple[int, int] | None:
+    """Return the compactable history range between system and final user turn."""
+    history_start = 1
+    history_end = len(messages) - 1
+    if history_end - history_start < 4:
+        return None
+    return history_start, history_end
+
+
+def _compacted_messages(messages: list[dict], *, cut: int, summary: str) -> list[dict]:
+    return [
+        messages[0],
+        {"role": "user", "content": f"[Prior conversation summary]\n{summary}"},
+        {
+            "role": "assistant",
+            "content": "Understood, I have the context from our previous conversation.",
+        },
+        *messages[cut:],
+    ]
 
 
 class MemoryHandler:
@@ -720,8 +758,6 @@ class MemoryHandler:
         Preserves assistant(tool_calls)/tool message pairs to avoid orphan tool messages.
         """
         from src.memory.store import MemoryStore
-        from src.memory.token_budget import estimate_messages_tokens, resolve_context_limit
-
         cfg = self._memory_config
         if not cfg or not cfg.compaction.enabled:
             return messages
@@ -737,51 +773,21 @@ class MemoryHandler:
             )
             return messages
 
-        estimated_tokens = estimate_messages_tokens(
-            messages,
-            safety_margin=cfg.compaction.safety_margin,
-        )
-        context_limit = resolve_context_limit(model)
-        threshold = int(context_limit * cfg.compaction.threshold_ratio)
-        micro_threshold = int(threshold * _MICROCOMPACT_TRIGGER_RATIO)
+        messages, budget = self._apply_microcompaction_if_needed(messages, model=model)
 
-        logger.debug(
-            "Token budget: estimated={} limit={} threshold={} compacting={}",
-            estimated_tokens,
-            context_limit,
-            threshold,
-            estimated_tokens > threshold,
-        )
-
-        if estimated_tokens > micro_threshold:
-            microcompacted, trimmed_results = _apply_microcompaction(messages)
-            if trimmed_results:
-                messages = microcompacted
-                estimated_tokens = estimate_messages_tokens(
-                    messages,
-                    safety_margin=cfg.compaction.safety_margin,
-                )
-                logger.info(
-                    "Microcompaction trimmed {} old tool result(s); estimated tokens now {}",
-                    trimmed_results,
-                    estimated_tokens,
-                )
-
-        if estimated_tokens <= threshold:
+        if not budget.should_compact:
             return messages
 
         logger.warning(
             "Context approaching limit (~{} tokens, threshold {}), running compaction",
-            estimated_tokens,
-            threshold,
+            budget.estimated_tokens,
+            budget.threshold,
         )
 
-        # History messages sit between system prompt (index 0) and the final
-        # merged user turn (last entry).
-        history_start = 1
-        history_end = len(messages) - 1  # keep the final merged user msg
-        if history_end - history_start < 4:
-            return messages  # too few to compact
+        compact_range = _compaction_range(messages)
+        if compact_range is None:
+            return messages
+        history_start, history_end = compact_range
 
         cut = _find_safe_cut(messages, history_start, history_end)
         if cut is None:
@@ -789,34 +795,20 @@ class MemoryHandler:
 
         old_msgs = messages[history_start:cut]
 
-        # Pre-compaction flush: extract durable facts from gap before compaction.
-        # Only fires on pre-turn path (persisted_history provided); in-loop
-        # compaction passes persisted_history=None, disabling this.
-        if persisted_history is not None:
-            asyncio.create_task(
-                self._schedule_pre_compaction_flush(
-                    session_key=session_key,
-                    persisted_history=persisted_history,
-                    compact_prefix_count=cut - history_start,
-                    provider=provider,
-                    model=model,
-                    workspace=workspace or self._scope.workspace,
-                )
-            )
+        self._schedule_pre_compaction_flush_if_needed(
+            session_key=session_key,
+            persisted_history=persisted_history,
+            compact_prefix_count=cut - history_start,
+            provider=provider,
+            model=model,
+            workspace=workspace or self._scope.workspace,
+        )
 
         try:
             summary = await MemoryStore(self._scope.workspace).compact_messages(
                 old_msgs, provider, model
             )
-            compacted = [
-                messages[0],  # system prompt
-                {"role": "user", "content": f"[Prior conversation summary]\n{summary}"},
-                {
-                    "role": "assistant",
-                    "content": "Understood, I have the context from our previous conversation.",
-                },
-                *messages[cut:],
-            ]
+            compacted = _compacted_messages(messages, cut=cut, summary=summary)
             # Post-compact context restoration: re-inject recently read files
             # so the LLM retains awareness of code it was working with.
             restore_max_files = cfg.compaction.restore_max_files
@@ -846,6 +838,75 @@ class MemoryHandler:
                 session_key[:8],
             )
             return messages
+
+    def _compaction_budget(self, messages: list[dict], *, model: str) -> _CompactionBudget:
+        from src.memory.token_budget import estimate_messages_tokens, resolve_context_limit
+
+        estimated_tokens = estimate_messages_tokens(
+            messages,
+            safety_margin=self._memory_config.compaction.safety_margin,
+        )
+        context_limit = resolve_context_limit(model)
+        threshold = int(context_limit * self._memory_config.compaction.threshold_ratio)
+        budget = _CompactionBudget(
+            estimated_tokens=estimated_tokens,
+            context_limit=context_limit,
+            threshold=threshold,
+            micro_threshold=int(threshold * _MICROCOMPACT_TRIGGER_RATIO),
+        )
+        logger.debug(
+            "Token budget: estimated={} limit={} threshold={} compacting={}",
+            budget.estimated_tokens,
+            budget.context_limit,
+            budget.threshold,
+            budget.should_compact,
+        )
+        return budget
+
+    def _apply_microcompaction_if_needed(
+        self,
+        messages: list[dict],
+        *,
+        model: str,
+    ) -> tuple[list[dict], _CompactionBudget]:
+        budget = self._compaction_budget(messages, model=model)
+        if not budget.should_microcompact:
+            return messages, budget
+
+        microcompacted, trimmed_results = _apply_microcompaction(messages)
+        if not trimmed_results:
+            return messages, budget
+
+        budget = self._compaction_budget(microcompacted, model=model)
+        logger.info(
+            "Microcompaction trimmed {} old tool result(s); estimated tokens now {}",
+            trimmed_results,
+            budget.estimated_tokens,
+        )
+        return microcompacted, budget
+
+    def _schedule_pre_compaction_flush_if_needed(
+        self,
+        *,
+        session_key: str,
+        persisted_history: list[dict] | None,
+        compact_prefix_count: int,
+        provider: Any,
+        model: str,
+        workspace: Path,
+    ) -> None:
+        if persisted_history is None:
+            return
+        asyncio.create_task(
+            self._schedule_pre_compaction_flush(
+                session_key=session_key,
+                persisted_history=persisted_history,
+                compact_prefix_count=compact_prefix_count,
+                provider=provider,
+                model=model,
+                workspace=workspace,
+            )
+        )
 
     async def _schedule_pre_compaction_flush(
         self,
