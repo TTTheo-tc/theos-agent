@@ -293,7 +293,7 @@ class KnowledgeSearch:
             d = dict(row)
             distance = d.pop("distance", 1.0)
             d["vec_score"] = round(max(0.0, 1.0 - float(distance)), 4)
-            d["final_score"] = _compute_final_score(d, vec_score=d["vec_score"])
+            d["final_score"] = _compute_final_score(d)
             results.append(d)
 
         return results
@@ -435,17 +435,10 @@ def _sanitize_fts_query(query: str) -> str:
     return " ".join(f'"{t}"' for t in tokens if t)
 
 
-def _compute_final_score(
-    row: dict[str, Any],
-    *,
-    vec_score: float | None = None,
-) -> float:
+def _compute_final_score(row: dict[str, Any]) -> float:
     """Compute the composite score for a search result.
 
     ``final_score = fts_rank_norm * 0.7 + importance * 0.2 + temporal_decay * 0.1``
-
-    When a ``vec_score`` is provided (hybrid mode), the vector component
-    is blended in via the merge step, not here.
     """
     score = _text_relevance_component(row) + _temporal_component(row)
     return round(score, 4)
