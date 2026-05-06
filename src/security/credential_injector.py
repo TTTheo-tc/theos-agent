@@ -89,32 +89,40 @@ class CredentialInjector:
             query_params = dict(query_params)
 
         for mapping in mappings:
-            if mapping.secret_name not in self._registry.allowed_secrets:
-                continue
-
-            secret = self._resolver.resolve(mapping.secret_name)
-            if secret is None:
-                continue
-
-            if mapping.method == InjectionMethod.BEARER:
-                headers["Authorization"] = f"Bearer {secret}"
-
-            elif mapping.method == InjectionMethod.BASIC:
-                user = mapping.username or ""
-                encoded = base64.b64encode(f"{user}:{secret}".encode()).decode()
-                headers["Authorization"] = f"Basic {encoded}"
-
-            elif mapping.method == InjectionMethod.HEADER:
-                header_name = mapping.header_name or "X-API-Key"
-                headers[header_name] = secret
-
-            elif mapping.method == InjectionMethod.QUERY:
-                param_name = mapping.query_param or "key"
-                if query_params is None:
-                    query_params = {}
-                query_params[param_name] = secret
+            query_params = self._inject_mapping(mapping, headers, query_params)
 
         return headers, query_params
+
+    def _resolve_mapping_secret(self, mapping: CredentialMapping) -> str | None:
+        if mapping.secret_name not in self._registry.allowed_secrets:
+            return None
+        return self._resolver.resolve(mapping.secret_name)
+
+    def _inject_mapping(
+        self,
+        mapping: CredentialMapping,
+        headers: dict[str, str],
+        query_params: dict[str, str] | None,
+    ) -> dict[str, str] | None:
+        secret = self._resolve_mapping_secret(mapping)
+        if secret is None:
+            return query_params
+
+        if mapping.method == InjectionMethod.BEARER:
+            headers["Authorization"] = f"Bearer {secret}"
+        elif mapping.method == InjectionMethod.BASIC:
+            user = mapping.username or ""
+            encoded = base64.b64encode(f"{user}:{secret}".encode()).decode()
+            headers["Authorization"] = f"Basic {encoded}"
+        elif mapping.method == InjectionMethod.HEADER:
+            header_name = mapping.header_name or "X-API-Key"
+            headers[header_name] = secret
+        elif mapping.method == InjectionMethod.QUERY:
+            param_name = mapping.query_param or "key"
+            query_params = query_params or {}
+            query_params[param_name] = secret
+
+        return query_params
 
     def resolve_secret_refs(
         self,
