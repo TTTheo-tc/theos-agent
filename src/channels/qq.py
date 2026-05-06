@@ -2,6 +2,7 @@
 
 import asyncio
 from collections import deque
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -53,7 +54,7 @@ class QQChannel(BaseChannel):
     def __init__(self, config: QQConfig, bus: MessageBus, owner_ids: list[str] | None = None):
         super().__init__(config, bus, owner_ids=owner_ids)
         self.config: QQConfig = config
-        self._client: "botpy.Client | None" = None
+        self._client: botpy.Client | None = None
         self._processed_ids: deque = deque(maxlen=1000)
 
     async def start(self) -> None:
@@ -88,10 +89,8 @@ class QQChannel(BaseChannel):
         """Stop the QQ bot."""
         self._running = False
         if self._client:
-            try:
+            with suppress(Exception):
                 await self._client.close()
-            except Exception:
-                pass
         logger.info("QQ bot stopped")
 
     async def send(self, msg: OutboundMessage) -> None:

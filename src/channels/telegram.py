@@ -6,6 +6,7 @@ import asyncio
 import os
 import re
 from pathlib import Path
+from typing import ClassVar
 
 from loguru import logger
 from telegram import BotCommand, ReplyParameters, Update
@@ -94,7 +95,7 @@ class TelegramChannel(BaseChannel):
     name = "telegram"
 
     # Commands registered with Telegram's command menu
-    BOT_COMMANDS = [
+    BOT_COMMANDS: ClassVar[list[BotCommand]] = [
         BotCommand("start", "Start the bot"),
         BotCommand("new", "Start a new conversation"),
         BotCommand("stop", "Stop the current task"),
