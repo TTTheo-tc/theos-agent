@@ -256,7 +256,7 @@ class MemoryRecallService:
             return ""
 
         if not effective_config or effective_config.injection.mode == "full" or not query:
-            return _memory_block(_FULL_MEMORY_HEADER, self._annotate_freshness(long_term))
+            return _memory_block(_FULL_MEMORY_HEADER, self._annotate_freshness(long_term, store))
 
         return self._select_markdown_sections(
             long_term=long_term,
@@ -270,17 +270,15 @@ class MemoryRecallService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _annotate_freshness(text: str) -> str:
+    def _annotate_freshness(text: str, store: Any) -> str:
         """Append freshness warnings to stale or undated memory sections."""
-        from src.memory.store import MemoryStore
-
-        sections = MemoryStore.split_sections(text)
+        sections = store.split_sections(text)
         if not sections:
             return text
 
         parts: list[str] = []
         for title, body in sections:
-            parts.append(_section_text(title, body, store=MemoryStore))
+            parts.append(_section_text(title, body, store=store))
 
         return "\n\n".join(parts)
 
