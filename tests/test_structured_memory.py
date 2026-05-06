@@ -734,6 +734,7 @@ async def test_agent_loop_retries_invalid_request_with_clean_context(tmp_path: P
     inference_messages: list[list[dict]] = []
 
     async def _chat(*, messages, **kwargs):
+        del kwargs
         # Skip the background fact-extraction call (it has a fixed system
         # prompt different from the main inference path).  We only care about
         # the main inference calls here.

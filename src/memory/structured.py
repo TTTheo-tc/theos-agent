@@ -769,7 +769,6 @@ class StructuredMemoryStore:
                 source_refs=source_refs,
                 artifacts=artifacts,
                 selected_primary=selected_primary,
-                existing=candidate,
                 existing_meta=meta,
             ):
                 continue
@@ -794,7 +793,6 @@ class StructuredMemoryStore:
         source_refs: list[str],
         artifacts: list[str],
         selected_primary: str | None,
-        existing: dict[str, Any],
         existing_meta: dict[str, Any],
     ) -> bool:
         """Check whether two tasks cover the same topic (KG-compatible version)."""

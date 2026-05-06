@@ -255,7 +255,7 @@ class KnowledgeGraph:
         _validate_update_columns(fields)
 
         set_clause = ", ".join(f"{col} = ?" for col in fields)
-        values = list(fields.values()) + [node_id]
+        values = [*fields.values(), node_id]
         await self._db.execute(
             f"UPDATE kg_nodes SET {set_clause} WHERE id = ?",
             tuple(values),
