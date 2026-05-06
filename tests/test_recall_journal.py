@@ -180,14 +180,14 @@ class TestAppendRecallEntries:
 
     @pytest.mark.asyncio
     async def test_write_errors_are_best_effort(self, monkeypatch, tmp_path):
-        import builtins
+        from pathlib import Path
 
         from src.memory.recall_journal import append_recall_entries
 
-        def fail_open(*_args, **_kwargs):
+        def fail_open(self: Path, *_args, **_kwargs):
             raise OSError("disk full")
 
-        monkeypatch.setattr(builtins, "open", fail_open)
+        monkeypatch.setattr(Path, "open", fail_open)
 
         await append_recall_entries(
             workspace=tmp_path,

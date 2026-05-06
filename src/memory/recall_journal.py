@@ -107,7 +107,7 @@ async def append_recall_entries(
             for r in results
         ]
 
-        with open(journal_path, "a") as f:
+        with journal_path.open("a", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
 
         append_memory_event(
