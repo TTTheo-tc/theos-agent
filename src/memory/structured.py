@@ -61,6 +61,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _coerce_metadata(value: Any) -> dict[str, Any]:
+    """Return parsed metadata dict from KG rows, tolerating legacy bad JSON."""
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return {}
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 class StructuredMemoryStore:
     """Persist structured knowledge objects in a KnowledgeGraph (SQLite).
 
@@ -349,12 +362,7 @@ class StructuredMemoryStore:
             for row in results:
                 node_type_raw = row.get("node_type", "")
                 display_type = reverse_type_map.get(node_type_raw, node_type_raw)
-                meta = row.get("metadata") or "{}"
-                if isinstance(meta, str):
-                    try:
-                        meta = json.loads(meta)
-                    except (json.JSONDecodeError, TypeError):
-                        meta = {}
+                meta = _coerce_metadata(row.get("metadata"))
                 domains_raw = row.get("domains", "")
                 domains_list = (
                     [d for d in domains_raw.split(",") if d]
@@ -453,12 +461,7 @@ class StructuredMemoryStore:
         existing = await self._kg.get_node(rule_id)
         if existing is not None:
             # Update existing rule
-            meta = existing.get("metadata") or "{}"
-            if isinstance(meta, str):
-                try:
-                    meta = json.loads(meta)
-                except (json.JSONDecodeError, TypeError):
-                    meta = {}
+            meta = _coerce_metadata(existing.get("metadata"))
             source_task_ids: list[str] = meta.get("source_task_ids", [])
             if task_id not in source_task_ids:
                 source_task_ids.append(task_id)
@@ -542,14 +545,7 @@ class StructuredMemoryStore:
             if not cand_id or cand_id == task_id:
                 continue
 
-            meta_raw = candidate.get("metadata") or "{}"
-            if isinstance(meta_raw, str):
-                try:
-                    meta = json.loads(meta_raw)
-                except (json.JSONDecodeError, TypeError):
-                    meta = {}
-            else:
-                meta = meta_raw
+            meta = _coerce_metadata(candidate.get("metadata"))
 
             if meta.get("status") != "success":
                 continue

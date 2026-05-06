@@ -10,7 +10,7 @@ from src.agent.loop import AgentLoop
 from src.bus.events import InboundMessage
 from src.bus.queue import MessageBus
 from src.config.schema import Config
-from src.memory.structured import RecordTaskResult, StructuredMemoryStore
+from src.memory.structured import RecordTaskResult, StructuredMemoryStore, _coerce_metadata
 from src.memory.structured_models import extract_rules
 from src.providers.base import LLMResponse, ToolCallRequest
 
@@ -20,6 +20,14 @@ def _make_test_config(workspace: Path) -> Config:
     cfg.agents.defaults.workspace = str(workspace)
     cfg.knowledge_graph.enabled = True
     return cfg
+
+
+def test_coerce_metadata_tolerates_kg_metadata_shapes() -> None:
+    assert _coerce_metadata({"a": 1}) == {"a": 1}
+    assert _coerce_metadata('{"a": 1}') == {"a": 1}
+    assert _coerce_metadata("{bad json") == {}
+    assert _coerce_metadata("[1, 2]") == {}
+    assert _coerce_metadata(None) == {}
 
 
 async def test_structured_memory_store_creates_task_rule_and_research_note(tmp_path: Path) -> None:
