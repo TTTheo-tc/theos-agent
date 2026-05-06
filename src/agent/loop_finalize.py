@@ -470,34 +470,51 @@ class TurnFinalizer:
             self._append_session_entry(session, user_entry, memory_tiers)
 
         for m in messages[skip:]:
-            entry = {k: v for k, v in m.items() if k != "reasoning_content"}
-            role, content = entry.get("role"), entry.get("content")
-            if "tool_calls" in entry:
-                entry["tool_calls"] = truncate_tool_call_arguments(
-                    entry["tool_calls"], self._TOOL_CALL_ARGS_MAX_CHARS
-                )
-            if (
-                role == "tool"
-                and isinstance(content, str)
-                and len(content) > self._TOOL_RESULT_MAX_CHARS
-            ):
-                entry["content"] = content[: self._TOOL_RESULT_MAX_CHARS] + "\n... (truncated)"
-            elif role == "user":
-                if self._skip_persisted_user_content(content):
-                    continue
-                if isinstance(content, list):
-                    entry["content"] = self._sanitize_multimodal_content(content)
-            if turn_id and role in {"assistant", "tool", "user"}:
-                entry.setdefault("turn_id", turn_id)
-            entry.setdefault("timestamp", datetime.now().isoformat())
-
-            # Attach usage to the final assistant message
-            if role == "assistant" and usage and m is messages[-1]:
-                entry["usage"] = usage
-
+            entry = self._prepare_session_entry(
+                m,
+                usage=usage,
+                is_final=m is messages[-1],
+                turn_id=turn_id,
+                timestamp=datetime.now().isoformat(),
+            )
+            if entry is None:
+                continue
             self._append_session_entry(session, entry, memory_tiers)
 
         session.updated_at = datetime.now()
+
+    def _prepare_session_entry(
+        self,
+        message: dict,
+        *,
+        usage: dict[str, int] | None,
+        is_final: bool,
+        turn_id: str | None,
+        timestamp: str,
+    ) -> dict[str, Any] | None:
+        entry = {k: v for k, v in message.items() if k != "reasoning_content"}
+        role, content = entry.get("role"), entry.get("content")
+        if "tool_calls" in entry:
+            entry["tool_calls"] = truncate_tool_call_arguments(
+                entry["tool_calls"], self._TOOL_CALL_ARGS_MAX_CHARS
+            )
+        if (
+            role == "tool"
+            and isinstance(content, str)
+            and len(content) > self._TOOL_RESULT_MAX_CHARS
+        ):
+            entry["content"] = content[: self._TOOL_RESULT_MAX_CHARS] + "\n... (truncated)"
+        elif role == "user":
+            if self._skip_persisted_user_content(content):
+                return None
+            if isinstance(content, list):
+                entry["content"] = self._sanitize_multimodal_content(content)
+        if turn_id and role in {"assistant", "tool", "user"}:
+            entry.setdefault("turn_id", turn_id)
+        entry.setdefault("timestamp", timestamp)
+        if role == "assistant" and usage and is_final:
+            entry["usage"] = usage
+        return entry
 
     def _append_session_entry(
         self,
