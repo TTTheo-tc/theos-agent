@@ -94,9 +94,6 @@ class CustomEmbeddingProvider(EmbeddingProvider):
     def name(self) -> str:
         return "custom"
 
-    def dimensions(self) -> int:
-        return self._delegate._dimensions
-
     async def embed_one(self, text: str) -> list[float]:
         return await self._delegate.embed_one(text)
 
