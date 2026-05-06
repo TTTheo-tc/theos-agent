@@ -33,7 +33,7 @@ def get_codex_token():
 class OpenAICodexProvider(LLMProvider):
     """Use Codex OAuth to call the Responses API."""
 
-    def __init__(self, default_model: str = "openai-codex/gpt-5.4"):
+    def __init__(self, default_model: str = "openai-codex/gpt-5.4") -> None:
         super().__init__(api_key=None, api_base=None)
         self.default_model = default_model
 

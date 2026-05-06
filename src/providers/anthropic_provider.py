@@ -119,7 +119,7 @@ class AnthropicProvider(LLMProvider):
         extra_headers: dict[str, str] | None = None,
         provider_name: str | None = None,
         spec: Any | None = None,
-    ):
+    ) -> None:
         super().__init__(api_key, api_base)
         self._default_model = default_model
         self._extra_headers = extra_headers or {}

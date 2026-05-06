@@ -182,7 +182,7 @@ class OpenAICompatProvider(LLMProvider):
         model_prefix_to_strip: str | None = None,
         extra_headers: dict[str, str] | None = None,
         spec: ProviderSpec | None = None,
-    ):
+    ) -> None:
         super().__init__(api_key, api_base)
         self._default_model = default_model
         self._model_prefix_to_strip = model_prefix_to_strip

@@ -16,7 +16,7 @@ class GroqTranscriptionProvider:
     Groq offers extremely fast transcription with a generous free tier.
     """
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None) -> None:
         self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         self.api_url = "https://api.groq.com/openai/v1/audio/transcriptions"
 
