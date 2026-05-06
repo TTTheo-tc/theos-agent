@@ -31,6 +31,42 @@ def _claim_hash(content: str) -> str:
     return hashlib.sha1(normalized.encode()).hexdigest()[:12]
 
 
+def _entry_for_result(
+    result: dict[str, Any],
+    *,
+    timestamp: str,
+    session_key: str | None,
+    tool: str,
+    query: str,
+    query_hash: str,
+    day: str,
+) -> dict[str, Any]:
+    content = result.get("content")
+    return {
+        "timestamp": timestamp,
+        "session_key": session_key or "",
+        "tool": tool,
+        "query": query,
+        "query_hash": query_hash,
+        "day": day,
+        "target_kind": result.get("target_kind", ""),
+        "target_id": result.get("target_id"),
+        "path": result.get("path", ""),
+        "score": result.get("score"),
+        "domains": result.get("domains", []),
+        "claim_hash": _claim_hash(content) if content else None,
+    }
+
+
+def _event_result(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "target_kind": result.get("target_kind", ""),
+        "target_id": result.get("target_id"),
+        "path": result.get("path", ""),
+        "score": result.get("score"),
+    }
+
+
 async def append_recall_entries(
     *,
     workspace: Path,
@@ -57,21 +93,15 @@ async def append_recall_entries(
 
         lines: list[str] = []
         for r in results:
-            content = r.get("content")
-            entry = {
-                "timestamp": ts,
-                "session_key": session_key or "",
-                "tool": tool,
-                "query": query,
-                "query_hash": qhash,
-                "day": day,
-                "target_kind": r.get("target_kind", ""),
-                "target_id": r.get("target_id"),
-                "path": r.get("path", ""),
-                "score": r.get("score"),
-                "domains": r.get("domains", []),
-                "claim_hash": _claim_hash(content) if content else None,
-            }
+            entry = _entry_for_result(
+                r,
+                timestamp=ts,
+                session_key=session_key,
+                tool=tool,
+                query=query,
+                query_hash=qhash,
+                day=day,
+            )
             lines.append(json.dumps(entry, ensure_ascii=False))
 
         with open(journal_path, "a") as f:
@@ -84,15 +114,7 @@ async def append_recall_entries(
                 "tool": tool,
                 "query": query,
                 "result_count": len(results),
-                "results": [
-                    {
-                        "target_kind": r.get("target_kind", ""),
-                        "target_id": r.get("target_id"),
-                        "path": r.get("path", ""),
-                        "score": r.get("score"),
-                    }
-                    for r in results
-                ],
+                "results": [_event_result(r) for r in results],
             },
         )
 

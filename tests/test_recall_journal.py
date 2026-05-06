@@ -7,6 +7,53 @@ import json
 import pytest
 
 
+def test_entry_for_result_hashes_content_claim() -> None:
+    from src.memory.recall_journal import _entry_for_result
+
+    entry = _entry_for_result(
+        {
+            "target_kind": "markdown_section",
+            "target_id": None,
+            "path": "MEMORY:Decisions",
+            "score": 0.8,
+            "domains": ["coding"],
+            "content": "Use PostgreSQL for primary data",
+        },
+        timestamp="2026-01-01T00:00:00",
+        session_key=None,
+        tool="memory_search",
+        query="postgres",
+        query_hash="abc123",
+        day="2026-01-01",
+    )
+
+    assert entry["session_key"] == ""
+    assert entry["domains"] == ["coding"]
+    assert entry["claim_hash"]
+
+
+def test_event_result_projects_public_fields_only() -> None:
+    from src.memory.recall_journal import _event_result
+
+    result = _event_result(
+        {
+            "target_kind": "kg_rule",
+            "target_id": "rule-1",
+            "path": "rule-1",
+            "score": 0.9,
+            "content": "not included",
+            "domains": ["coding"],
+        }
+    )
+
+    assert result == {
+        "target_kind": "kg_rule",
+        "target_id": "rule-1",
+        "path": "rule-1",
+        "score": 0.9,
+    }
+
+
 class TestAppendRecallEntries:
     @pytest.mark.asyncio
     async def test_creates_journal_file(self, tmp_path):
@@ -130,3 +177,30 @@ class TestAppendRecallEntries:
         )
         lines = [line for line in journal.read_text().strip().split("\n") if line]
         assert len(lines) == 2
+
+    @pytest.mark.asyncio
+    async def test_write_errors_are_best_effort(self, monkeypatch, tmp_path):
+        import builtins
+
+        from src.memory.recall_journal import append_recall_entries
+
+        def fail_open(*_args, **_kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(builtins, "open", fail_open)
+
+        await append_recall_entries(
+            workspace=tmp_path,
+            session_key="cli:test",
+            tool="memory_search",
+            query="test",
+            results=[
+                {
+                    "target_kind": "markdown_section",
+                    "target_id": None,
+                    "path": "",
+                    "score": 0.5,
+                    "domains": [],
+                }
+            ],
+        )
