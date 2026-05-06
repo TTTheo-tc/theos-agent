@@ -68,14 +68,18 @@ def _split_frontmatter(text: str) -> tuple[str | None, str]:
     Returns ``(frontmatter_str, body_str)``.  If the file does not
     start with ``---`` the frontmatter is ``None``.
     """
-    if not text.startswith("---"):
+    lines = text.splitlines(keepends=True)
+    if not lines or not _is_frontmatter_marker(lines[0]):
         return None, text
 
-    # Find the closing ---
-    end = text.find("---", 3)
-    if end == -1:
-        return None, text
+    for idx, line in enumerate(lines[1:], start=1):
+        if _is_frontmatter_marker(line):
+            frontmatter = "".join(lines[1:idx]).strip()
+            body = "".join(lines[idx + 1 :])
+            return frontmatter, body
 
-    frontmatter = text[3:end].strip()
-    body = text[end + 3 :]
-    return frontmatter, body
+    return None, text
+
+
+def _is_frontmatter_marker(line: str) -> bool:
+    return line.strip() == "---"

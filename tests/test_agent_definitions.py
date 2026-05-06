@@ -40,6 +40,30 @@ class TestLoadAgentDefinitions:
         assert cfg.max_iterations == 30
         assert cfg.prompt == "You are a research assistant.\n\nFocus on accuracy."
 
+    def test_frontmatter_marker_must_be_own_line(self, tmp_path: Path):
+        md = tmp_path / "researcher.md"
+        md.write_text(
+            "---\n"
+            "description: Research --- agent\n"
+            "---\n"
+            "Prompt.\n"
+        )
+        result = load_agent_definitions(tmp_path)
+
+        assert result["researcher"].description == "Research --- agent"
+
+    def test_frontmatter_marker_allows_trailing_whitespace(self, tmp_path: Path):
+        md = tmp_path / "researcher.md"
+        md.write_text(
+            "--- \n"
+            "description: Research agent\n"
+            "---\t\n"
+            "Prompt.\n"
+        )
+        result = load_agent_definitions(tmp_path)
+
+        assert result["researcher"].prompt == "Prompt."
+
     def test_load_multiple_definitions(self, tmp_path: Path):
         (tmp_path / "alpha.md").write_text("---\ndescription: Alpha agent\n---\nAlpha prompt.\n")
         (tmp_path / "beta.md").write_text("---\ndescription: Beta agent\n---\nBeta prompt.\n")
