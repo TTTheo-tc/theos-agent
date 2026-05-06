@@ -96,11 +96,19 @@ class DashboardWriter:
 
     async def connect(self) -> None:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = await aiosqlite.connect(str(self._db_path))
-        await self._conn.execute("PRAGMA journal_mode=WAL")
-        await self._conn.executescript(_SCHEMA_SQL)
-        await self._conn.execute("PRAGMA user_version = 1")
-        await self._conn.commit()
+        conn = await aiosqlite.connect(str(self._db_path))
+        self._conn = conn
+        try:
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.executescript(_SCHEMA_SQL)
+            await conn.execute("PRAGMA user_version = 1")
+            await conn.commit()
+        except Exception:
+            try:
+                await conn.close()
+            finally:
+                self._conn = None
+            raise
         logger.info("Dashboard DB connected: {}", self._db_path)
 
     async def close(self) -> None:

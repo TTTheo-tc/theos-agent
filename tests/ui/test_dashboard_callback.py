@@ -63,3 +63,41 @@ async def test_callback_error_does_not_block(writer: DashboardWriter):
         )
         row = await cursor.fetchone()
         assert row is not None, "Event should be persisted despite callback failure"
+
+
+async def test_connect_clears_connection_when_schema_init_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    writer = DashboardWriter(tmp_path / "test.db")
+    opened = _FakeConnection()
+
+    async def connect(_path: str) -> "_FakeConnection":
+        return opened
+
+    monkeypatch.setattr("src.store.dashboard_writer.aiosqlite.connect", connect)
+
+    with pytest.raises(RuntimeError, match="schema failed"):
+        await writer.connect()
+
+    assert opened.closed is True
+    assert writer._conn is None
+
+
+class _FakeConnection:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def execute(self, sql: str) -> None:
+        if "journal_mode" in sql:
+            return None
+        raise RuntimeError("schema failed")
+
+    async def executescript(self, _sql: str) -> None:
+        raise RuntimeError("schema failed")
+
+    async def commit(self) -> None:
+        return None
+
+    async def close(self) -> None:
+        self.closed = True
