@@ -402,10 +402,6 @@ class StructuredMemoryStore:
             title=task.title,
             domains=task.domains,
             status=status,
-            user_message=user_message,
-            artifacts=task.artifacts,
-            tests=task.tests,
-            superseded=superseded,
         )
 
         rule_ids = await self._record_rules(
@@ -839,7 +835,6 @@ class StructuredMemoryStore:
         title: str,
         domains: list[str],
         status: str,
-        **_kwargs: Any,
     ) -> str | None:
         """Build a one-line history index entry, or None if task failed.
 
