@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 
 class TaskState(str, Enum):
@@ -48,7 +49,9 @@ class TaskRecord:
     handoff: dict[str, Any] | None = None
     event_log_enabled: bool = True
     event_log: list[dict[str, Any]] = field(default_factory=list)
-    _on_event: Callable | None = field(default=None, repr=False, compare=False)
+    _on_event: Callable[[dict[str, Any]], Awaitable[None]] | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         self._log_event("created", state=self.state.value)
@@ -87,7 +90,12 @@ class TaskRecord:
             return
         import asyncio
 
-        event = {"type": event_type, "timestamp": datetime.now().isoformat(), **data}
+        event = {
+            "type": event_type,
+            "timestamp": datetime.now().isoformat(),
+            **data,
+            "task_id": self.task_id,
+        }
         self.event_log.append(event)
         if self._on_event is not None:
             try:

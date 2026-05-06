@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -139,7 +140,9 @@ class OrchestratorPolicy(ExecutionPolicy):
         self._event_store = EventStore(self._db)
         logger.info("EventStore connected: {}", db_path)
 
-    def _build_event_callback(self, session_key: str) -> Any:
+    def _build_event_callback(
+        self, session_key: str
+    ) -> Callable[[dict[str, Any]], Awaitable[None]] | None:
         """Build an async callback for persisting events to the EventStore.
 
         Returns ``None`` when the EventStore is not enabled.
@@ -148,7 +151,7 @@ class OrchestratorPolicy(ExecutionPolicy):
             return None
         es = self._event_store
 
-        async def _persist(event: dict, *, _sk: str = session_key) -> None:
+        async def _persist(event: dict[str, Any], *, _sk: str = session_key) -> None:
             try:
                 await es.append(event.get("task_id", ""), _sk, event)
             except Exception:

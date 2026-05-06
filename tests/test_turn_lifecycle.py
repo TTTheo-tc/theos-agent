@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.bus.events import InboundMessage, OutboundMessage
 from src.bus.queue import MessageBus
+from src.config.schema import EventStoreConfig
 from src.orchestrator.policies import ExecutionPolicy, GenVerExecutionPolicy, OrchestratorPolicy
 from src.orchestrator.state_machine import TaskState
 from src.orchestrator.turn_lifecycle import TurnLifecycle
@@ -53,7 +54,7 @@ def _make_agent(bus: MessageBus | None = None, workspace: Path | None = None) ->
 # ---------------------------------------------------------------------------
 
 
-def test_turn_record_defaults():
+def test_turn_record_defaults() -> None:
     """TurnRecord has correct defaults: status, turn_id format, started_at type."""
     tr = TurnRecord(session_key="test:1")
     assert tr.status == "created"
@@ -67,7 +68,7 @@ def test_turn_record_defaults():
 # ---------------------------------------------------------------------------
 
 
-async def test_lifecycle_no_policies():
+async def test_lifecycle_no_policies() -> None:
     """With no policies, handle_message publishes response with turn_id."""
     bus = MessageBus()
     agent = _make_agent(bus=bus)
@@ -83,7 +84,7 @@ async def test_lifecycle_no_policies():
     assert "turn_id" in out.metadata
 
 
-async def test_lifecycle_routes_code_turn_to_genver_execution_policy():
+async def test_lifecycle_routes_code_turn_to_genver_execution_policy() -> None:
     """GenVer policy owns code-shaped turns while lifecycle still publishes the response."""
     bus = MessageBus()
     agent = _make_agent(bus=bus)
@@ -101,7 +102,7 @@ async def test_lifecycle_routes_code_turn_to_genver_execution_policy():
     assert out.content == "reply"
 
 
-async def test_lifecycle_leaves_non_code_turn_on_default_execution_in_genver_mode():
+async def test_lifecycle_leaves_non_code_turn_on_default_execution_in_genver_mode() -> None:
     """GenVer policy declines chatty turns so AgentLoop can run its normal bypass path."""
     bus = MessageBus()
     agent = _make_agent(bus=bus)
@@ -124,7 +125,7 @@ async def test_lifecycle_leaves_non_code_turn_on_default_execution_in_genver_mod
 # ---------------------------------------------------------------------------
 
 
-async def test_lifecycle_failure_no_policies():
+async def test_lifecycle_failure_no_policies() -> None:
     """On failure with no policies: post-chat hook fires and error fallback published."""
     bus = MessageBus()
     agent = _make_agent(bus=bus)
@@ -152,7 +153,7 @@ async def test_lifecycle_failure_no_policies():
 # ---------------------------------------------------------------------------
 
 
-async def test_lifecycle_failure_with_policies_skips_builtin_hook():
+async def test_lifecycle_failure_with_policies_skips_builtin_hook() -> None:
     """When policies are installed, _run_failed_post_chat does NOT fire."""
     bus = MessageBus()
     agent = _make_agent(bus=bus)
@@ -180,7 +181,7 @@ async def test_lifecycle_failure_with_policies_skips_builtin_hook():
 # ---------------------------------------------------------------------------
 
 
-async def test_lifecycle_retry():
+async def test_lifecycle_retry() -> None:
     """Policy returns should_retry=True once, on_retry called, second attempt succeeds."""
     bus = MessageBus()
     agent = _make_agent(bus=bus)
@@ -241,7 +242,7 @@ async def test_lifecycle_retry():
 # ---------------------------------------------------------------------------
 
 
-async def test_orchestrator_policy_before_execute():
+async def test_orchestrator_policy_before_execute() -> None:
     """before_execute creates TaskRecord linked by turn_id, stored in _tasks and _active."""
     agent = _make_agent()
     policy = OrchestratorPolicy(
@@ -264,12 +265,45 @@ async def test_orchestrator_policy_before_execute():
     assert task.state == TaskState.EXECUTING
 
 
+async def test_orchestrator_policy_persists_events_under_task_id(tmp_path: Path) -> None:
+    """EventStore wiring persists TaskRecord events under the generated task_id."""
+    agent = _make_agent(workspace=tmp_path)
+    policy = OrchestratorPolicy(
+        max_retries=3,
+        review_mode="auto",
+        event_log_enabled=True,
+        event_store_config=EventStoreConfig(enabled=True, db_name="events.db"),
+        agent=agent,
+    )
+    turn = TurnRecord(session_key="test:1")
+    msg = _make_msg()
+    await policy.before_execute(turn, msg)
+
+    task = policy._active[turn.turn_id]
+    assert policy._event_store is not None
+
+    async def _wait_for_events() -> list[dict[str, object]]:
+        while True:
+            persisted = await policy._event_store.get_events(task.task_id)
+            if len(persisted) >= 2:
+                return persisted
+            await asyncio.sleep(0.01)
+
+    try:
+        events = await asyncio.wait_for(_wait_for_events(), timeout=1.0)
+    finally:
+        await policy.close()
+
+    assert [event["event_type"] for event in events] == ["created", "transition"]
+    assert {event["task_id"] for event in events} == {task.task_id}
+
+
 # ---------------------------------------------------------------------------
 # 6. OrchestratorPolicy on_retry — state transitions
 # ---------------------------------------------------------------------------
 
 
-async def test_orchestrator_policy_on_retry():
+async def test_orchestrator_policy_on_retry() -> None:
     """on_retry transitions EXEC_FAILED -> EXECUTING, increments retry_count.
     should_retry does NOT do state transitions."""
     agent = _make_agent()
@@ -306,7 +340,7 @@ async def test_orchestrator_policy_on_retry():
 # ---------------------------------------------------------------------------
 
 
-async def test_orchestrator_policy_concurrent_sessions():
+async def test_orchestrator_policy_concurrent_sessions() -> None:
     """Two TurnRecords with different turn_ids get separate _active entries."""
     agent = _make_agent()
     policy = OrchestratorPolicy(
@@ -336,7 +370,7 @@ async def test_orchestrator_policy_concurrent_sessions():
 # ---------------------------------------------------------------------------
 
 
-async def test_orchestrator_policy_success():
+async def test_orchestrator_policy_success() -> None:
     """after_success transitions TaskRecord to APPROVED and cleans up _active."""
     agent = _make_agent()
 
@@ -359,7 +393,7 @@ async def test_orchestrator_policy_success():
     assert turn.turn_id not in policy._active
 
 
-async def test_orchestrator_policy_reads_genver_handoff_from_response_metadata():
+async def test_orchestrator_policy_reads_genver_handoff_from_response_metadata() -> None:
     """GenVer strategy passes handoff through response metadata for orchestrator review."""
     agent = _make_agent()
     agent.is_genver = True
@@ -396,7 +430,7 @@ async def test_orchestrator_policy_reads_genver_handoff_from_response_metadata()
 # ---------------------------------------------------------------------------
 
 
-async def test_orchestrator_policy_failure():
+async def test_orchestrator_policy_failure() -> None:
     """after_failure transitions TaskRecord to FAILED and cleans up _active."""
     agent = _make_agent()
     policy = OrchestratorPolicy(
@@ -423,7 +457,7 @@ async def test_orchestrator_policy_failure():
 # ---------------------------------------------------------------------------
 
 
-async def test_turn_id_in_outbound():
+async def test_turn_id_in_outbound() -> None:
     """End-to-end: handle_message publishes OutboundMessage with turn_id in metadata."""
     bus = MessageBus()
     agent = _make_agent(bus=bus)
@@ -444,7 +478,7 @@ async def test_turn_id_in_outbound():
 # ---------------------------------------------------------------------------
 
 
-async def test_lifecycle_close():
+async def test_lifecycle_close() -> None:
     """close() calls close() on all installed policies."""
     mock_policy_a = MagicMock(spec=ExecutionPolicy)
     mock_policy_a.close = AsyncMock()
@@ -464,7 +498,7 @@ async def test_lifecycle_close():
 # ---------------------------------------------------------------------------
 
 
-async def test_retry_hooks_only_run_for_retry_owners():
+async def test_retry_hooks_only_run_for_retry_owners() -> None:
     """PolicyA (should_retry=False) does NOT get on_retry; PolicyB (should_retry=True) does."""
     bus = MessageBus()
     agent = _make_agent(bus=bus)
@@ -512,7 +546,7 @@ async def test_retry_hooks_only_run_for_retry_owners():
 # ---------------------------------------------------------------------------
 
 
-async def test_orchestrator_policy_public_accessors():
+async def test_orchestrator_policy_public_accessors() -> None:
     """get_task() and active_tasks work after before_execute."""
     agent = _make_agent()
     policy = OrchestratorPolicy(
