@@ -46,7 +46,7 @@ class ToolRegistry:
         }
     )
 
-    def __init__(self, approval_gate: ApprovalGate | None = None):
+    def __init__(self, approval_gate: ApprovalGate | None = None) -> None:
         self._tools: dict[str, Tool] = {}
         self._deferred: dict[str, Tool] = {}
         self._activated: set[str] = set()
