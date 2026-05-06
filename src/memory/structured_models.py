@@ -2,12 +2,11 @@
 
 Contains:
 - TaskMemory, DomainRule, ResearchNote dataclasses
-- Tokenization, scoring, and rule extraction helpers
+- Rule extraction, source reference, and remember/research hint helpers
 """
 
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass, field
 
@@ -172,44 +171,6 @@ def is_transferable_rule_text(text: str) -> bool:
     return bool(_RULE_ACTION_RE.search(clean))
 
 
-def is_ascii_term(term: str) -> bool:
-    return bool(re.fullmatch(r"[a-z0-9][a-z0-9._/-]*", term, flags=re.I))
-
-
-def count_term_hits(text: str, term: str) -> int:
-    haystack = (text or "").lower()
-    if not haystack:
-        return 0
-    if is_ascii_term(term):
-        exact_hits = len(
-            re.findall(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", haystack, flags=re.I)
-        )
-        if exact_hits > 0:
-            return exact_hits
-        if len(term) >= 4:
-            return haystack.count(term)
-        return 0
-
-    count = 0
-    start = 0
-    while True:
-        idx = haystack.find(term, start)
-        if idx < 0:
-            return count
-        count += 1
-        start = idx + len(term)
-
-
-def term_weight(term: str) -> float:
-    if is_ascii_term(term):
-        return 1.0 + min(len(term), 12) / 12
-    if len(term) == 2:
-        return 0.9
-    if len(term) == 3:
-        return 1.15
-    return 1.35
-
-
 def is_research_hint(text: str) -> bool:
     return bool(_RESEARCH_HINT_RE.search(text))
 
@@ -257,83 +218,3 @@ def derive_remembered_note(user_message: str, response: str) -> str | None:
             return f"{cleaned} -> {summary}"[:220]
 
     return cleaned[:220]
-
-
-def score_record(
-    object_type: str,
-    record: dict,
-    *,
-    fields: dict[str, str],
-    domains: list[str],
-    selected_primary: str | None,
-    query_terms: list[str],
-    doc_freq: dict[str, int],
-    total_docs: int,
-    prefer_domain: str | None = None,
-) -> dict | None:
-    field_weights = {
-        "title": 3.2,
-        "primary": 1.8,
-        "summary": 1.5,
-        "detail": 1.0,
-        "tags": 2.0,
-        "domains": 2.4,
-        "refs": 1.2,
-    }
-    score = 0.0
-    matched_terms = 0
-    for term in query_terms:
-        term_score = 0.0
-        for field_name, text in fields.items():
-            hits = min(count_term_hits(text, term), 3)
-            if hits <= 0:
-                continue
-            term_score += hits * field_weights.get(field_name, 1.0)
-        if term_score <= 0:
-            continue
-        matched_terms += 1
-        idf = 1.0 + math.log((1 + total_docs) / (1 + doc_freq.get(term, 0)))
-        score += term_score * idf * term_weight(term)
-
-    if score <= 0 or matched_terms <= 0:
-        return None
-    score += matched_terms * 0.35
-
-    if prefer_domain:
-        prefer_domain = prefer_domain.lower()
-        lowered_domains = [str(d).lower() for d in domains]
-        if prefer_domain in lowered_domains:
-            score += 3.0
-        elif any(d.startswith(prefer_domain.split("/", 1)[0] + "/") for d in lowered_domains):
-            score += 1.0
-        if selected_primary and str(selected_primary).lower() == prefer_domain:
-            score += 2.0
-
-    if object_type == "rule":
-        score += min(float(record.get("occurrence_count", 0)) * 0.15, 1.2)
-    elif object_type == "task" and record.get("superseded_by"):
-        score *= 0.45
-
-    if object_type == "task":
-        title = record.get("response_summary") or record.get("user_message") or record.get("id", "")
-        summary = record.get("user_message", "")
-    elif object_type == "rule":
-        title = record.get("rule_text", "")
-        summary = (
-            f"domains={', '.join(record.get('domains', []))} "
-            f"occurrences={record.get('occurrence_count', 0)}"
-        )
-    else:
-        title = record.get("title", "") or record.get("id", "")
-        summary = record.get("summary", "")
-
-    return {
-        "object_type": object_type,
-        "id": record.get("id"),
-        "title": title[:200],
-        "summary": summary[:500],
-        "score": round(score, 2),
-        "created_at": record.get("created_at") or record.get("last_seen_at") or "",
-        "domains": domains,
-        "selected_primary": selected_primary,
-    }
