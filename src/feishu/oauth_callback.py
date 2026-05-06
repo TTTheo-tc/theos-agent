@@ -273,6 +273,7 @@ def create_oauth_app(
 
     # Health check
     async def handle_health(request: web.Request) -> web.Response:
+        del request
         return web.json_response({"status": "ok"})
 
     app.router.add_get("/feishu/oauth/callback", handle_callback)

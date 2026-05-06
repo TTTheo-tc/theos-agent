@@ -1482,6 +1482,7 @@ def move_docs_to_wiki(
     Returns:
         Response dict containing wiki_token (and possibly task_id if async).
     """
+    del client
     _rate_limiter.wait()
     url = f"https://open.feishu.cn/open-apis/wiki/v2/spaces/{space_id}/nodes/move_docs_to_wiki"
     body = {
