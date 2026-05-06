@@ -78,6 +78,57 @@ def _recover_text_tool_calls(
     return None, parsed
 
 
+def _chat_error_response(exc: Exception, model: str) -> LLMResponse:
+    err_msg = short_error_message(exc)
+    if isinstance(exc, openai.AuthenticationError):
+        logger.error("OpenAI-compat authentication failed (model={}): {}", model, err_msg)
+        return LLMResponse(
+            content=f"Error (authentication failed): {err_msg}",
+            finish_reason="error",
+            error_type="AuthenticationError",
+        )
+    if isinstance(exc, openai.RateLimitError):
+        logger.warning("OpenAI-compat rate limited (model={}): {}", model, err_msg)
+        return LLMResponse(
+            content=f"Error (rate limited): {err_msg}",
+            finish_reason="error",
+            error_type="RateLimitError",
+        )
+
+    logger.warning("OpenAI-compat call failed (model={}): {}", model, err_msg)
+    return LLMResponse(
+        content=f"Error calling LLM: {err_msg}",
+        finish_reason="error",
+        error_type=type(exc).__name__,
+    )
+
+
+def _stream_error_delta(exc: Exception, model: str) -> StreamDelta:
+    err_msg = short_error_message(exc)
+    if isinstance(exc, openai.AuthenticationError):
+        logger.error("OpenAI-compat stream auth failed (model={}): {}", model, err_msg)
+        return StreamDelta(
+            is_final=True,
+            finish_reason="error",
+            error_type="AuthenticationError",
+        )
+    if isinstance(exc, openai.RateLimitError):
+        logger.warning("OpenAI-compat stream rate limited (model={}): {}", model, err_msg)
+        return StreamDelta(
+            is_final=True,
+            finish_reason="error",
+            error_type="RateLimitError",
+        )
+
+    logger.warning("OpenAI-compat stream failed (model={}): {}", model, err_msg)
+    return StreamDelta(
+        content=f"Error: {err_msg}",
+        is_final=True,
+        finish_reason="error",
+        error_type=type(exc).__name__,
+    )
+
+
 class OpenAICompatProvider(LLMProvider):
     """Direct OpenAI-compatible provider for custom endpoints.
 
@@ -260,38 +311,8 @@ class OpenAICompatProvider(LLMProvider):
         try:
             response = await self._client.chat.completions.create(**kwargs)
             return self._parse_response(response)
-        except openai.AuthenticationError as e:
-            err_msg = short_error_message(e)
-            logger.error(
-                "OpenAI-compat authentication failed (model={}): {}",
-                resolved_model,
-                err_msg,
-            )
-            return LLMResponse(
-                content=f"Error (authentication failed): {err_msg}",
-                finish_reason="error",
-                error_type="AuthenticationError",
-            )
-        except openai.RateLimitError as e:
-            err_msg = short_error_message(e)
-            logger.warning(
-                "OpenAI-compat rate limited (model={}): {}",
-                resolved_model,
-                err_msg,
-            )
-            return LLMResponse(
-                content=f"Error (rate limited): {err_msg}",
-                finish_reason="error",
-                error_type="RateLimitError",
-            )
         except Exception as e:
-            err_msg = short_error_message(e)
-            logger.warning("OpenAI-compat call failed (model={}): {}", resolved_model, err_msg)
-            return LLMResponse(
-                content=f"Error calling LLM: {err_msg}",
-                finish_reason="error",
-                error_type=type(e).__name__,
-            )
+            return _chat_error_response(e, resolved_model)
 
     # ------------------------------------------------------------------
     # Public: chat_stream (streaming)
@@ -413,45 +434,8 @@ class OpenAICompatProvider(LLMProvider):
                 usage=final_usage,
             )
 
-        except openai.AuthenticationError as e:
-            err_msg = short_error_message(e)
-            logger.error(
-                "OpenAI-compat stream auth failed (model={}): {}",
-                resolved_model,
-                err_msg,
-            )
-            yield StreamDelta(
-                is_final=True,
-                finish_reason="error",
-                error_type="AuthenticationError",
-            )
-
-        except openai.RateLimitError as e:
-            err_msg = short_error_message(e)
-            logger.warning(
-                "OpenAI-compat stream rate limited (model={}): {}",
-                resolved_model,
-                err_msg,
-            )
-            yield StreamDelta(
-                is_final=True,
-                finish_reason="error",
-                error_type="RateLimitError",
-            )
-
         except Exception as e:
-            err_msg = short_error_message(e)
-            logger.warning(
-                "OpenAI-compat stream failed (model={}): {}",
-                resolved_model,
-                err_msg,
-            )
-            yield StreamDelta(
-                content=f"Error: {err_msg}",
-                is_final=True,
-                finish_reason="error",
-                error_type=type(e).__name__,
-            )
+            yield _stream_error_delta(e, resolved_model)
 
     # ------------------------------------------------------------------
     # Default model

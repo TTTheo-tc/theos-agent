@@ -630,6 +630,36 @@ class TestStreaming:
         assert len(deltas) == 1
         assert deltas[0].is_final is True
         assert deltas[0].error_type == "AuthenticationError"
+        assert deltas[0].content is None
+
+    @pytest.mark.asyncio
+    async def test_stream_rate_limit_error(self):
+        """RateLimitError during streaming yields error_type='RateLimitError'."""
+        import openai as openai_mod
+
+        provider = _make_provider()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_response.headers = {}
+        rate_err = openai_mod.RateLimitError(
+            message="rate limited",
+            response=mock_response,
+            body=None,
+        )
+        mock_create = AsyncMock(side_effect=rate_err)
+
+        with patch.object(provider._client.chat.completions, "create", mock_create):
+            deltas: list[StreamDelta] = []
+            async for delta in provider.chat_stream(
+                messages=[{"role": "user", "content": "hi"}],
+            ):
+                deltas.append(delta)
+
+        assert len(deltas) == 1
+        assert deltas[0].is_final is True
+        assert deltas[0].error_type == "RateLimitError"
+        assert deltas[0].content is None
 
     @pytest.mark.asyncio
     async def test_stream_kwargs_include_stream_options(self):
