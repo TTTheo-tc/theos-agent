@@ -248,3 +248,28 @@ class TestMemoryGetLineHints:
         entry = json.loads(journal.read_text().strip())
         assert "postgres" in output
         assert entry["path"] == "MEMORY.md:Decisions@1-1"
+
+    def test_kg_node_fields_are_merged_without_mutating_search_result(self):
+        from src.agent.tools.memory_search import _merge_kg_node_fields
+
+        result = {
+            "id": "task-1",
+            "object_type": "task",
+            "title": "Task",
+            "summary": "Summary",
+            "score": 1.0,
+        }
+        node = {
+            "id": "task-1",
+            "node_type": "task",
+            "content": "Full KG content",
+            "importance": 0.7,
+        }
+        original = dict(result)
+
+        merged = _merge_kg_node_fields(result, node)
+
+        assert merged["importance"] == 0.7
+        assert merged["node_type"] == "task"
+        assert merged["content"] == "Full KG content"
+        assert result == original

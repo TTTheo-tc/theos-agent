@@ -132,6 +132,14 @@ def _kg_recall_entries(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _merge_kg_node_fields(result: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(result)
+    merged["importance"] = node.get("importance", 0)
+    merged["node_type"] = node.get("node_type", "")
+    merged["content"] = node.get("content", "")
+    return merged
+
+
 class MemorySearchTool(ContextAwareTool):
     """Search long-term memory, conversation history, and knowledge graph."""
 
@@ -287,10 +295,7 @@ class MemorySearchTool(ContextAwareTool):
                             for r in kg_results:
                                 node = await store._kg.get_node(r.get("id", ""))
                                 if node and node.get("importance", 0) >= min_importance:
-                                    r["importance"] = node.get("importance", 0)
-                                    r["node_type"] = node.get("node_type", "")
-                                    r["content"] = node.get("content", "")
-                                    filtered.append(r)
+                                    filtered.append(_merge_kg_node_fields(r, node))
                             kg_results = filtered
 
                         # include_related: append related nodes for each result
