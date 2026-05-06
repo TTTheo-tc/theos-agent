@@ -6,7 +6,7 @@ Runs VACUUM to reclaim space.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from loguru import logger
@@ -20,7 +20,7 @@ async def gc_superseded_nodes(workspace: Path, max_age_days: int = 30) -> int:
     """
     from src.memory.structured import StructuredMemoryStore
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
 
     store = StructuredMemoryStore(workspace)
     try:
