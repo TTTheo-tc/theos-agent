@@ -155,6 +155,56 @@ class TestSchedulePreCompactionFlush:
         assert data["facts_merged"] == 1
 
     @pytest.mark.asyncio
+    async def test_success_syncs_memory_index(self, tmp_path):
+        handler = _make_handler(tmp_path)
+        index = MagicMock()
+        index.sync_all = AsyncMock()
+        handler.resolve_index_for_tools = MagicMock(return_value=index)
+
+        with patch(
+            "src.agent.loop_memory.extract_durable_facts", new_callable=AsyncMock
+        ) as mock_extract:
+            mock_extract.return_value = [{"section": "Decisions", "content": "We chose X"}]
+            with patch("src.agent.loop_memory.merge_extracted_facts", return_value=1):
+                await handler._schedule_pre_compaction_flush(
+                    session_key="test",
+                    persisted_history=[{"role": "user", "content": f"msg {i}"} for i in range(10)],
+                    compact_prefix_count=8,
+                    provider=AsyncMock(),
+                    model="test",
+                    workspace=tmp_path,
+                )
+
+        handler.resolve_index_for_tools.assert_called_once_with("test")
+        index.sync_all.assert_awaited_once_with(tmp_path / "memory")
+
+    @pytest.mark.asyncio
+    async def test_index_sync_failure_preserves_flush_event(self, tmp_path):
+        handler = _make_handler(tmp_path)
+        index = MagicMock()
+        index.sync_all = AsyncMock(side_effect=RuntimeError("fts down"))
+        handler.resolve_index_for_tools = MagicMock(return_value=index)
+
+        with patch(
+            "src.agent.loop_memory.extract_durable_facts", new_callable=AsyncMock
+        ) as mock_extract:
+            mock_extract.return_value = [{"section": "Decisions", "content": "We chose X"}]
+            with patch("src.agent.loop_memory.merge_extracted_facts", return_value=1):
+                await handler._schedule_pre_compaction_flush(
+                    session_key="test",
+                    persisted_history=[{"role": "user", "content": f"msg {i}"} for i in range(10)],
+                    compact_prefix_count=8,
+                    provider=AsyncMock(),
+                    model="test",
+                    workspace=tmp_path,
+                )
+
+        events_dir = tmp_path / "memory" / "instinct" / "events"
+        events = list(events_dir.glob("*-flush.json"))
+        assert len(events) == 1
+        index.sync_all.assert_awaited_once_with(tmp_path / "memory")
+
+    @pytest.mark.asyncio
     async def test_extract_failure_is_silent(self, tmp_path):
         handler = _make_handler(tmp_path)
 

@@ -41,6 +41,8 @@ _MICROCOMPACT_HEAD_CHARS = 500
 _MICROCOMPACT_TAIL_CHARS = 500
 _MICROCOMPACT_TRIGGER_RATIO = 0.6
 _MICROCOMPACT_KEEP_RECENT_USER_TURNS = 2
+_PRE_COMPACTION_MAX_GAP_MESSAGES = 50
+_PRE_COMPACTION_FLUSH_TIMEOUT_S = 30.0
 
 
 @dataclass(frozen=True)
@@ -965,11 +967,39 @@ class MemoryHandler:
         this, because _extract_cursor tracks absolute offsets into session.messages
         and cannot be mixed with the ephemeral in-loop messages list.
         """
-        if persisted_history is None:
+        gap_msgs = self._pre_compaction_flush_gap(
+            session_key=session_key,
+            persisted_history=persisted_history,
+            compact_prefix_count=compact_prefix_count,
+        )
+        if gap_msgs is None:
             return
+
+        try:
+            facts = await asyncio.wait_for(
+                extract_durable_facts(gap_msgs, provider, model),
+                timeout=_PRE_COMPACTION_FLUSH_TIMEOUT_S,
+            )
+            await self._merge_pre_compaction_facts(
+                facts=facts,
+                session_key=session_key,
+                workspace=workspace,
+            )
+        except Exception:
+            logger.opt(exception=True).debug("Pre-compaction flush failed (best-effort)")
+
+    def _pre_compaction_flush_gap(
+        self,
+        *,
+        session_key: str,
+        persisted_history: list[dict] | None,
+        compact_prefix_count: int,
+    ) -> list[dict] | None:
+        if persisted_history is None:
+            return None
         cfg_flush = self._memory_config.flush
         if not cfg_flush.enabled:
-            return
+            return None
 
         cursor = max(self._extract_cursor.get(session_key, 0), 0)
         gap_msgs = _pre_compaction_gap(
@@ -978,37 +1008,45 @@ class MemoryHandler:
             compact_prefix_count=compact_prefix_count,
         )
         if gap_msgs is None:
-            return
-        if len(gap_msgs) > 50:
+            return None
+        if len(gap_msgs) > _PRE_COMPACTION_MAX_GAP_MESSAGES:
             logger.warning(
                 "Pre-flush gap too large ({}), skipping to avoid stale extraction",
                 len(gap_msgs),
             )
+            return None
+        return gap_msgs
+
+    async def _merge_pre_compaction_facts(
+        self,
+        *,
+        facts: list[dict],
+        session_key: str,
+        workspace: Path,
+    ) -> None:
+        if not facts:
             return
 
-        try:
-            facts = await asyncio.wait_for(
-                extract_durable_facts(gap_msgs, provider, model),
-                timeout=30.0,
-            )
-            if facts:
-                from src.memory.store import MemoryStore
+        from src.memory.store import MemoryStore
 
-                merged = merge_extracted_facts(MemoryStore(workspace), facts)
-                if merged > 0:
-                    self._write_flush_event(workspace, session_key, merged)
-                    logger.info("Pre-compaction flush: {} facts merged", merged)
-                    # Best-effort FTS sync so flushed facts are searchable immediately
-                    index = self.resolve_index_for_tools(session_key)
-                    if index is not None:
-                        try:
-                            await index.sync_all(workspace / "memory")
-                        except Exception:
-                            logger.opt(exception=True).debug(
-                                "FTS sync after pre-compaction flush failed (best-effort)"
-                            )
+        merged = merge_extracted_facts(MemoryStore(workspace), facts)
+        if merged <= 0:
+            return
+
+        self._write_flush_event(workspace, session_key, merged)
+        logger.info("Pre-compaction flush: {} facts merged", merged)
+        await self._sync_pre_compaction_index(session_key=session_key, workspace=workspace)
+
+    async def _sync_pre_compaction_index(self, *, session_key: str, workspace: Path) -> None:
+        """Best-effort FTS sync so flushed facts are searchable immediately."""
+        try:
+            index = self.resolve_index_for_tools(session_key)
+            if index is not None:
+                await index.sync_all(workspace / "memory")
         except Exception:
-            logger.opt(exception=True).debug("Pre-compaction flush failed (best-effort)")
+            logger.opt(exception=True).debug(
+                "FTS sync after pre-compaction flush failed (best-effort)"
+            )
 
     @staticmethod
     def _write_flush_event(workspace: Path, session_key: str, facts_merged: int) -> None:
