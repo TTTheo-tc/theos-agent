@@ -92,7 +92,7 @@ class DashboardWriter:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
         self._conn: aiosqlite.Connection | None = None
-        self._event_callback: Callable[[dict], Awaitable[None]] | None = None
+        self._event_callback: Callable[[dict[str, Any]], Awaitable[None]] | None = None
 
     async def connect(self) -> None:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,7 +108,10 @@ class DashboardWriter:
             await self._conn.close()
             self._conn = None
 
-    def set_event_callback(self, callback: Callable[[dict], Awaitable[None]] | None) -> None:
+    def set_event_callback(
+        self,
+        callback: Callable[[dict[str, Any]], Awaitable[None]] | None,
+    ) -> None:
         """Set an optional async callback invoked after each event INSERT."""
         self._event_callback = callback
 
