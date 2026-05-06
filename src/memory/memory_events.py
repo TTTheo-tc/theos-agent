@@ -32,7 +32,7 @@ def append_memory_event(
             "timestamp": datetime.now().isoformat(),
             "payload": payload or {},
         }
-        with open(path, "a") as f:
+        with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
     except Exception:
         logger.opt(exception=True).debug("Failed to append memory event")
