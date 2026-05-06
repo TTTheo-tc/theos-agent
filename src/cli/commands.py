@@ -71,11 +71,14 @@ def agent(
     logs: bool = typer.Option(
         False, "--logs/--no-logs", help="Show theos runtime logs during chat"
     ),
+    page: bool = typer.Option(
+        True, "--page/--no-page", help="Use alternate-screen page mode for interactive chat"
+    ),
 ):
     """Interact with the agent directly."""
     from src.cli.agent_cmd import agent as _agent
 
-    return _agent(message=message, session_id=session_id, markdown=markdown, logs=logs)
+    return _agent(message=message, session_id=session_id, markdown=markdown, logs=logs, page=page)
 
 
 @app.command()

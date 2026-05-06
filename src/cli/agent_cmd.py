@@ -5,22 +5,26 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import threading
 
 import typer
 
 from src.cli.display import (
     _ANSI_RE,
     console,
+    format_agent_toolbar,
     print_agent_banner,
     print_agent_response,
     print_token_usage,
 )
 from src.cli.repl import (
+    enter_terminal_page,
     flush_pending_tty_input,
     init_prompt_session,
     is_exit_command,
     read_interactive_input,
     restore_terminal,
+    wait_for_escape_key,
 )
 from src.utils.helpers import sync_workspace_templates
 from src.utils.usage import merge_usage
@@ -40,6 +44,9 @@ def agent(
     ),
     logs: bool = typer.Option(
         False, "--logs/--no-logs", help="Show theos runtime logs during chat"
+    ),
+    page: bool = typer.Option(
+        True, "--page/--no-page", help="Use alternate-screen page mode for interactive chat"
     ),
 ):
     """Interact with the agent directly."""
@@ -128,6 +135,7 @@ def agent(
         from src.bus.events import InboundMessage
 
         init_prompt_session()
+        page_active = enter_terminal_page() if page else False
 
         # Startup diagnostics banner
         diag = agent_loop.get_diagnostics()
@@ -158,6 +166,7 @@ def agent(
             logs=logs,
             tool_names=diag["tool_names"],
             details=details,
+            page=page_active,
         )
         console.print()
 
@@ -194,6 +203,29 @@ def agent(
                 usage = turn_usage[-1]
                 merge_usage(session_usage, usage)
                 print_token_usage(usage, session_usage=session_usage)
+
+            async def _wait_for_turn_or_escape() -> bool:
+                stop_escape_watch = threading.Event()
+                turn_wait = asyncio.create_task(turn_done.wait())
+                escape_wait = asyncio.create_task(wait_for_escape_key(stop_escape_watch))
+                try:
+                    while True:
+                        done, _pending = await asyncio.wait(
+                            {turn_wait, escape_wait}, return_when=asyncio.FIRST_COMPLETED
+                        )
+                        if turn_wait in done:
+                            return False
+                        if escape_wait in done:
+                            if escape_wait.result():
+                                return True
+                            await turn_wait
+                            return False
+                finally:
+                    stop_escape_watch.set()
+                    if not turn_wait.done():
+                        turn_wait.cancel()
+                    if not escape_wait.done():
+                        await asyncio.gather(escape_wait, return_exceptions=True)
 
             async def _consume_outbound():
                 nonlocal turn_streamed
@@ -308,7 +340,18 @@ def agent(
                     try:
                         await wizard_active.wait()  # block here while wizard is running
                         flush_pending_tty_input()
-                        user_input = await read_interactive_input()
+                        user_input = await read_interactive_input(
+                            bottom_toolbar=(
+                                format_agent_toolbar(
+                                    model=config.agents.defaults.model,
+                                    mode=f"{mode_str} mode",
+                                    tools=tool_count,
+                                    session_usage=session_usage,
+                                )
+                                if page_active
+                                else None
+                            )
+                        )
                         command = user_input.strip()
                         if not command:
                             continue
@@ -334,12 +377,28 @@ def agent(
                         )
 
                         with _thinking_ctx():
-                            await turn_done.wait()
+                            escaped = await _wait_for_turn_or_escape()
+
+                        if escaped and not turn_done.is_set():
+                            console.print("\n[dim]Esc pressed · stopping current task...[/dim]")
+                            await bus.publish_inbound(
+                                InboundMessage(
+                                    channel=cli_channel,
+                                    sender_id="user",
+                                    chat_id=cli_chat_id,
+                                    content="/stop",
+                                    sender_is_owner=True,
+                                )
+                            )
+                            with _thinking_ctx():
+                                await turn_done.wait()
 
                         if turn_streamed:
                             # Streaming already printed the content inline;
                             # just add a newline to end the stream block.
                             console.print()
+                            if escaped and turn_response:
+                                console.print(f"[dim]{turn_response[0]}[/dim]")
                             _print_turn_usage()
                         elif turn_response:
                             print_agent_response(turn_response[0], render_markdown=markdown)

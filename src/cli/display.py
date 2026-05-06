@@ -170,9 +170,30 @@ def print_agent_banner(
     logs: bool = False,
     tool_names: Sequence[str] | None = None,
     details: Sequence[str] | None = None,
+    page: bool = False,
 ) -> None:
     """Render the interactive agent header."""
     model_short = model.split("/")[-1] if "/" in model else model
+    if page:
+        console.rule(f"[bold {THEOS_ACCENT}]TheOS Agent[/]", style=THEOS_ACCENT)
+        console.print(
+            f"[bold {THEOS_ACCENT}]{model_short}[/] "
+            f"[dim]│ {mode} │ {tools} tools │ {_short_path(workspace)}[/]"
+        )
+        console.print(
+            f"[dim {THEOS_MUTED}]session {session_id} │ /help │ /model │ /agent │ Ctrl+C quit[/]"
+        )
+        if details:
+            for detail in details:
+                console.print(f"[dim {THEOS_MUTED}]  {detail}[/]")
+        if logs and tool_names:
+            tool_line = ", ".join(tool_names)
+            if len(tool_line) > 96:
+                tool_line = f"{tool_line[:93]}..."
+            console.print(f"[dim {THEOS_MUTED}]  tools: {tool_line}[/]")
+        console.rule(style=THEOS_MUTED)
+        return
+
     summary = (
         f"[bold {THEOS_ACCENT}]TheOS[/] "
         f"[dim]{model_short} · {mode} · {tools} tools · {_short_path(workspace)}[/]"
@@ -190,6 +211,23 @@ def print_agent_banner(
         if len(tool_line) > 96:
             tool_line = f"{tool_line[:93]}..."
         console.print(f"[dim {THEOS_MUTED}]  tools: {tool_line}[/]")
+
+
+def format_agent_toolbar(
+    *,
+    model: str,
+    mode: str,
+    tools: int,
+    session_usage: dict | None = None,
+) -> str:
+    """Return a compact bottom toolbar for the interactive agent page."""
+    model_short = model.split("/")[-1] if "/" in model else model
+    session_total = _usage_counts(session_usage)[2]
+    usage_label = f"{_format_token_count(session_total)} tok" if session_total > 0 else "ready"
+    return (
+        f"TheOS {model_short} │ {mode} │ {tools} tools │ {usage_label} "
+        "│ Esc stop │ /help /model /agent"
+    )
 
 
 def print_status_header(version: str) -> None:

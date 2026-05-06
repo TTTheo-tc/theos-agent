@@ -1,4 +1,20 @@
-from src.cli.display import format_token_usage_line
+from src.cli.display import format_agent_toolbar, format_token_usage_line
+
+
+def test_format_agent_toolbar_includes_session_usage():
+    toolbar = format_agent_toolbar(
+        model="openai-codex/gpt-5.5",
+        mode="single mode",
+        tools=61,
+        session_usage={"prompt_tokens": 2000, "completion_tokens": 500, "total_tokens": 2500},
+    )
+
+    assert "TheOS gpt-5.5" in toolbar
+    assert "single mode" in toolbar
+    assert "61 tools" in toolbar
+    assert "2.5k tok" in toolbar
+    assert "Esc stop" in toolbar
+    assert "/help" in toolbar
 
 
 def test_format_token_usage_line_includes_turn_and_session_totals():
