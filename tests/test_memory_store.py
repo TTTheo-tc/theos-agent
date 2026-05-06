@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from src.memory.store import MemoryStore
 
 
@@ -235,3 +237,58 @@ def test_gc_max_sections_preserves_pinned_sections(tmp_path: Path) -> None:
     assert removed == 1
     assert "## Pinned Manual Note" in text
     assert ("## Recent One" in text) ^ ("## Recent Two" in text)
+
+
+def test_memory_index_reuses_memory_store_section_parsing() -> None:
+    from src.memory.index import MemoryIndex
+
+    sections = MemoryIndex._split_sections(
+        """# Long-term Memory
+
+## Decisions
+<!-- updated: 2026-04-14 -->
+- use postgres
+
+## Notes
+- untimestamped
+"""
+    )
+
+    assert sections == [
+        ("_preamble", "# Long-term Memory", ""),
+        ("Decisions", "<!-- updated: 2026-04-14 -->\n- use postgres", "2026-04-14"),
+        ("Notes", "- untimestamped", ""),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_memory_index_sync_search_and_get_section_roundtrip(tmp_path: Path) -> None:
+    from src.memory.index import MemoryIndex
+    from src.store.database import Database
+
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    (memory_dir / "MEMORY.md").write_text(
+        """# Long-term Memory
+
+## Decisions
+<!-- updated: 2026-04-14 -->
+- use postgres for primary data
+""",
+        encoding="utf-8",
+    )
+    db = Database(tmp_path / "test.db")
+    await db.connect()
+    index = MemoryIndex(db)
+    await index.ensure_table()
+
+    try:
+        assert await index.sync_memory(memory_dir / "MEMORY.md") == 2
+        results = await index.search("postgres primary", max_results=5)
+        section = await index.get_section("Decisions")
+    finally:
+        await db.close()
+
+    assert any(result["section"] == "Decisions" for result in results)
+    assert section is not None
+    assert "postgres" in section

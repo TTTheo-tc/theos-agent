@@ -12,6 +12,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.memory.store import MemoryStore
 from src.store.database import Database
 
 _FTS_SCHEMA = """
@@ -162,23 +163,11 @@ class MemoryIndex:
     def _split_sections(text: str) -> list[tuple[str, str, str]]:
         """Split MEMORY.md by ## headings. Returns [(title, body, timestamp)]."""
         sections: list[tuple[str, str, str]] = []
-        parts = re.split(r"^(## .+)$", text, flags=re.MULTILINE)
-
-        # parts = [preamble, "## Title1", body1, "## Title2", body2, ...]
-        i = 1
-        while i < len(parts) - 1:
-            title = parts[i].lstrip("# ").strip()
-            body = parts[i + 1]
+        for title, body in MemoryStore.split_sections(text):
             # Extract timestamp from <!-- updated: YYYY-MM-DD --> comment
             ts_match = re.search(r"<!-- updated: ([\d-]+) -->", body)
             ts = ts_match.group(1) if ts_match else ""
             sections.append((title, body.strip(), ts))
-            i += 2
-
-        # Handle preamble (text before first ##) if any
-        if parts and parts[0].strip():
-            sections.insert(0, ("_preamble", parts[0].strip(), ""))
-
         return sections
 
     @staticmethod
