@@ -42,7 +42,7 @@ def mmr_rerank(
 
     ``lambda_=1.0`` is pure relevance, ``lambda_=0.0`` is pure diversity.
     """
-    if not results:
+    if not results or k <= 0:
         return []
     if len(results) <= 1:
         return list(results[:k])

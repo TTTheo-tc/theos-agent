@@ -46,6 +46,17 @@ class TestMMR:
 
         assert mmr_rerank([], k=3) == []
 
+    def test_mmr_handles_non_positive_k(self):
+        from src.memory.mmr import mmr_rerank
+
+        results = [
+            {"id": "a", "content": "x", "final_score": 0.5},
+            {"id": "b", "content": "y", "final_score": 0.4},
+        ]
+
+        assert mmr_rerank(results, k=0) == []
+        assert mmr_rerank(results, k=-1) == []
+
     def test_mmr_handles_single(self):
         from src.memory.mmr import mmr_rerank
 
