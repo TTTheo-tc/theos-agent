@@ -115,19 +115,7 @@ def _build_restoration_context(
     whose mtime has changed since the original read (file was modified
     externally).
     """
-    from src.agent.tools.fs_read import ReadFileTool
-
-    session_reads = ReadFileTool.get_recent_reads(session_key)
-    if not session_reads:
-        return None
-
-    # Filter to workspace scope when available (defense in depth).
-    ws_prefix = str(workspace) + "/" if workspace else None
-    scoped_entries = [
-        (path_str, state)
-        for path_str, state in session_reads.items()
-        if ws_prefix is None or path_str.startswith(ws_prefix)
-    ]
+    scoped_entries = _scoped_recent_reads(session_key=session_key, workspace=workspace)
     if not scoped_entries:
         return None
 
@@ -135,30 +123,10 @@ def _build_restoration_context(
     # Sort by mtime descending (most recently read first).
     scoped_entries.sort(key=lambda kv: kv[1][0], reverse=True)
 
-    for path_str, (read_mtime, offset, limit) in scoped_entries[:max_files]:
-        try:
-            p = Path(path_str)
-            if not p.is_file():
-                continue
-            # Skip if file was modified since the read (stale).
-            if read_mtime and abs(p.stat().st_mtime - read_mtime) > 0.01:
-                continue
-            raw = p.read_text(encoding="utf-8", errors="replace")
-            lines = raw.splitlines(keepends=True)
-            # Honor original offset/limit to restore what the model saw.
-            start = (offset or 1) - 1  # 1-based → 0-based
-            end = start + limit if limit else len(lines)
-            content = "".join(lines[start:end])
-            if len(content) > max_chars_per_file:
-                half = max_chars_per_file // 2
-                content = (
-                    content[:half]
-                    + f"\n\n... [truncated {len(content) - max_chars_per_file} chars] ...\n\n"
-                    + content[-half:]
-                )
-            parts.append(f"### {p.name}\n```\n{content}\n```")
-        except Exception:
-            continue
+    for path_str, state in scoped_entries[:max_files]:
+        block = _restored_file_block(path_str, state, max_chars_per_file=max_chars_per_file)
+        if block:
+            parts.append(block)
 
     if not parts:
         return None
@@ -170,6 +138,65 @@ def _build_restoration_context(
         + "\n[Recently read files — restored after compaction]\n\n"
         + "\n\n".join(parts)
     )
+
+
+def _scoped_recent_reads(
+    *,
+    session_key: str | None,
+    workspace: Path | None,
+) -> list[tuple[str, tuple[float, int | None, int | None]]]:
+    from src.agent.tools.fs_read import ReadFileTool
+
+    session_reads = ReadFileTool.get_recent_reads(session_key)
+    if not session_reads:
+        return []
+
+    ws_prefix = str(workspace) + "/" if workspace else None
+    return [
+        (path_str, state)
+        for path_str, state in session_reads.items()
+        if ws_prefix is None or path_str.startswith(ws_prefix)
+    ]
+
+
+def _restored_file_block(
+    path_str: str,
+    state: tuple[float, int | None, int | None],
+    *,
+    max_chars_per_file: int,
+) -> str | None:
+    try:
+        p = Path(path_str)
+        if not p.is_file():
+            return None
+        read_mtime, offset, limit = state
+        if _read_is_stale(p, read_mtime):
+            return None
+        content = _restore_read_slice(p, offset=offset, limit=limit)
+        content = _truncate_restored_content(content, max_chars_per_file)
+        return f"### {p.name}\n```\n{content}\n```"
+    except Exception:
+        return None
+
+
+def _read_is_stale(path: Path, read_mtime: float) -> bool:
+    return bool(read_mtime and abs(path.stat().st_mtime - read_mtime) > 0.01)
+
+
+def _restore_read_slice(path: Path, *, offset: int | None, limit: int | None) -> str:
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    lines = raw.splitlines(keepends=True)
+    start = (offset or 1) - 1  # read_file offsets are 1-based.
+    end = start + limit if limit else len(lines)
+    return "".join(lines[start:end])
+
+
+def _truncate_restored_content(content: str, max_chars: int) -> str:
+    if len(content) <= max_chars:
+        return content
+    half = max_chars // 2
+    trimmed = len(content) - max_chars
+    return f"{content[:half]}\n\n... [truncated {trimmed} chars] ...\n\n{content[-half:]}"
 
 
 def _find_microcompact_preserve_start(
