@@ -55,6 +55,28 @@ def test_cleanup_structured_rules_quarantines_failed_source_noise(tmp_path: Path
     assert (base / "rules" / "rule-good.json").exists()
 
 
+def test_cleanup_structured_rules_handles_numeric_source_task_ids(tmp_path: Path) -> None:
+    base = tmp_path / "memory" / "structured"
+    _write_json(
+        base / "tasks" / "task-1.json",
+        {"id": 1, "status": "failed"},
+    )
+    _write_json(
+        base / "rules" / "rule-bad.json",
+        {
+            "id": "rule-bad",
+            "rule_text": "以后验证结构时，逐层 feishu_list 展开确认。",
+            "source_task_ids": [1, None, ""],
+        },
+    )
+
+    report = cleanup_structured_rules(tmp_path)
+
+    assert report.scanned == 1
+    assert report.quarantined == 1
+    assert (base / "rules_quarantine" / "rule-bad.json").exists()
+
+
 def test_cleanup_structured_rules_quarantines_context_specific_text(tmp_path: Path) -> None:
     base = tmp_path / "memory" / "structured"
     _write_json(

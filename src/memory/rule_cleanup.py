@@ -146,9 +146,8 @@ def _load_task_statuses(tasks_dir: Path) -> dict[str, str]:
     if not tasks_dir.exists():
         return statuses
     for task_path in tasks_dir.glob("*.json"):
-        try:
-            payload = json.loads(task_path.read_text(encoding="utf-8"))
-        except Exception:
+        payload = _load_json_object(task_path)
+        if payload is None:
             continue
         task_id = str(payload.get("id") or "").strip()
         if task_id:
@@ -157,9 +156,8 @@ def _load_task_statuses(tasks_dir: Path) -> dict[str, str]:
 
 
 def _dirty_rule_reason(rule_path: Path, task_statuses: dict[str, str]) -> str | None:
-    try:
-        payload = json.loads(rule_path.read_text(encoding="utf-8"))
-    except Exception:
+    payload = _load_json_object(rule_path)
+    if payload is None:
         return "invalid-json"
 
     rule_text = payload.get("rule_text")
@@ -174,10 +172,31 @@ def _dirty_rule_reason(rule_path: Path, task_statuses: dict[str, str]) -> str | 
     if "|------|" in rule_text and "http" in rule_text:
         return "table-blob"
 
-    source_task_ids = [str(item).strip() for item in payload.get("source_task_ids", []) if item]
+    source_task_ids = _string_list(payload.get("source_task_ids", []))
     if source_task_ids:
         statuses = [task_statuses.get(task_id) for task_id in source_task_ids]
         if statuses and all(status and status != "success" for status in statuses):
             return "failed-source-task"
 
     return None
+
+
+def _load_json_object(path: Path) -> dict | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        if item is None:
+            continue
+        text = str(item).strip()
+        if text:
+            items.append(text)
+    return items
