@@ -71,9 +71,7 @@ def _checkpoint_offset(path: Path, targets: dict[str, dict[str, Any]]) -> tuple[
     if "byte_offset" not in checkpoint:
         return 0, False
     offset = checkpoint["byte_offset"]
-    if isinstance(offset, bool) or not isinstance(offset, int):
-        return 0, False
-    if offset < 0:
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
         return 0, False
     return offset, True
 
