@@ -31,7 +31,7 @@ INSTINCT_DIR = REPO_ROOT / "instinct"
 EVOLVE_SCRIPT = REPO_ROOT / "instinct" / "scripts" / "evolve.js"
 
 
-def _workspace(loop: "AgentLoop") -> Path:
+def _workspace(loop: AgentLoop) -> Path:
     return getattr(loop, "workspace", Path.home() / ".theos" / "workspace")
 
 
@@ -73,7 +73,7 @@ def _sync_index_reviewed(workspace: Path, session_id: str) -> None:
         logger.opt(exception=True).warning("Failed to sync DREAM_INDEX.jsonl for {}", session_id)
 
 
-async def handle_instinct_command(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage | None:
+async def handle_instinct_command(loop: AgentLoop, msg: InboundMessage) -> OutboundMessage | None:
     """Dispatch /instinct subcommands."""
     if getattr(loop, "learning_enabled", True) is False:
         return OutboundMessage(
@@ -88,15 +88,15 @@ async def handle_instinct_command(loop: "AgentLoop", msg: InboundMessage) -> Out
     if sub == "status":
         return _handle_status(loop, msg)
     elif sub == "evolve-run":
-        return _handle_evolve_run(loop, msg, dry_run=False)
+        return _handle_evolve_run(msg, dry_run=False)
     elif sub == "evolve-preview":
-        return _handle_evolve_run(loop, msg, dry_run=True)
+        return _handle_evolve_run(msg, dry_run=True)
     elif sub == "dream-run":
         return await _handle_dream_run(loop, msg)
     elif sub == "dream-review":
         return _handle_dream_review(loop, msg, parts)
     elif sub == "dream-apply":
-        return _handle_dream_apply(loop, msg, parts)
+        return _handle_dream_apply(loop, msg)
     else:
         return OutboundMessage(
             channel=msg.channel,
@@ -120,7 +120,7 @@ def _usage_text() -> str:
 # ── status ──────────────────────────────────────────────────────────
 
 
-def _handle_status(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage:
+def _handle_status(loop: AgentLoop, msg: InboundMessage) -> OutboundMessage:
     ws = _workspace(loop)
     instinct_dir = ws / "memory" / "instinct"
     rules_dir = instinct_dir / "rules"
@@ -186,7 +186,7 @@ def _handle_status(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage:
 # ── evolve ──────────────────────────────────────────────────────────
 
 
-def _handle_evolve_run(loop: "AgentLoop", msg: InboundMessage, *, dry_run: bool) -> OutboundMessage:
+def _handle_evolve_run(msg: InboundMessage, *, dry_run: bool) -> OutboundMessage:
     if not EVOLVE_SCRIPT.exists():
         return OutboundMessage(
             channel=msg.channel,
@@ -223,7 +223,7 @@ def _handle_evolve_run(loop: "AgentLoop", msg: InboundMessage, *, dry_run: bool)
 # ── dream-run ───────────────────────────────────────────────────────
 
 
-async def _handle_dream_run(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage:
+async def _handle_dream_run(loop: AgentLoop, msg: InboundMessage) -> OutboundMessage:
     if not INSTINCT_DIR.exists():
         return OutboundMessage(
             channel=msg.channel,
@@ -276,7 +276,7 @@ async def _handle_dream_run(loop: "AgentLoop", msg: InboundMessage) -> OutboundM
 
 
 def _handle_dream_review(
-    loop: "AgentLoop", msg: InboundMessage, parts: list[str]
+    loop: AgentLoop, msg: InboundMessage, parts: list[str]
 ) -> OutboundMessage:
     ws = _workspace(loop)
     dreams_dir = ws / "memory" / "instinct" / "dreams"
@@ -344,9 +344,7 @@ def _handle_dream_review(
 # ── dream-apply ─────────────────────────────────────────────────────
 
 
-def _handle_dream_apply(
-    loop: "AgentLoop", msg: InboundMessage, parts: list[str]
-) -> OutboundMessage:
+def _handle_dream_apply(loop: AgentLoop, msg: InboundMessage) -> OutboundMessage:
     # Re-split with enough maxsplit for session-id and artifact
     full_parts = msg.content.strip().split(maxsplit=3)
     if len(full_parts) < 4:

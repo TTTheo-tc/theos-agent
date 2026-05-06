@@ -136,7 +136,7 @@ def format_help_message(*, learning_enabled: bool) -> str:
     )
 
 
-def format_model_status(loop: "AgentLoop") -> str:
+def format_model_status(loop: AgentLoop) -> str:
     """Return the user-facing ``/model`` status text."""
     lines = [
         "## Model",
@@ -172,7 +172,7 @@ def is_model_alias(name: str) -> bool:
     return name.lower() in MODEL_ALIASES
 
 
-def _team_enabled(loop: "AgentLoop", config: "Config") -> bool:
+def _team_enabled(loop: AgentLoop, config: Config) -> bool:
     return bool(
         getattr(loop, "team_enabled", False)
         or config.agents.team_enabled
@@ -180,7 +180,7 @@ def _team_enabled(loop: "AgentLoop", config: "Config") -> bool:
     )
 
 
-def _genver_enabled(loop: "AgentLoop", config: "Config") -> bool:
+def _genver_enabled(loop: AgentLoop, config: Config) -> bool:
     return bool(
         getattr(loop, "genver_enabled", False)
         or config.agents.genver_enabled
@@ -193,12 +193,12 @@ def _role_lines(roles: dict[str, Any]) -> list[str]:
 
 
 def _switch_agent_mode(
-    loop: "AgentLoop",
-    config: "Config",
+    loop: AgentLoop,
+    config: Config,
     *,
     mode: str,
     root_agent_mode: str,
-    genver_config: "GenVerConfig | None" = None,
+    genver_config: GenVerConfig | None = None,
     team_enabled: bool | None = None,
     genver_enabled: bool | None = None,
 ) -> None:
@@ -216,7 +216,7 @@ def _switch_agent_mode(
     loop.rebuild_tools()
 
 
-async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage | None:
+async def handle_agent_command(loop: AgentLoop, msg: InboundMessage) -> OutboundMessage | None:
     """Handle ``/agent [single|team|genver]`` slash command for hot mode switching."""
     parts = msg.content.strip().split()
     subcommand = parts[1].lower() if len(parts) > 1 else ""
@@ -352,7 +352,7 @@ async def handle_agent_command(loop: "AgentLoop", msg: InboundMessage) -> Outbou
     )
 
 
-def _genver_status_message(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage:
+def _genver_status_message(loop: AgentLoop, msg: InboundMessage) -> OutboundMessage:
     """Build a status message showing current genver configuration."""
     gv = loop.genver_config
     return OutboundMessage(
@@ -369,7 +369,7 @@ def _genver_status_message(loop: "AgentLoop", msg: InboundMessage) -> OutboundMe
     )
 
 
-def apply_genver_config(loop: "AgentLoop", genver_config: "GenVerConfig") -> None:
+def apply_genver_config(loop: AgentLoop, genver_config: GenVerConfig) -> None:
     """Apply a GenVerConfig and switch to genver mode."""
     loop.genver_enabled = True
     loop.genver_config = genver_config
@@ -377,7 +377,7 @@ def apply_genver_config(loop: "AgentLoop", genver_config: "GenVerConfig") -> Non
     loop.rebuild_tools()
 
 
-async def handle_ui_command(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage | None:
+async def handle_ui_command(loop: AgentLoop, msg: InboundMessage) -> OutboundMessage | None:
     """Handle ``/ui`` — return dashboard URL."""
     ui_cfg = loop.config.gateway.ui
     if not ui_cfg.enabled:
@@ -397,7 +397,7 @@ async def handle_ui_command(loop: "AgentLoop", msg: InboundMessage) -> OutboundM
     )
 
 
-async def handle_model_command(loop: "AgentLoop", msg: InboundMessage) -> OutboundMessage:
+async def handle_model_command(loop: AgentLoop, msg: InboundMessage) -> OutboundMessage:
     """Handle ``/model [name]`` or ``/model <role> <name>`` for hot-switching models."""
     parts = msg.content.strip().split()
     # /model — show current
