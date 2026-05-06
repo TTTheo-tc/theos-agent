@@ -354,6 +354,12 @@ class TestToolSearchTool:
         assert "historical recall" in result
         assert "`memory_search` before answering" in result
 
+    def test_memory_recall_hint_ignores_non_memory_tools(self):
+        from src.agent.tools.tool_search import _memory_recall_hint
+
+        assert _memory_recall_hint(["pdf", "tts"]) == ""
+        assert "`memory_search` before answering" in _memory_recall_hint(["pdf", "memory_search"])
+
     @pytest.mark.asyncio
     async def test_select_already_active_tool_is_not_counted_as_activated(self):
         from src.agent.tools.tool_search import ToolSearchTool

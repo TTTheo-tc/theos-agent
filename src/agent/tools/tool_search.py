@@ -12,6 +12,17 @@ if TYPE_CHECKING:
 _MEMORY_SEARCH_TOOLS = {"memory_search", "structured_memory_search"}
 
 
+def _memory_recall_hint(tool_names: list[str]) -> str:
+    memory_tools = [name for name in tool_names if name in _MEMORY_SEARCH_TOOLS]
+    if not memory_tools:
+        return ""
+    search_phrase = " or ".join(f"`{name}`" for name in memory_tools)
+    return (
+        "\nFor historical recall questions not covered by injected memory, "
+        f"call {search_phrase} before answering."
+    )
+
+
 class ToolSearchTool(Tool):
     """Search the deferred tool pool and activate matched tools.
 
@@ -108,17 +119,9 @@ class ToolSearchTool(Tool):
         lines = [f"**Activated {len(activated)} new tool(s):**\n"]
         for item in activated:
             lines.append(f"- **{item['name']}**: {item['description']}")
-        memory_search_tools = [
-            name
-            for name in [*(item["name"] for item in activated), *already_active]
-            if name in _MEMORY_SEARCH_TOOLS
-        ]
-        if memory_search_tools:
-            search_phrase = " or ".join(f"`{name}`" for name in memory_search_tools)
-            lines.append(
-                "\nFor historical recall questions not covered by injected memory, "
-                f"call {search_phrase} before answering."
-            )
+        memory_hint = _memory_recall_hint([*(item["name"] for item in activated), *already_active])
+        if memory_hint:
+            lines.append(memory_hint)
         if already_active:
             lines.append(f"\nAlready active: {', '.join(already_active)}")
         if not_found:
