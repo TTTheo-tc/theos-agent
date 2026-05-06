@@ -38,7 +38,7 @@ def _format_item(item: Path) -> str:
 class ListDirTool(Tool):
     """List directory contents with optional ignore patterns."""
 
-    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
+    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None) -> None:
         self._workspace = workspace
         self._allowed_dir = allowed_dir
 

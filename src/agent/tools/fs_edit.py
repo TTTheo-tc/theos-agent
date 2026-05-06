@@ -91,7 +91,7 @@ class EditFileTool(ContextAwareTool):
         workspace: Path | None = None,
         allowed_dir: Path | None = None,
         neuro_symbolic_config: Any = None,
-    ):
+    ) -> None:
         self._workspace = workspace
         self._allowed_dir = allowed_dir
         self._ns_config = neuro_symbolic_config
@@ -224,7 +224,7 @@ class EditFileTool(ContextAwareTool):
 class MultiEditTool(ContextAwareTool):
     """Apply multiple edits to a file in one atomic call."""
 
-    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
+    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None) -> None:
         self._workspace = workspace
         self._allowed_dir = allowed_dir
 

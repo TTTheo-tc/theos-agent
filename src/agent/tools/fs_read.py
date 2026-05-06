@@ -142,7 +142,7 @@ class ReadFileTool(ContextAwareTool):
         workspace: Path | None = None,
         allowed_dir: Path | None = None,
         max_size_bytes: int = _DEFAULT_MAX_SIZE,
-    ):
+    ) -> None:
         self._workspace = workspace
         self._allowed_dir = allowed_dir
         self._max_size_bytes = max_size_bytes

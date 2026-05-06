@@ -120,7 +120,7 @@ def _resolve_head_limit(kwargs: dict[str, Any]) -> int:
 class GlobTool(Tool):
     """Find files matching a glob pattern."""
 
-    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
+    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None) -> None:
         self._workspace = workspace
         self._allowed_dir = allowed_dir
 
@@ -283,7 +283,7 @@ class _GrepOptions:
 class GrepTool(Tool):
     """Search file contents using ripgrep (with Python re fallback)."""
 
-    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
+    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None) -> None:
         self._workspace = workspace
         self._allowed_dir = allowed_dir
 

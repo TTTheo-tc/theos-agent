@@ -35,7 +35,7 @@ def _resolve_notebook_path(
 class NotebookReadTool(ContextAwareTool):
     """Read all cells from a Jupyter notebook (.ipynb)."""
 
-    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
+    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None) -> None:
         self._workspace = workspace
         self._allowed_dir = allowed_dir
 
@@ -66,9 +66,10 @@ class NotebookReadTool(ContextAwareTool):
     async def execute(
         self,
         notebook_path: str,
-        _context: "ToolContext | None" = None,
+        _context: ToolContext | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         session_key = _context.session_key if _context else None
         try:
             fp, error = _resolve_notebook_path(
@@ -128,7 +129,7 @@ class NotebookReadTool(ContextAwareTool):
 class NotebookEditTool(ContextAwareTool):
     """Edit a specific cell in a Jupyter notebook (.ipynb)."""
 
-    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
+    def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None) -> None:
         self._workspace = workspace
         self._allowed_dir = allowed_dir
 
@@ -182,9 +183,10 @@ class NotebookEditTool(ContextAwareTool):
         new_source: str = "",
         cell_type: str | None = None,
         edit_mode: str = "replace",
-        _context: "ToolContext | None" = None,
+        _context: ToolContext | None = None,
         **kwargs: Any,
     ) -> str:
+        del kwargs
         session_key = _context.session_key if _context else None
         try:
             fp, error = _resolve_notebook_path(
