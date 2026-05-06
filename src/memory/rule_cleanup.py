@@ -205,11 +205,9 @@ def _load_json_object(path: Path) -> dict | None:
 def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
-    items: list[str] = []
-    for item in value:
-        if item is None:
-            continue
-        text = str(item).strip()
-        if text:
-            items.append(text)
-    return items
+    return [
+        text
+        for item in value
+        if item is not None
+        if (text := str(item).strip())
+    ]
