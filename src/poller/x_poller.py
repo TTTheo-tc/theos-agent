@@ -139,8 +139,7 @@ class XPoller(BasePoller):
         for username in self.usernames:
             try:
                 new_tweets = await self._check_user(username)
-                for tweet in new_tweets:
-                    events.append(self._tweet_event(username, tweet))
+                events.extend(self._tweet_event(username, tweet) for tweet in new_tweets)
             except Exception:
                 logger.opt(exception=True).debug("XPoller: error checking @{}", username)
 
