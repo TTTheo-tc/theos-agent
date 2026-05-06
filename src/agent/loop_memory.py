@@ -95,7 +95,7 @@ def _find_safe_cut(
 def _cut_preserves_tool_pairs(
     messages: list[dict],
     cut: int,
-    history_end: int,
+    _history_end: int,
 ) -> bool:
     """Check that messages[cut:] has no orphaned tool_result messages.
 
@@ -348,7 +348,7 @@ class MemoryHandler:
     # -- narrow public APIs ---------------------------------------------------
 
     @property
-    def tiers(self) -> "MemoryTierManager":
+    def tiers(self) -> MemoryTierManager:
         """Access the underlying MemoryTierManager."""
         if self._memory_tiers is None:
             from src.memory.tiers import MemoryTierManager
@@ -362,7 +362,7 @@ class MemoryHandler:
         """Return whether the short-term tier pipeline is enabled."""
         return self._memory_tiers_enabled
 
-    def tiers_or_none(self) -> "MemoryTierManager | None":
+    def tiers_or_none(self) -> MemoryTierManager | None:
         """Return the tier manager only when full memory tiers are enabled."""
         if not self._memory_tiers_enabled:
             return None
@@ -501,7 +501,7 @@ class MemoryHandler:
         return workspace_override or self._scope.resolve_structured_workspace(session_key)
 
     @staticmethod
-    def _sync_structured_markdown(workspace: Path, result: "RecordTaskResult") -> None:
+    def _sync_structured_markdown(workspace: Path, result: RecordTaskResult) -> None:
         """Mirror selected structured-memory writes into markdown memory files."""
         if not result.remember_directive and not result.history_entry:
             return
@@ -662,7 +662,7 @@ class MemoryHandler:
 
     # -- index / scope resolution ---------------------------------------------
 
-    def resolve_index_for_tools(self, session_key: str | None) -> "MemoryIndex | None":
+    def resolve_index_for_tools(self, session_key: str | None) -> MemoryIndex | None:
         """Resolve memory index for tool execution context."""
         if self._scope.group_memory_enabled:
             if not session_key:
@@ -797,6 +797,8 @@ class MemoryHandler:
         Returns the (possibly modified) messages list.
         Preserves assistant(tool_calls)/tool message pairs to avoid orphan tool messages.
         """
+        del memory_window  # Retained for caller/API symmetry with consolidation paths.
+
         from src.memory.store import MemoryStore
         cfg = self._memory_config
         if not cfg or not cfg.compaction.enabled:
