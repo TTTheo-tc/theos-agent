@@ -30,6 +30,7 @@ from src.memory.scope import MemoryScopeResolver
 
 if TYPE_CHECKING:
     from src.memory.index import MemoryIndex
+    from src.memory.structured import RecordTaskResult
     from src.memory.tiers import MemoryTierManager
     from src.store.database import Database
 
@@ -457,7 +458,10 @@ class MemoryHandler:
 
         from src.memory.structured import StructuredMemoryStore
 
-        workspace = workspace_override or self._scope.resolve_structured_workspace(session_key)
+        workspace = self._structured_workspace(
+            session_key=session_key,
+            workspace_override=workspace_override,
+        )
         structured_store: StructuredMemoryStore | None = None
         try:
             structured_store = StructuredMemoryStore(workspace)
@@ -477,28 +481,9 @@ class MemoryHandler:
                 status=status,
             )
 
-            # Markdown sync — MemoryHandler owns this decision
-            from src.memory.store import MemoryStore
-
-            md_store: MemoryStore | None = None
-            if result.remember_directive:
-                md_store = MemoryStore(workspace)
-                md_store.remember(result.remember_directive)
-
-            if result.history_entry:
-                if md_store is None:
-                    md_store = MemoryStore(workspace)
-                md_store.append_history(result.history_entry)
-
-            index = self.resolve_index_for_tools(session_key)
-            default_workspace = self._scope.resolve_structured_workspace(session_key)
-            if index is not None and workspace == default_workspace:
-                await index.sync_all(workspace / "memory")
-
-            # One-shot import of Instinct stable rules queued for KG
-            if not self._kg_pending_imported:
-                self._kg_pending_imported = True
-                await self._import_kg_pending(workspace)
+            self._sync_structured_markdown(workspace, result)
+            await self._sync_structured_index(session_key=session_key, workspace=workspace)
+            await self._import_kg_pending_once(workspace)
         except Exception:
             logger.opt(exception=True).warning(
                 "Structured memory persistence failed for session {}", session_key
@@ -507,18 +492,59 @@ class MemoryHandler:
             if structured_store is not None:
                 await structured_store.close()
 
+    def _structured_workspace(
+        self,
+        *,
+        session_key: str,
+        workspace_override: Path | None,
+    ) -> Path:
+        return workspace_override or self._scope.resolve_structured_workspace(session_key)
+
+    @staticmethod
+    def _sync_structured_markdown(workspace: Path, result: "RecordTaskResult") -> None:
+        """Mirror selected structured-memory writes into markdown memory files."""
+        if not result.remember_directive and not result.history_entry:
+            return
+
+        from src.memory.store import MemoryStore
+
+        md_store = MemoryStore(workspace)
+        if result.remember_directive:
+            md_store.remember(result.remember_directive)
+        if result.history_entry:
+            md_store.append_history(result.history_entry)
+
+    async def _sync_structured_index(self, *, session_key: str, workspace: Path) -> None:
+        """Refresh markdown FTS only when structured writes target the active scope."""
+        index = self.resolve_index_for_tools(session_key)
+        if index is None:
+            return
+
+        default_workspace = self._scope.resolve_structured_workspace(session_key)
+        if workspace != default_workspace:
+            return
+
+        await index.sync_all(workspace / "memory")
+
+    async def _import_kg_pending_once(self, workspace: Path) -> None:
+        """Import Instinct KG promotions once per handler lifetime."""
+        if self._kg_pending_imported:
+            return
+        self._kg_pending_imported = True
+        await self._import_kg_pending(workspace)
+
     # -- Instinct-to-KG pending import ----------------------------------------
 
-    async def _import_kg_pending(self, workspace: Path) -> None:
+    async def _import_kg_pending(self, workspace: Path) -> int:
         """Import Instinct stable rules from kg_pending.jsonl into KG as lesson nodes."""
         pending_path = workspace / "memory" / "instinct" / "kg_pending.jsonl"
         if not pending_path.exists():
-            return
+            return 0
 
         try:
             lines = pending_path.read_text(encoding="utf-8").strip().splitlines()
             if not lines:
-                return
+                return 0
 
             from src.memory.structured import StructuredMemoryStore
 
@@ -529,31 +555,8 @@ class MemoryHandler:
 
                 imported = 0
                 for line in lines:
-                    try:
-                        record = json.loads(line)
-                        rule_text = record.get("rule_text", "").strip()
-                        if not rule_text:
-                            continue
-
-                        domains = record.get("domains", [])
-                        confidence = record.get("confidence", 0.9)
-
-                        # Create lesson node
-                        await store._kg.add_node(
-                            node_type="lesson",
-                            title=rule_text[:120],
-                            content=rule_text,
-                            domains=domains,
-                            metadata={
-                                "source": "instinct",
-                                "confidence": confidence,
-                                "promoted_at": record.get("promoted_at", ""),
-                            },
-                        )
-
+                    if await self._import_kg_pending_record(store, line):
                         imported += 1
-                    except Exception:
-                        logger.opt(exception=True).debug("Failed to import KG pending record")
 
                 # Rebuild FTS once after all imports, then link lessons to rules
                 if imported:
@@ -568,8 +571,45 @@ class MemoryHandler:
 
             # Truncate the file after successful import
             pending_path.write_text("", encoding="utf-8")
+            return imported
         except Exception:
             logger.opt(exception=True).warning("Failed to import kg_pending.jsonl")
+            return 0
+
+    async def _import_kg_pending_record(self, store: Any, line: str) -> bool:
+        """Import one kg_pending JSONL record. Invalid records are skipped."""
+        try:
+            record = json.loads(line)
+            if not isinstance(record, dict):
+                return False
+
+            raw_rule_text = record.get("rule_text", "")
+            if not isinstance(raw_rule_text, str):
+                return False
+
+            rule_text = raw_rule_text.strip()
+            if not rule_text:
+                return False
+
+            domains = record.get("domains", [])
+            if not isinstance(domains, list):
+                domains = []
+
+            await store._kg.add_node(
+                node_type="lesson",
+                title=rule_text[:120],
+                content=rule_text,
+                domains=domains,
+                metadata={
+                    "source": "instinct",
+                    "confidence": record.get("confidence", 0.9),
+                    "promoted_at": record.get("promoted_at", ""),
+                },
+            )
+            return True
+        except Exception:
+            logger.opt(exception=True).debug("Failed to import KG pending record")
+            return False
 
     # -- structured recall ----------------------------------------------------
 

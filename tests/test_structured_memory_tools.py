@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.agent.loop import AgentLoop
+from src.agent.loop_memory import MemoryHandler
 from src.agent.tools.context import ToolContext
 from src.agent.tools.structured_memory import (
     DomainRuleGetTool,
@@ -19,6 +20,14 @@ from src.bus.queue import MessageBus
 from src.config.schema import Config
 from src.memory.structured import RecordTaskResult, StructuredMemoryStore
 from src.providers.base import LLMResponse
+
+
+class _SyncSpy:
+    def __init__(self) -> None:
+        self.paths: list[Path] = []
+
+    async def sync_all(self, path: Path) -> None:
+        self.paths.append(path)
 
 
 async def _seed_store(workspace: Path) -> tuple[StructuredMemoryStore, RecordTaskResult]:
@@ -43,6 +52,38 @@ async def _seed_store(workspace: Path) -> tuple[StructuredMemoryStore, RecordTas
         duration_ms=10.0,
     )
     return store, result
+
+
+async def test_memory_handler_persists_structured_markdown_and_syncs_index(
+    tmp_path: Path,
+) -> None:
+    handler = MemoryHandler(
+        workspace=tmp_path,
+        memory_config=None,
+        orchestrator_config=None,
+        group_memory_enabled=False,
+        groups_base_dir=tmp_path / "groups",
+    )
+    sync_spy = _SyncSpy()
+    handler._memory_index = sync_spy
+
+    await handler.persist_structured_memory(
+        session_key="cli:test",
+        user_message="请记住：Always run pytest before committing.",
+        response="Always run pytest before committing.",
+        tools_used=["bash"],
+        routed_skills=[],
+        routing_domains=["coding/testing"],
+        selected_primary="coding/testing",
+        usage={"input_tokens": 1, "output_tokens": 1},
+        duration_ms=12.0,
+    )
+
+    memory_file = tmp_path / "memory" / "MEMORY.md"
+    history_file = tmp_path / "memory" / "HISTORY.md"
+    assert "Always run pytest before committing" in memory_file.read_text(encoding="utf-8")
+    assert "task-" in history_file.read_text(encoding="utf-8")
+    assert sync_spy.paths == [tmp_path / "memory"]
 
 
 async def test_structured_memory_search_tool_returns_results(tmp_path: Path) -> None:

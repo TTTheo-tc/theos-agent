@@ -5,57 +5,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.agent.loop_memory import MemoryHandler
 from src.memory.knowledge_graph import KnowledgeGraph
-from src.memory.knowledge_search import KnowledgeSearch
 
 
 async def _import_kg_pending(workspace: Path) -> int:
-    """Replicate the import logic from MemoryHandler._import_kg_pending for testing."""
-    pending_path = workspace / "memory" / "instinct" / "kg_pending.jsonl"
-    if not pending_path.exists():
-        return 0
-
-    lines = pending_path.read_text(encoding="utf-8").strip().splitlines()
-    if not lines:
-        return 0
-
-    db_path = workspace / "memory" / "kg.db"
-    kg = KnowledgeGraph(db_path)
-    await kg.connect()
-    search = KnowledgeSearch(kg)
-    await search.ensure_fts()
-
-    imported = 0
-    for line in lines:
-        record = json.loads(line)
-        rule_text = record.get("rule_text", "").strip()
-        if not rule_text:
-            continue
-
-        domains = record.get("domains", [])
-        confidence = record.get("confidence", 0.9)
-
-        await kg.add_node(
-            node_type="lesson",
-            title=rule_text[:120],
-            content=rule_text,
-            domains=domains,
-            metadata={
-                "source": "instinct",
-                "confidence": confidence,
-                "promoted_at": record.get("promoted_at", ""),
-            },
-        )
-        imported += 1
-
-    if imported:
-        await search.rebuild_fts()
-
-    # Truncate after import
-    pending_path.write_text("", encoding="utf-8")
-
-    await kg.close()
-    return imported
+    """Run the production Instinct-to-KG import path."""
+    handler = MemoryHandler(
+        workspace=workspace,
+        memory_config=None,
+        orchestrator_config=None,
+        group_memory_enabled=False,
+        groups_base_dir=workspace / "groups",
+    )
+    return await handler._import_kg_pending(workspace)
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +74,35 @@ class TestKGPendingImport:
     async def test_nonexistent_pending_is_noop(self, tmp_path):
         imported = await _import_kg_pending(tmp_path)
         assert imported == 0
+
+    async def test_invalid_pending_records_are_skipped(self, tmp_path):
+        pending_dir = tmp_path / "memory" / "instinct"
+        pending_dir.mkdir(parents=True)
+        pending_path = pending_dir / "kg_pending.jsonl"
+        pending_path.write_text(
+            "\n".join(
+                [
+                    "{not-json",
+                    json.dumps({"rule_text": ""}),
+                    json.dumps({"rule_text": None}),
+                    json.dumps({"rule_text": 123}),
+                    json.dumps({"rule_text": "Prefer direct production tests", "domains": "bad"}),
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        imported = await _import_kg_pending(tmp_path)
+        assert imported == 1
+
+        kg = KnowledgeGraph(tmp_path / "memory" / "kg.db")
+        await kg.connect()
+        lessons = await kg.list_nodes(node_type="lesson")
+        assert len(lessons) == 1
+        assert lessons[0]["title"] == "Prefer direct production tests"
+        assert lessons[0]["domains"] == ""
+        assert pending_path.read_text(encoding="utf-8") == ""
+        await kg.close()
 
     async def test_lesson_linked_to_rule(self, tmp_path):
         """After importing a lesson, it can be linked to a rule via an edge."""
