@@ -28,7 +28,7 @@ class ProviderCredentials:
 
 def resolve_credentials(
     provider_name: str | None,
-    config: "Config",
+    config: Config,
     model: str | None = None,
     *,
     spec: Any | None = None,

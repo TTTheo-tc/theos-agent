@@ -16,11 +16,11 @@ if TYPE_CHECKING:
 
 
 def _resolve_spec_for_model(
-    config: "Config",
+    config: Config,
     model: str,
     *,
     force_provider: str | None = None,
-) -> tuple["ProviderSpec | None", str | None]:
+) -> tuple[ProviderSpec | None, str | None]:
     """Resolve a ProviderSpec for the given model.
 
     Args:
@@ -51,11 +51,11 @@ def _resolve_spec_for_model(
 
 
 def _build_provider(
-    spec: "ProviderSpec | None",
+    spec: ProviderSpec | None,
     provider_name: str | None,
     model: str,
-    config: "Config",
-) -> "LLMProvider":
+    config: Config,
+) -> LLMProvider:
     """Build a provider instance from a resolved spec and credentials.
 
     Routes by ``spec.backend``:
@@ -121,7 +121,7 @@ def _build_provider(
 
 
 def _is_codex_provider(
-    spec: "ProviderSpec | None",
+    spec: ProviderSpec | None,
     provider_name: str | None,
     model: str,
 ) -> bool:
@@ -133,7 +133,7 @@ def _is_codex_provider(
 
 
 def _custom_openai_compat_settings(
-    config: "Config",
+    config: Config,
     model: str,
 ) -> tuple[str | None, str, dict[str, str] | None]:
     """Resolve settings for the explicit custom OpenAI-compatible endpoint."""
@@ -146,10 +146,10 @@ def _custom_openai_compat_settings(
 
 
 def _configured_openai_compat_settings(
-    spec: "ProviderSpec",
+    spec: ProviderSpec,
     provider_name: str | None,
     model: str,
-    config: "Config",
+    config: Config,
 ) -> tuple[str | None, str, dict[str, str] | None]:
     """Resolve settings for registry-backed OpenAI-compatible providers."""
     from src.providers.credentials import resolve_credentials
@@ -162,7 +162,7 @@ def _configured_openai_compat_settings(
     return creds.api_key, api_base, creds.extra_headers
 
 
-def _raise_missing_credentials(provider_name: str | None, spec: "ProviderSpec") -> None:
+def _raise_missing_credentials(provider_name: str | None, spec: ProviderSpec) -> None:
     provider_label = provider_name.replace("_", "-") if provider_name else "provider"
     if spec.is_oauth:
         raise ValueError(
@@ -180,7 +180,7 @@ def _raise_missing_credentials(provider_name: str | None, spec: "ProviderSpec") 
 # ---------------------------------------------------------------------------
 
 
-def make_provider(config: "Config") -> "LLMProvider":
+def make_provider(config: Config) -> LLMProvider:
     """Create the appropriate LLM provider from config.
 
     Respects config.agents.defaults.provider (may be "auto" or a forced name).
@@ -221,7 +221,7 @@ def make_provider(config: "Config") -> "LLMProvider":
     return RecoveryProvider(primary, fallbacks)
 
 
-def make_provider_for_model(config: "Config", model: str) -> "LLMProvider":
+def make_provider_for_model(config: Config, model: str) -> LLMProvider:
     """Create a provider for a specific model.
 
     Always auto-detects provider from model name — never uses forced provider.

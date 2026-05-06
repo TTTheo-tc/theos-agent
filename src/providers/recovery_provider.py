@@ -91,7 +91,7 @@ class RecoveryProvider(LLMProvider):
         the caller we are committed to the current provider — errors yield a
         final error delta and stop.
         """
-        providers = [self._primary] + self._fallbacks
+        providers = [self._primary, *self._fallbacks]
 
         for idx, provider in enumerate(providers):
             use_model = model if provider is self._primary else provider.get_default_model()
