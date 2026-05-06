@@ -1,6 +1,7 @@
 """Async message queue for decoupled channel-agent communication."""
 
 import asyncio
+from contextlib import suppress
 from typing import TypeVar
 
 from loguru import logger
@@ -45,10 +46,8 @@ class MessageBus:
 
     @staticmethod
     def _drop_oldest(queue: asyncio.Queue[T]) -> None:
-        try:
+        with suppress(asyncio.QueueEmpty):
             queue.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
 
     async def consume_outbound(self) -> OutboundMessage:
         """Consume the next outbound message (blocks until available)."""
