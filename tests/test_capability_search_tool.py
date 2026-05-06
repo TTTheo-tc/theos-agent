@@ -146,3 +146,23 @@ async def test_capability_search_reports_invalid_kind(tmp_path: Path) -> None:
     payload = json.loads(raw)
 
     assert payload["error"] == "Unknown capability kinds: plugin"
+
+
+@pytest.mark.asyncio
+async def test_capability_search_requires_kind(tmp_path: Path) -> None:
+    tool = _make_tool(tmp_path)
+
+    raw = await tool.execute(query="github", kinds=[])
+    payload = json.loads(raw)
+
+    assert payload["error"] == "Provide at least one capability kind."
+
+
+@pytest.mark.asyncio
+async def test_capability_search_requires_search_scope(tmp_path: Path) -> None:
+    tool = _make_tool(tmp_path)
+
+    raw = await tool.execute()
+    payload = json.loads(raw)
+
+    assert payload["error"] == "Provide at least one of 'query', 'domain', or 'server'."

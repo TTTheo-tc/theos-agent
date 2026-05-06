@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -116,72 +117,39 @@ class CapabilitySearchTool(Tool):
         include_unavailable: bool = False,
     ) -> dict[str, Any]:
         """Search all enabled discovery surfaces and return a unified result set."""
-        enabled_kinds = set(kinds or ["skill", "mcp"])
-        if not enabled_kinds:
-            return {"error": "Provide at least one capability kind."}
-        invalid = sorted(kind for kind in enabled_kinds if kind not in {"skill", "mcp"})
-        if invalid:
-            return {"error": f"Unknown capability kinds: {', '.join(invalid)}"}
-
-        if not query.strip() and not (domain or "").strip() and not (server or "").strip():
-            return {"error": "Provide at least one of 'query', 'domain', or 'server'."}
+        enabled_kinds = set(kinds) if kinds is not None else {"skill", "mcp"}
+        if error := _validate_search_request(enabled_kinds, query=query, domain=domain, server=server):
+            return {"error": error}
 
         entries: list[dict[str, Any]] = []
         warnings: list[str] = []
         errors: list[str] = []
 
         if "skill" in enabled_kinds:
-            skill_result = self._skills.search_skills(
-                query=query,
-                domain=domain,
-                limit=max(limit, 20),
-                include_unavailable=include_unavailable,
-            )
-            if skill_result.get("error"):
-                errors.append(skill_result["error"])
-            for item in skill_result.get("matches", []):
-                score = self._score_skill_entry(item, query=query, domain=domain)
-                entries.append(
-                    {
-                        "kind": "skill",
-                        "score": score,
-                        "title": item["name"],
-                        "description": item["description"],
-                        "match_reasons": item["match_reasons"],
-                        "domains": item.get("domains", []),
-                        "available": item["available"],
-                        "details": item,
-                    }
+            entries.extend(
+                self._skill_entries(
+                    query=query,
+                    domain=domain,
+                    limit=limit,
+                    include_unavailable=include_unavailable,
+                    errors=errors,
                 )
+            )
 
         if "mcp" in enabled_kinds:
             if self._mcp is None:
                 warnings.append("MCP discovery is unavailable because no MCP manager is attached.")
             else:
-                mcp_result = self._mcp.search_tools(
-                    query=query,
-                    domain=domain,
-                    server=server,
-                    limit=max(limit, 20),
-                )
-                if mcp_result.get("error"):
-                    errors.append(mcp_result["error"])
-                if mcp_result.get("notice"):
-                    warnings.append(mcp_result["notice"])
-                for item in mcp_result.get("matches", []):
-                    score = self._score_mcp_entry(item, query=query, domain=domain, server=server)
-                    entries.append(
-                        {
-                            "kind": "mcp",
-                            "score": score,
-                            "title": item["wrapper_name"],
-                            "description": item["description"],
-                            "match_reasons": item["match_reasons"],
-                            "domains": item.get("matched_domains", []),
-                            "available": item["connected"],
-                            "details": item,
-                        }
+                entries.extend(
+                    self._mcp_entries(
+                        query=query,
+                        domain=domain,
+                        server=server,
+                        limit=limit,
+                        warnings=warnings,
+                        errors=errors,
                     )
+                )
 
         entries.sort(
             key=lambda item: (
@@ -190,25 +158,15 @@ class CapabilitySearchTool(Tool):
                 item["title"],
             )
         )
+        matches = entries[: max(1, int(limit))]
 
         result = {
             "query": query,
             "domain": domain,
             "server": server,
             "kinds": sorted(enabled_kinds),
-            "count": len(entries[: max(1, int(limit))]),
-            "matches": [
-                {
-                    "kind": item["kind"],
-                    "title": item["title"],
-                    "description": item["description"],
-                    "match_reasons": item["match_reasons"],
-                    "domains": item["domains"],
-                    "available": item["available"],
-                    "details": item["details"],
-                }
-                for item in entries[: max(1, int(limit))]
-            ],
+            "count": len(matches),
+            "matches": [_public_entry(item) for item in matches],
         }
         if warnings:
             result["warnings"] = warnings
@@ -217,6 +175,76 @@ class CapabilitySearchTool(Tool):
         elif errors:
             result["partial_errors"] = list(dict.fromkeys(errors))
         return result
+
+    def _skill_entries(
+        self,
+        *,
+        query: str,
+        domain: str | None,
+        limit: int,
+        include_unavailable: bool,
+        errors: list[str],
+    ) -> list[dict[str, Any]]:
+        skill_result = self._skills.search_skills(
+            query=query,
+            domain=domain,
+            limit=max(limit, 20),
+            include_unavailable=include_unavailable,
+        )
+        if skill_result.get("error"):
+            errors.append(skill_result["error"])
+
+        return [
+            _ranked_entry(
+                kind="skill",
+                score=self._score_skill_entry(item, query=query, domain=domain),
+                title=item["name"],
+                description=item["description"],
+                match_reasons=item["match_reasons"],
+                domains=item.get("domains", []),
+                available=item["available"],
+                details=item,
+            )
+            for item in skill_result.get("matches", [])
+        ]
+
+    def _mcp_entries(
+        self,
+        *,
+        query: str,
+        domain: str | None,
+        server: str | None,
+        limit: int,
+        warnings: list[str],
+        errors: list[str],
+    ) -> list[dict[str, Any]]:
+        if self._mcp is None:
+            return []
+
+        mcp_result = self._mcp.search_tools(
+            query=query,
+            domain=domain,
+            server=server,
+            limit=max(limit, 20),
+        )
+        if mcp_result.get("error"):
+            errors.append(mcp_result["error"])
+        if mcp_result.get("notice"):
+            warnings.append(mcp_result["notice"])
+
+        return [
+            _ranked_entry(
+                kind="mcp",
+                score=self._score_mcp_entry(item, query=query, domain=domain, server=server),
+                title=item["wrapper_name"],
+                description=item["description"],
+                match_reasons=item["match_reasons"],
+                domains=item.get("matched_domains", []),
+                available=item["connected"],
+                details=item,
+            )
+            for item in mcp_result.get("matches", [])
+        ]
 
     def _score_skill_entry(self, item: dict[str, Any], *, query: str, domain: str | None) -> int:
         """Estimate cross-surface ordering score for one skill result."""
@@ -254,3 +282,55 @@ class CapabilitySearchTool(Tool):
         if item.get("connected"):
             score += 5
         return score
+
+
+def _validate_search_request(
+    enabled_kinds: set[str],
+    *,
+    query: str,
+    domain: str | None,
+    server: str | None,
+) -> str | None:
+    if not enabled_kinds:
+        return "Provide at least one capability kind."
+    invalid = sorted(kind for kind in enabled_kinds if kind not in {"skill", "mcp"})
+    if invalid:
+        return f"Unknown capability kinds: {', '.join(invalid)}"
+    if not query.strip() and not (domain or "").strip() and not (server or "").strip():
+        return "Provide at least one of 'query', 'domain', or 'server'."
+    return None
+
+
+def _ranked_entry(
+    *,
+    kind: str,
+    score: int,
+    title: str,
+    description: str,
+    match_reasons: list[str],
+    domains: Iterable[str],
+    available: bool,
+    details: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "score": score,
+        "title": title,
+        "description": description,
+        "match_reasons": match_reasons,
+        "domains": list(domains),
+        "available": available,
+        "details": details,
+    }
+
+
+def _public_entry(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": item["kind"],
+        "title": item["title"],
+        "description": item["description"],
+        "match_reasons": item["match_reasons"],
+        "domains": item["domains"],
+        "available": item["available"],
+        "details": item["details"],
+    }
