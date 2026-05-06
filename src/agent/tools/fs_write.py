@@ -73,7 +73,7 @@ class WriteFileTool(ContextAwareTool):
     @classmethod
     def record_read(cls, session_key: str | None, file_path: str, mtime: float) -> None:
         """Record that *file_path* (resolved, absolute) was read at *mtime*."""
-        cls._read_files.setdefault(session_key, {})[file_path] = mtime
+        cls._session_reads(session_key)[file_path] = mtime
 
     @classmethod
     def check_staleness(cls, session_key: str | None, resolved_path: str) -> str | None:
@@ -81,10 +81,9 @@ class WriteFileTool(ContextAwareTool):
         p = Path(resolved_path)
         if not p.exists():
             return None
-        session_files = cls._read_files.get(session_key)
-        if not session_files or resolved_path not in session_files:
+        read_mtime = cls._read_files.get(session_key, {}).get(resolved_path)
+        if read_mtime is None:
             return None  # staleness only checked when file was previously read
-        read_mtime = session_files[resolved_path]
         current_mtime = p.stat().st_mtime
         if current_mtime != read_mtime:
             return (
@@ -97,8 +96,7 @@ class WriteFileTool(ContextAwareTool):
     @classmethod
     def has_read(cls, session_key: str | None, resolved_path: str) -> bool:
         """Return True if *resolved_path* has been read in *session_key*."""
-        session_files = cls._read_files.get(session_key)
-        return bool(session_files and resolved_path in session_files)
+        return resolved_path in cls._read_files.get(session_key, {})
 
     @classmethod
     def clear_read_state(cls, session_key: str | None = None) -> None:
@@ -107,6 +105,10 @@ class WriteFileTool(ContextAwareTool):
             cls._read_files.clear()
         else:
             cls._read_files.pop(session_key, None)
+
+    @classmethod
+    def _session_reads(cls, session_key: str | None) -> dict[str, float]:
+        return cls._read_files.setdefault(session_key, {})
 
     # ---- tool metadata ----
 
