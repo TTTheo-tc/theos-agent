@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from functools import partial
 from typing import Any
 
@@ -63,7 +64,7 @@ def _classify_for_output(exc: Exception) -> str:
     return _CATEGORY_LABELS.get(cat.value, "unknown")
 
 
-async def _run(func, *args, **kwargs) -> str:
+async def _run(func: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
     """Run a sync function in executor and format the result."""
     loop = asyncio.get_running_loop()
     try:
@@ -78,7 +79,7 @@ async def _run(func, *args, **kwargs) -> str:
 class _FeishuClientTool(Tool):
     """Base for Feishu tools that only need the shared client."""
 
-    def __init__(self, client: Any):
+    def __init__(self, client: Any) -> None:
         self._client = client
 
 
@@ -134,6 +135,7 @@ class FeishuReadTool(_FeishuClientTool):
     async def execute(
         self, url: str, max_age: int | None = None, force_refresh: bool = False, **kw: Any
     ) -> str:
+        del kw
         return await _run(
             self._client.read_page_as_markdown, url, max_age=max_age, force_refresh=force_refresh
         )
@@ -182,6 +184,7 @@ class FeishuSearchTool(_FeishuClientTool):
         doc_types: list[str] | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if scope == "all":
             return await _run(
                 self._client.search_docs,
@@ -208,6 +211,7 @@ class FeishuListTool(_FeishuClientTool):
     }
 
     async def execute(self, url: str, **kw: Any) -> str:
+        del kw
         return await _run(self._client.list_pages, url)
 
 
@@ -219,6 +223,7 @@ class FeishuSpacesTool(_FeishuClientTool):
     parameters = {"type": "object", "properties": {}, "required": []}
 
     async def execute(self, **kw: Any) -> str:
+        del kw
         return await _run(self._client.list_spaces)
 
 
@@ -309,6 +314,7 @@ class FeishuCalendarTool(_FeishuClientTool):
         user_ids: list[str] | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         # Resolve natural dates
         start_resolved = _resolve_natural_date(start_time, is_end=False) if start_time else None
         end_resolved = _resolve_natural_date(end_time, is_end=True) if end_time else None
@@ -465,6 +471,7 @@ class FeishuEditTool(_FeishuClientTool):
         dry_run: bool = False,
         **kw: Any,
     ) -> str:
+        del kw
         if draft_markdown is not None:
             result = await _run(self._client.edit_page, url, edits=draft_markdown, dry_run=dry_run)
         elif edits:
@@ -525,7 +532,7 @@ class FeishuCreateTool(_FeishuClientTool):
     def risk_level(self) -> str:
         return "medium"
 
-    def __init__(self, client: Any, allow_from: list[str] | None = None):
+    def __init__(self, client: Any, allow_from: list[str] | None = None) -> None:
         super().__init__(client)
         self._allow_from = allow_from or []
 
@@ -538,6 +545,7 @@ class FeishuCreateTool(_FeishuClientTool):
         grant_access_to: list[str] | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         # Auto-grant to allowFrom contacts when not explicitly specified
         if grant_access_to is None and self._allow_from:
             grant_access_to = list(self._allow_from)
@@ -618,9 +626,10 @@ class FeishuSendTool(_FeishuClientTool):
         title: str | None = None,
         image_key: str | None = None,
         file_key: str | None = None,
-        buttons: list[dict] | None = None,
+        buttons: list[dict[str, Any]] | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if msg_type == "text":
             if not message:
                 return _missing("message", "text messages")
@@ -701,6 +710,7 @@ class FeishuCommentsTool(_FeishuClientTool):
         comment_id: str | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if action == "read":
             return await _run(self._client.read_comments, url)
 
@@ -768,6 +778,7 @@ class FeishuDownloadTool(_FeishuClientTool):
         dry_run: bool = False,
         **kw: Any,
     ) -> str:
+        del kw
         return await _run(
             self._client.download_file,
             url,
@@ -796,6 +807,7 @@ class FeishuInfoTool(_FeishuClientTool):
     async def execute(
         self, url: str, max_age: int | None = None, force_refresh: bool = False, **kw: Any
     ) -> str:
+        del kw
         return await _run(self._client.info_page, url, max_age=max_age, force_refresh=force_refresh)
 
 
@@ -860,6 +872,7 @@ class FeishuPermTool(_FeishuClientTool):
         new_owner: str | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if action == "list":
             return await _run(self._client.perm_list, url)
 
@@ -962,6 +975,7 @@ class FeishuChatTool(_FeishuClientTool):
         emoji: str | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if action == "create":
             if not name:
                 return _missing("name", "create action")
@@ -1084,9 +1098,10 @@ class FeishuSheetTool(_FeishuClientTool):
         action: str,
         url: str,
         range: str | None = None,
-        values: list[list] | None = None,
+        values: list[list[Any]] | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if action == "read":
             return await _run(self._client.read_sheet, url, range=range or "")
         if action == "info":
@@ -1178,6 +1193,7 @@ class FeishuTaskTool(_FeishuClientTool):
         completed: bool | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if action == "list":
             return await _run(self._client.task_list, completed=completed)
 
@@ -1300,6 +1316,7 @@ class FeishuFileTool(_FeishuClientTool):
         wiki_parent_url: str | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if action == "list":
             if not folder_token:
                 return _missing("folder_token", "list action")
@@ -1434,6 +1451,7 @@ class FeishuContactTool(_FeishuClientTool):
         phone: str | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if action == "user":
             if not user_id:
                 return _missing("user_id", "user action")
@@ -1557,7 +1575,7 @@ class FeishuAuthTool(Tool):
     def owner_only(self) -> bool:
         return True
 
-    def __init__(self, app_id: str, app_secret: str, token_dir: str):
+    def __init__(self, app_id: str, app_secret: str, token_dir: str) -> None:
         self._app_id = app_id
         self._app_secret = app_secret
         self._token_dir = token_dir
@@ -1569,6 +1587,7 @@ class FeishuAuthTool(Tool):
         code: str | None = None,
         **kw: Any,
     ) -> str:
+        del kw
         if action == "status":
             return self._check_status()
 
