@@ -43,6 +43,15 @@ def _make_pdf(tmp_path: Path, name: str = "test.pdf", num_pages: int = 3) -> Pat
     return p
 
 
+def _make_zero_page_pdf(tmp_path: Path, name: str = "empty.pdf") -> Path:
+    writer = PdfWriter()
+    buf = io.BytesIO()
+    writer.write(buf)
+    p = tmp_path / name
+    p.write_bytes(buf.getvalue())
+    return p
+
+
 def _make_pdf_with_text(
     tmp_path: Path, name: str = "text.pdf", texts: list[str] | None = None
 ) -> Path:
@@ -325,6 +334,45 @@ class TestPdfToolPages:
         tool = PdfTool()
         result = await tool.execute(pdf=str(p), max_pages=3)
         assert "extracted pages: 3" in result
+
+    @pytest.mark.asyncio
+    async def test_zero_page_pdf_ignores_page_range(self, tmp_path: Path):
+        p = _make_zero_page_pdf(tmp_path)
+        tool = PdfTool()
+        result = await tool.execute(pdf=str(p), pages="1-2")
+        assert "0 pages" in result
+        assert "extracted pages" not in result
+
+    @pytest.mark.asyncio
+    async def test_zero_page_pdf_ignores_invalid_page_range(self, tmp_path: Path):
+        p = _make_zero_page_pdf(tmp_path)
+        tool = PdfTool()
+        result = await tool.execute(pdf=str(p), pages="abc")
+        assert "0 pages" in result
+        assert "Extraction error" not in result
+        assert "Invalid page range" not in result
+
+    @pytest.mark.asyncio
+    async def test_import_error_fallback_skips_page_selection(self, tmp_path: Path):
+        p = _make_pdf(tmp_path)
+        tool = PdfTool(provider=_make_provider())
+        real_import = __import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "pypdf":
+                raise ImportError("no pypdf")
+            return real_import(name, *args, **kwargs)
+
+        with (
+            patch("builtins.__import__", side_effect=fake_import),
+            patch(
+                "src.agent.tools.pdf._select_page_indices",
+                side_effect=AssertionError("page selection should not run"),
+            ),
+        ):
+            result = await tool.execute(pdf=str(p), pages="1-2")
+
+        assert "pypdf unavailable" in result
 
 
 # ---------------------------------------------------------------------------

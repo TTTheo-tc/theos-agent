@@ -109,11 +109,14 @@ async def _load_pdf_bytes(source: str) -> tuple[bytes, str]:
 
 def _extract_text_pypdf(
     data: bytes,
-    page_indices: list[int] | None = None,
-) -> tuple[str, int]:
+    *,
+    pages: str | None = None,
+    max_pages: int = DEFAULT_MAX_PAGES,
+) -> tuple[str, int, int | None]:
     """Extract text from PDF bytes using pypdf.
 
-    Returns ``(text, total_pages)``.  Raises ``ImportError`` if pypdf is
+    Returns ``(text, total_pages, extracted_page_count)``.  The final value is
+    ``None`` when all pages are extracted.  Raises ``ImportError`` if pypdf is
     unavailable.
     """
     from pypdf import PdfReader
@@ -121,6 +124,7 @@ def _extract_text_pypdf(
     reader = PdfReader(io.BytesIO(data))
     total = len(reader.pages)
 
+    page_indices = _select_page_indices(total_pages=total, pages=pages, max_pages=max_pages)
     indices = page_indices if page_indices is not None else list(range(total))
     # Clamp to actual page count
     indices = [i for i in indices if 0 <= i < total]
@@ -131,7 +135,21 @@ def _extract_text_pypdf(
         if page_text.strip():
             parts.append(f"--- Page {idx + 1} ---\n{page_text}")
 
-    return "\n\n".join(parts), total
+    extracted_count = len(page_indices) if page_indices is not None else None
+    return "\n\n".join(parts), total, extracted_count
+
+
+def _select_page_indices(
+    *,
+    total_pages: int,
+    pages: str | None,
+    max_pages: int,
+) -> list[int] | None:
+    if pages and total_pages > 0:
+        return parse_page_range(pages, total_pages)
+    if total_pages > max_pages:
+        return list(range(max_pages))
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -239,25 +257,14 @@ class PdfTool(Tool):
         all_texts: list[str] = []
         for data, fname in loaded:
             try:
-                total_pages = 0
-                try:
-                    from pypdf import PdfReader
-
-                    total_pages = len(PdfReader(io.BytesIO(data)).pages)
-                except ImportError:
-                    pass
-
-                # Resolve page indices
-                page_indices: list[int] | None = None
-                if pages and total_pages > 0:
-                    page_indices = parse_page_range(pages, total_pages)
-                elif total_pages > max_pages:
-                    page_indices = list(range(max_pages))
-
-                text, total = _extract_text_pypdf(data, page_indices)
+                text, total, extracted_page_count = _extract_text_pypdf(
+                    data,
+                    pages=pages,
+                    max_pages=max_pages,
+                )
                 label = f"[{fname}] ({total} pages)"
-                if page_indices is not None:
-                    label += f" (extracted pages: {len(page_indices)})"
+                if extracted_page_count is not None:
+                    label += f" (extracted pages: {extracted_page_count})"
                 if text.strip():
                     all_texts.append(f"{label}\n{text}")
                 else:
