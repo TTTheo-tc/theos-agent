@@ -84,11 +84,15 @@ def save_config(config: Config, config_path: Path | None = None, *, compact: boo
 
 def _migrate_config(data: dict) -> dict:
     """Migrate old config formats to current."""
+    data = dict(data)
+
     # Move tools.exec.restrictToWorkspace → tools.restrictToWorkspace
-    tools = data.get("tools", {})
-    exec_cfg = tools.get("exec", {})
+    tools = dict(data.get("tools") or {})
+    exec_cfg = dict(tools.get("exec") or {})
     if "restrictToWorkspace" in exec_cfg and "restrictToWorkspace" not in tools:
         tools["restrictToWorkspace"] = exec_cfg.pop("restrictToWorkspace")
+        tools["exec"] = exec_cfg
+        data["tools"] = tools
 
     # Rename root hooksDir/hooks_dir -> hooks
     if "hooks" not in data:

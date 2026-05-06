@@ -15,6 +15,38 @@ def test_migrate_hooks_dir_to_hooks():
     assert "hooksDir" not in out
 
 
+def test_migrate_config_does_not_mutate_input():
+    data = {
+        "hooksDir": "/tmp/.hook",
+        "tools": {"exec": {"restrictToWorkspace": True, "timeout": 5}},
+    }
+
+    out = _migrate_config(data)
+
+    assert out["hooks"] == "/tmp/.hook"
+    assert out["tools"]["restrictToWorkspace"] is True
+    assert data == {
+        "hooksDir": "/tmp/.hook",
+        "tools": {"exec": {"restrictToWorkspace": True, "timeout": 5}},
+    }
+
+
+def test_migrate_config_keeps_explicit_current_fields() -> None:
+    data = {
+        "hooks": "/current/hooks",
+        "hooksDir": "/legacy/hooks",
+        "tools": {
+            "restrictToWorkspace": False,
+            "exec": {"restrictToWorkspace": True},
+        },
+    }
+
+    out = _migrate_config(data)
+
+    assert out["hooks"] == "/current/hooks"
+    assert out["tools"]["restrictToWorkspace"] is False
+
+
 def test_migrate_hooks_dir_snake_case_to_hooks():
     data = {"hooks_dir": "/tmp/.hook"}
 
