@@ -7,6 +7,7 @@ import logging
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,44 @@ from src.agent.tools.tool_security import policy_error
 from src.utils.path import resolve_path as _resolve_path
 
 log = logging.getLogger(__name__)
+
+
+def _join_policy_parts(*parts: str | None) -> str:
+    return "\n".join(part for part in parts if part)
+
+
+def _resolve_search_base(
+    raw_path: str | None,
+    workspace: Path | None,
+    allowed_dir: Path | None,
+    *,
+    kind: str,
+) -> tuple[Path | None, str | None]:
+    try:
+        base = _resolve_path(raw_path, workspace, allowed_dir) if raw_path else (workspace or Path.cwd())
+    except PermissionError as e:
+        return None, f"Error: {e}"
+
+    policy_block = policy_error(str(base), kind=kind)
+    if policy_block:
+        return None, policy_block
+    return base, None
+
+
+def _apply_window(lines: list[str], *, offset: int, head_limit: int) -> tuple[list[str], bool]:
+    if offset > 0:
+        lines = lines[offset:]
+    if head_limit <= 0:
+        return lines, False
+    return lines[:head_limit], len(lines) > head_limit
+
+
+def _format_lines(lines: list[str], *, offset: int, head_limit: int) -> str:
+    visible, truncated = _apply_window(lines, offset=offset, head_limit=head_limit)
+    result = "\n".join(visible)
+    if truncated:
+        result += f"\n... (truncated at {head_limit} results)"
+    return result
 
 
 class GlobTool(Tool):
@@ -62,18 +101,18 @@ class GlobTool(Tool):
         # Accept both 'path' (Claude Code) and 'root' (legacy)
         search_path = path or root
         try:
-            policy_input = "\n".join(part for part in [search_path or "", pattern] if part)
-            policy_block = policy_error(policy_input, kind="File glob")
+            policy_block = policy_error(_join_policy_parts(search_path, pattern), kind="File glob")
             if policy_block:
                 return policy_block
-            base = (
-                _resolve_path(search_path, self._workspace, self._allowed_dir)
-                if search_path
-                else (self._workspace or Path.cwd())
+            base, error = _resolve_search_base(
+                search_path,
+                self._workspace,
+                self._allowed_dir,
+                kind="File glob",
             )
-            resolved_policy_error = policy_error(str(base), kind="File glob")
-            if resolved_policy_error:
-                return resolved_policy_error
+            if error:
+                return error
+            assert base is not None
             matches = sorted(base.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
             if self._allowed_dir:
                 allowed = self._allowed_dir.resolve()
@@ -91,14 +130,15 @@ class GlobTool(Tool):
 # ripgrep availability detection (cached)
 # ---------------------------------------------------------------------------
 
-_rg_path: str | None | bool = False  # False = not yet checked
+_RG_UNCHECKED = object()
+_rg_path: str | None | object = _RG_UNCHECKED
 
 
 def _find_rg() -> str | None:
     """Return the path to the rg binary, or None if unavailable."""
     global _rg_path
-    if _rg_path is not False:
-        return _rg_path  # type: ignore[return-value]
+    if _rg_path is not _RG_UNCHECKED:
+        return _rg_path if isinstance(_rg_path, str) else None
 
     # 1. shutil.which (covers PATH)
     found = shutil.which("rg")
@@ -140,6 +180,46 @@ def _find_rg() -> str | None:
 # ---------------------------------------------------------------------------
 
 _VCS_DIRS = frozenset({".git", ".svn", ".hg", ".bzr"})
+
+
+@dataclass(frozen=True)
+class _GrepOptions:
+    pattern: str
+    path: str | None
+    output_mode: str
+    include: str | None
+    file_type: str | None
+    case_insensitive: bool
+    show_line_numbers: bool
+    before_ctx: int | None
+    after_ctx: int | None
+    both_ctx: int | None
+    multiline: bool
+    head_limit: int
+    offset: int
+
+    @classmethod
+    def from_kwargs(cls, kwargs: dict[str, Any]) -> "_GrepOptions":
+        both_ctx = kwargs.get("-C")
+        head_limit = kwargs.get("head_limit")
+        max_results = kwargs.get("max_results")
+        return cls(
+            pattern=kwargs.get("pattern", ""),
+            path=kwargs.get("path"),
+            output_mode=kwargs.get("output_mode", "content"),
+            include=kwargs.get("include") or kwargs.get("glob"),
+            file_type=kwargs.get("type"),
+            case_insensitive=kwargs.get("-i", False) or kwargs.get("ignore_case", False),
+            show_line_numbers=kwargs.get("-n", True),
+            before_ctx=kwargs.get("-B"),
+            after_ctx=kwargs.get("-A"),
+            both_ctx=both_ctx if both_ctx is not None else kwargs.get("context"),
+            multiline=kwargs.get("multiline", False),
+            head_limit=(
+                head_limit if head_limit is not None else max_results if max_results is not None else 250
+            ),
+            offset=kwargs.get("offset", 0),
+        )
 
 
 class GrepTool(Tool):
@@ -254,77 +334,35 @@ class GrepTool(Tool):
     # -- public interface ----------------------------------------------------
 
     async def execute(self, **kwargs: Any) -> str:
-        pattern: str = kwargs.get("pattern", "")
-        path: str | None = kwargs.get("path")
-        output_mode: str = kwargs.get("output_mode", "content")
-        include: str | None = kwargs.get("include") or kwargs.get("glob")
-        file_type: str | None = kwargs.get("type")
-        case_insensitive: bool = kwargs.get("-i", False) or kwargs.get("ignore_case", False)
-        show_line_numbers: bool = kwargs.get("-n", True)
-        before_ctx: int | None = kwargs.get("-B")
-        after_ctx: int | None = kwargs.get("-A")
-        _c = kwargs.get("-C")
-        both_ctx: int | None = _c if _c is not None else kwargs.get("context")
-        multiline: bool = kwargs.get("multiline", False)
-        # head_limit: 0 means unlimited, None means not provided -> use default 250
-        _hl = kwargs.get("head_limit")
-        _mr = kwargs.get("max_results")
-        head_limit: int = _hl if _hl is not None else (_mr if _mr is not None else 250)
-        offset: int = kwargs.get("offset", 0)
+        options = _GrepOptions.from_kwargs(kwargs)
 
-        if not pattern:
+        if not options.pattern:
             return "Error: pattern is required"
 
         # -- policy check ---------------------------------------------------
-        try:
-            policy_input = "\n".join(part for part in [path or "", include or ""] if part)
-            policy_block = policy_error(policy_input, kind="File search")
-            if policy_block:
-                return policy_block
-
-            base = (
-                _resolve_path(path, self._workspace, self._allowed_dir)
-                if path
-                else (self._workspace or Path.cwd())
-            )
-            resolved_policy_err = policy_error(str(base), kind="File search")
-            if resolved_policy_err:
-                return resolved_policy_err
-        except PermissionError as e:
-            return f"Error: {e}"
+        policy_block = policy_error(
+            _join_policy_parts(options.path, options.include),
+            kind="File search",
+        )
+        if policy_block:
+            return policy_block
+        base, error = _resolve_search_base(
+            options.path,
+            self._workspace,
+            self._allowed_dir,
+            kind="File search",
+        )
+        if error:
+            return error
+        assert base is not None
 
         # -- dispatch to rg or fallback -------------------------------------
         rg = _find_rg()
         if rg:
-            return await self._run_rg(
-                rg_path=rg,
-                pattern=pattern,
-                base=base,
-                output_mode=output_mode,
-                include=include,
-                file_type=file_type,
-                case_insensitive=case_insensitive,
-                show_line_numbers=show_line_numbers,
-                before_ctx=before_ctx,
-                after_ctx=after_ctx,
-                both_ctx=both_ctx,
-                multiline=multiline,
-                head_limit=head_limit,
-                offset=offset,
-            )
-        else:
-            log.info("ripgrep not found; using Python re fallback")
-            return self._run_python_fallback(
-                pattern=pattern,
-                base=base,
-                output_mode=output_mode,
-                include=include,
-                case_insensitive=case_insensitive,
-                show_line_numbers=show_line_numbers,
-                multiline=multiline,
-                head_limit=head_limit,
-                offset=offset,
-            )
+            return await self._run_rg(rg_path=rg, base=base, options=options)
+
+        log.info("ripgrep not found; using Python re fallback")
+        return self._run_python_fallback(base=base, options=options)
 
     # -- ripgrep backend ----------------------------------------------------
 
@@ -332,74 +370,10 @@ class GrepTool(Tool):
         self,
         *,
         rg_path: str,
-        pattern: str,
         base: Path,
-        output_mode: str,
-        include: str | None,
-        file_type: str | None,
-        case_insensitive: bool,
-        show_line_numbers: bool,
-        before_ctx: int | None,
-        after_ctx: int | None,
-        both_ctx: int | None,
-        multiline: bool,
-        head_limit: int,
-        offset: int,
+        options: _GrepOptions,
     ) -> str:
-        cmd: list[str] = [rg_path]
-
-        # Output mode
-        if output_mode == "files_with_matches":
-            cmd.append("--files-with-matches")
-        elif output_mode == "count":
-            cmd.append("--count")
-        # "content" is default behavior
-
-        # Hidden files (search them) + VCS exclusion
-        cmd.append("--hidden")
-        for vcs in _VCS_DIRS:
-            cmd.extend(["--glob", f"!{vcs}"])
-
-        # Line length limit to suppress base64 / minified noise
-        cmd.extend(["--max-columns", "500"])
-
-        # Case sensitivity
-        if case_insensitive:
-            cmd.append("--ignore-case")
-
-        # Line numbers
-        if output_mode == "content" and show_line_numbers:
-            cmd.append("--line-number")
-        elif output_mode == "content" and not show_line_numbers:
-            cmd.append("--no-line-number")
-
-        # Context lines (only meaningful in content mode)
-        if output_mode == "content":
-            if both_ctx is not None:
-                cmd.extend(["--context", str(both_ctx)])
-            else:
-                if before_ctx is not None:
-                    cmd.extend(["--before-context", str(before_ctx)])
-                if after_ctx is not None:
-                    cmd.extend(["--after-context", str(after_ctx)])
-
-        # Multiline
-        if multiline:
-            cmd.extend(["--multiline", "--multiline-dotall"])
-
-        # File type filter
-        if file_type:
-            cmd.extend(["--type", file_type])
-
-        # Glob filter (include is alias for glob)
-        if include:
-            cmd.extend(["--glob", include])
-
-        # Pattern (use -e to handle patterns starting with dash)
-        cmd.extend(["-e", pattern])
-
-        # Search path
-        cmd.append(str(base))
+        cmd = self._build_rg_command(rg_path=rg_path, base=base, options=options)
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -413,17 +387,7 @@ class GrepTool(Tool):
         except FileNotFoundError:
             # rg binary disappeared between check and exec; fall back
             log.warning("rg binary not found at %s; falling back to Python re", rg_path)
-            return self._run_python_fallback(
-                pattern=pattern,
-                base=base,
-                output_mode=output_mode,
-                include=include,
-                case_insensitive=case_insensitive,
-                show_line_numbers=show_line_numbers,
-                multiline=False,
-                head_limit=head_limit,
-                offset=offset,
-            )
+            return self._run_python_fallback(base=base, options=replace(options, multiline=False))
 
         # rg exit codes: 0 = matches found, 1 = no matches, 2 = error
         if proc.returncode == 2:
@@ -432,95 +396,137 @@ class GrepTool(Tool):
 
         raw = stdout_bytes.decode("utf-8", errors="replace")
         if not raw.strip():
-            return f"No matches found for '{pattern}'"
+            return f"No matches found for '{options.pattern}'"
 
-        # Apply offset and head_limit
         lines = raw.rstrip("\n").split("\n")
-        if offset > 0:
-            lines = lines[offset:]
-        if head_limit > 0:
-            truncated = len(lines) > head_limit
-            lines = lines[:head_limit]
-        else:
-            truncated = False
-
-        # Enforce allowed_dir on output paths
         if self._allowed_dir:
             allowed = str(self._allowed_dir.resolve())
             lines = [ln for ln in lines if ln.startswith(allowed) or ln.startswith("--")]
 
-        result = "\n".join(lines)
-        if truncated:
-            result += f"\n... (truncated at {head_limit} results)"
-        return result
+        return _format_lines(lines, offset=options.offset, head_limit=options.head_limit)
+
+    def _build_rg_command(self, *, rg_path: str, base: Path, options: _GrepOptions) -> list[str]:
+        cmd: list[str] = [rg_path]
+
+        # Output mode
+        if options.output_mode == "files_with_matches":
+            cmd.append("--files-with-matches")
+        elif options.output_mode == "count":
+            cmd.append("--count")
+        # "content" is default behavior
+
+        # Hidden files (search them) + VCS exclusion
+        cmd.append("--hidden")
+        for vcs in _VCS_DIRS:
+            cmd.extend(["--glob", f"!{vcs}"])
+
+        # Line length limit to suppress base64 / minified noise
+        cmd.extend(["--max-columns", "500"])
+
+        # Case sensitivity
+        if options.case_insensitive:
+            cmd.append("--ignore-case")
+
+        # Line numbers
+        if options.output_mode == "content" and options.show_line_numbers:
+            cmd.append("--line-number")
+        elif options.output_mode == "content" and not options.show_line_numbers:
+            cmd.append("--no-line-number")
+
+        # Context lines (only meaningful in content mode)
+        if options.output_mode == "content":
+            if options.both_ctx is not None:
+                cmd.extend(["--context", str(options.both_ctx)])
+            else:
+                if options.before_ctx is not None:
+                    cmd.extend(["--before-context", str(options.before_ctx)])
+                if options.after_ctx is not None:
+                    cmd.extend(["--after-context", str(options.after_ctx)])
+
+        # Multiline
+        if options.multiline:
+            cmd.extend(["--multiline", "--multiline-dotall"])
+
+        # File type filter
+        if options.file_type:
+            cmd.extend(["--type", options.file_type])
+
+        # Glob filter (include is alias for glob)
+        if options.include:
+            cmd.extend(["--glob", options.include])
+
+        # Pattern (use -e to handle patterns starting with dash)
+        cmd.extend(["-e", options.pattern])
+
+        # Search path
+        cmd.append(str(base))
+        return cmd
 
     # -- Python re fallback -------------------------------------------------
 
     def _run_python_fallback(
         self,
         *,
-        pattern: str,
         base: Path,
-        output_mode: str,
-        include: str | None,
-        case_insensitive: bool,
-        show_line_numbers: bool,
-        multiline: bool,
-        head_limit: int,
-        offset: int,
+        options: _GrepOptions,
     ) -> str:
-        flags = re.IGNORECASE if case_insensitive else 0
-        if multiline:
+        flags = re.IGNORECASE if options.case_insensitive else 0
+        if options.multiline:
             flags |= re.DOTALL
         try:
-            regex = re.compile(pattern, flags)
+            regex = re.compile(options.pattern, flags)
         except re.error as e:
             return f"Error: Invalid regex pattern: {e}"
 
         collected: list[str] = []
+        probe_limit = options.offset + options.head_limit if options.head_limit > 0 else None
 
-        def _search_file(fp: Path) -> bool:
-            """Search a single file. Returns True to signal 'stop early'."""
+        def _limit_reached() -> bool:
+            return probe_limit is not None and len(collected) > probe_limit
+
+        def _append_match(fp: Path, line_no: int, line: str) -> None:
+            entry = (
+                f"{fp}:{line_no}: {line.rstrip()}"
+                if options.show_line_numbers
+                else f"{fp}: {line.rstrip()}"
+            )
+            collected.append(entry[:500])
+
+        def _search_file(fp: Path) -> None:
             try:
                 text = fp.read_text(encoding="utf-8", errors="ignore")
             except Exception:
-                return False
+                return
 
-            if multiline:
+            if options.multiline:
                 if regex.search(text):
-                    if output_mode == "files_with_matches":
+                    if options.output_mode == "files_with_matches":
                         collected.append(str(fp))
-                    elif output_mode == "count":
+                    elif options.output_mode == "count":
                         collected.append(f"{fp}:{len(regex.findall(text))}")
                     else:
                         for i, line in enumerate(text.splitlines(), 1):
                             if regex.search(line):
-                                entry = (
-                                    f"{fp}:{i}: {line.rstrip()}"
-                                    if show_line_numbers
-                                    else f"{fp}: {line.rstrip()}"
-                                )
-                                collected.append(entry[:500])
-                return False
+                                _append_match(fp, i, line)
+                            if _limit_reached():
+                                return
+                return
 
             match_count = 0
             for i, line in enumerate(text.splitlines(), 1):
                 if regex.search(line):
                     match_count += 1
-                    if output_mode == "content":
-                        entry = (
-                            f"{fp}:{i}: {line.rstrip()}"
-                            if show_line_numbers
-                            else f"{fp}: {line.rstrip()}"
-                        )
-                        collected.append(entry[:500])
+                    if options.output_mode == "content":
+                        _append_match(fp, i, line)
+                        if _limit_reached():
+                            return
 
-            if output_mode == "files_with_matches" and match_count > 0:
+            if options.output_mode == "files_with_matches" and match_count > 0:
                 collected.append(str(fp))
-            elif output_mode == "count" and match_count > 0:
+            elif options.output_mode == "count" and match_count > 0:
                 collected.append(f"{fp}:{match_count}")
-
-            return False
+            if _limit_reached():
+                return
 
         def _is_vcs_dir(p: Path) -> bool:
             return any(part in _VCS_DIRS for part in p.parts)
@@ -528,24 +534,14 @@ class GrepTool(Tool):
         if base.is_file():
             _search_file(base)
         else:
-            glob_pat = f"**/{include}" if include else "**/*"
+            glob_pat = f"**/{options.include}" if options.include else "**/*"
             for fp in sorted(base.glob(glob_pat)):
                 if fp.is_file() and not _is_vcs_dir(fp):
                     _search_file(fp)
+                if _limit_reached():
+                    break
 
         if not collected:
-            return f"No matches found for '{pattern}'"
+            return f"No matches found for '{options.pattern}'"
 
-        # Apply offset and head_limit
-        if offset > 0:
-            collected = collected[offset:]
-        if head_limit > 0:
-            truncated = len(collected) > head_limit
-            collected = collected[:head_limit]
-        else:
-            truncated = False
-
-        result = "\n".join(collected)
-        if truncated:
-            result += f"\n... (truncated at {head_limit} results)"
-        return result
+        return _format_lines(collected, offset=options.offset, head_limit=options.head_limit)
