@@ -43,8 +43,7 @@ def write_narrative(
     lines.append("## Seed Sources")
     lines.append("")
     if seeds:
-        for seed in seeds:
-            lines.append(f"- {seed}")
+        lines.extend(f"- {seed}" for seed in seeds)
     else:
         lines.append("- (no seed material)")
     lines.append("")
@@ -53,8 +52,7 @@ def write_narrative(
     lines.append("## Key Findings")
     lines.append("")
     if findings:
-        for finding in findings:
-            lines.append(f"- {finding}")
+        lines.extend(f"- {finding}" for finding in findings)
     else:
         lines.append("- (no findings recorded)")
     lines.append("")

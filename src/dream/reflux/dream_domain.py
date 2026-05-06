@@ -134,18 +134,21 @@ def _lookup_from_dirs(
 
 # Legacy stubs kept for backward compat — L2 only
 def get_dream_context(topic: str) -> dict[str, Any] | None:
+    del topic
     if DREAM_REFLUX_LEVEL != "L2":
         return None
     return None
 
 
 def list_recent_dreams(limit: int = 5) -> list[dict[str, Any]]:
+    del limit
     if DREAM_REFLUX_LEVEL != "L2":
         return []
     return []
 
 
 def get_dream_insights(session_id: str) -> list[str]:
+    del session_id
     if DREAM_REFLUX_LEVEL != "L2":
         return []
     return []

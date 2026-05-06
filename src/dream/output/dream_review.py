@@ -51,8 +51,7 @@ def write_review(
     lines.append("## Key Findings")
     lines.append("")
     if findings:
-        for f in findings:
-            lines.append(f"- {f}")
+        lines.extend(f"- {finding}" for finding in findings)
     else:
         lines.append("- (no findings recorded)")
     lines.append("")
@@ -71,8 +70,10 @@ def write_review(
     lines.append("## Artifacts Produced")
     lines.append("")
     if artifacts:
-        for a in artifacts:
-            lines.append(f"- `{a.path}` ({a.type}) — {a.description or 'no description'}")
+        lines.extend(
+            f"- `{artifact.path}` ({artifact.type}) — {artifact.description or 'no description'}"
+            for artifact in artifacts
+        )
     else:
         lines.append("- (no artifacts)")
     lines.append("")
@@ -81,8 +82,9 @@ def write_review(
     lines.append("## Suggested Actions")
     lines.append("")
     if artifacts:
-        for a in artifacts:
-            lines.append(f"- [ ] Review and apply/discard: `{a.path}`")
+        lines.extend(
+            f"- [ ] Review and apply/discard: `{artifact.path}`" for artifact in artifacts
+        )
     else:
         lines.append("- [ ] Review narrative for useful insights")
     lines.append("")

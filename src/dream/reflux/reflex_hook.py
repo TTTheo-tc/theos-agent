@@ -17,6 +17,7 @@ def get_dream_injection(intent: str) -> dict[str, Any] | None:
 
     Returns None when injection is disabled (default).
     """
+    del intent
     if not DREAM_INJECT_ENABLED:
         return None
     # Future: match intent against dream insights and return
@@ -29,6 +30,7 @@ def should_inject_dream(domains: list[str]) -> bool:
 
     Returns False when injection is disabled (default).
     """
+    del domains
     if not DREAM_INJECT_ENABLED:
         return False
     # Future: check if any dream sessions have relevant content
