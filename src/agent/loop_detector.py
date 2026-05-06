@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 
 
 class LoopDetector:
@@ -16,17 +17,14 @@ class LoopDetector:
     """
 
     def __init__(self, window: int = 10, threshold: int = 3) -> None:
-        self._window = window
         self._threshold = threshold
-        self._history: list[str] = []
+        self._history: deque[str] = deque(maxlen=window)
         self._denial_counts: dict[str, int] = {}
 
     def record(self, name: str, arguments: dict) -> None:
         """Record a tool call signature after execution."""
         sig = self._signature(name, arguments)
         self._history.append(sig)
-        if len(self._history) > self._window:
-            self._history = self._history[-self._window :]
 
     def check(self) -> str | None:
         """Check if any signature has hit the threshold.
