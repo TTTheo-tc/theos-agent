@@ -77,11 +77,8 @@ class SkillSearchTool(Tool):
         include_unavailable: bool = False,
         **kwargs: Any,
     ) -> str:
-        if not query.strip() and not (domain or "").strip():
-            return json.dumps(
-                {"error": "Provide at least one of 'query' or 'domain'."},
-                ensure_ascii=False,
-            )
+        if error := _validate_search_request(query=query, domain=domain):
+            return _json_response({"error": error})
 
         result = self._skills.search_skills(
             query=query,
@@ -89,4 +86,14 @@ class SkillSearchTool(Tool):
             limit=limit,
             include_unavailable=include_unavailable,
         )
-        return json.dumps(result, ensure_ascii=False)
+        return _json_response(result)
+
+
+def _validate_search_request(*, query: str, domain: str | None) -> str | None:
+    if not query.strip() and not (domain or "").strip():
+        return "Provide at least one of 'query' or 'domain'."
+    return None
+
+
+def _json_response(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False)

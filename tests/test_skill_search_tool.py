@@ -132,3 +132,15 @@ async def test_skill_search_tool_returns_error_for_unknown_domain(tmp_path: Path
 
     assert payload["error"] == "Unknown domain: paper"
     assert "coding/github" in payload["available_domains"]
+
+
+@pytest.mark.asyncio
+async def test_skill_search_tool_requires_search_scope(tmp_path: Path) -> None:
+    loader = _make_loader(tmp_path)
+    tool = SkillSearchTool(loader.workspace)
+    tool._skills = loader
+
+    raw = await tool.execute()
+    payload = json.loads(raw)
+
+    assert payload["error"] == "Provide at least one of 'query' or 'domain'."
