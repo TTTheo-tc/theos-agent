@@ -69,9 +69,7 @@ class MessageTool(ContextAwareTool):
         from src.agent.tools.context import ToolContext
 
         ctx = _context or ToolContext()
-        channel = channel or ctx.channel
-        chat_id = chat_id or ctx.chat_id
-        message_id = message_id or ctx.message_id
+        channel, chat_id, message_id = self._resolve_target(ctx, channel, chat_id, message_id)
 
         if not channel or not chat_id:
             return "Error: No target channel/chat specified"
@@ -79,21 +77,45 @@ class MessageTool(ContextAwareTool):
         if not self._send_callback:
             return "Error: Message sending not configured"
 
-        msg = OutboundMessage(
+        msg = self._build_outbound_message(channel, chat_id, content, message_id, media)
+
+        try:
+            await self._send_callback(msg)
+            self._mark_sent_if_current_target(channel, chat_id, ctx)
+            return self._format_success(channel, chat_id, media)
+        except Exception as e:
+            return f"Error sending message: {str(e)}"
+
+    @staticmethod
+    def _resolve_target(
+        ctx: Any,
+        channel: str | None,
+        chat_id: str | None,
+        message_id: str | None,
+    ) -> tuple[str | None, str | None, str | None]:
+        return channel or ctx.channel, chat_id or ctx.chat_id, message_id or ctx.message_id
+
+    @staticmethod
+    def _build_outbound_message(
+        channel: str,
+        chat_id: str,
+        content: str,
+        message_id: str | None,
+        media: list[str] | None,
+    ) -> OutboundMessage:
+        return OutboundMessage(
             channel=channel,
             chat_id=chat_id,
             content=content,
             media=media or [],
-            metadata={
-                "message_id": message_id,
-            },
+            metadata={"message_id": message_id},
         )
 
-        try:
-            await self._send_callback(msg)
-            if channel == ctx.channel and chat_id == ctx.chat_id:
-                self._messages_sent_in_turn = True
-            media_info = f" with {len(media)} attachments" if media else ""
-            return f"Message sent to {channel}:{chat_id}{media_info}"
-        except Exception as e:
-            return f"Error sending message: {str(e)}"
+    def _mark_sent_if_current_target(self, channel: str, chat_id: str, ctx: Any) -> None:
+        if channel == ctx.channel and chat_id == ctx.chat_id:
+            self._messages_sent_in_turn = True
+
+    @staticmethod
+    def _format_success(channel: str, chat_id: str, media: list[str] | None) -> str:
+        media_info = f" with {len(media)} attachments" if media else ""
+        return f"Message sent to {channel}:{chat_id}{media_info}"
