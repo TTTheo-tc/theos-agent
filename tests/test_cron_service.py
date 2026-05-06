@@ -90,6 +90,24 @@ async def test_run_job_updates_persisted_state(tmp_path) -> None:
     assert restored_job.state.last_run_at_ms is not None
 
 
+async def test_remove_last_job_clears_running_timer(tmp_path) -> None:
+    store_path = tmp_path / "cron" / "jobs.json"
+    service = CronService(store_path)
+    job = service.add_job(
+        name="remove me",
+        schedule=CronSchedule(kind="every", every_ms=60_000),
+        message="hello",
+    )
+
+    await service.start()
+    assert service._timer_task is not None
+
+    assert service.remove_job(job.id) is True
+    assert service._timer_task is None
+
+    service.stop()
+
+
 def test_build_schedule_one_shot_requests_delete_after_run() -> None:
     schedule, delete_after = build_schedule(at="2026-01-02T03:04:05")
 

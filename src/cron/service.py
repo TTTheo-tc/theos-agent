@@ -145,6 +145,10 @@ class CronService:
     def stop(self) -> None:
         """Stop the cron service."""
         self._running = False
+        self._cancel_timer()
+
+    def _cancel_timer(self) -> None:
+        """Cancel and clear the armed timer task."""
         if self._timer_task:
             self._timer_task.cancel()
             self._timer_task = None
@@ -192,8 +196,7 @@ class CronService:
 
     def _arm_timer(self) -> None:
         """Schedule the next timer tick."""
-        if self._timer_task:
-            self._timer_task.cancel()
+        self._cancel_timer()
 
         next_wake = self._get_next_wake_ms()
         if not next_wake or not self._running:
