@@ -53,6 +53,36 @@ def _dump_json(record: dict[str, Any]) -> str:
     return json.dumps(record, ensure_ascii=False, indent=2)
 
 
+async def _execute_get_record(
+    *,
+    workspace_resolver: WorkspaceResolver,
+    context: "ToolContext | None",
+    kwargs: dict[str, Any],
+    unavailable_message: str,
+    arg_name: str,
+    arg_label: str,
+    missing_label: str,
+    loader: Callable[[StructuredMemoryStore, str], Awaitable[dict[str, Any] | None]],
+) -> str:
+    workspace, error = _resolve_workspace(
+        workspace_resolver,
+        context,
+        unavailable_message=unavailable_message,
+    )
+    if error:
+        return error
+    assert workspace is not None
+
+    record_id, error = _required_text_arg(kwargs, arg_name, arg_label)
+    if error:
+        return error
+
+    record = await _load_structured_record(workspace, lambda store: loader(store, record_id))
+    if record is None:
+        return f"{missing_label} '{record_id}' not found."
+    return _dump_json(record)
+
+
 class StructuredMemorySearchTool(ContextAwareTool):
     """Search structured task, rule, and research-note objects."""
 
@@ -202,26 +232,18 @@ class ResearchNoteGetTool(ContextAwareTool):
         }
 
     async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
-        workspace, error = _resolve_workspace(
-            self._workspace_resolver,
-            _context,
-            unavailable_message="Research note retrieval is not available (workspace not resolved).",
+        return await _execute_get_record(
+            workspace_resolver=self._workspace_resolver,
+            context=_context,
+            kwargs=kwargs,
+            unavailable_message=(
+                "Research note retrieval is not available (workspace not resolved)."
+            ),
+            arg_name="note_id",
+            arg_label="research note ID",
+            missing_label="Research note",
+            loader=lambda store, note_id: store.get_research_note(note_id),
         )
-        if error:
-            return error
-        assert workspace is not None
-
-        note_id, error = _required_text_arg(kwargs, "note_id", "research note ID")
-        if error:
-            return error
-
-        note = await _load_structured_record(
-            workspace,
-            lambda store: store.get_research_note(note_id),
-        )
-        if note is None:
-            return f"Research note '{note_id}' not found."
-        return _dump_json(note)
 
 
 class TaskMemoryGetTool(ContextAwareTool):
@@ -255,26 +277,16 @@ class TaskMemoryGetTool(ContextAwareTool):
         }
 
     async def execute(self, _context: "ToolContext | None" = None, **kwargs: Any) -> str:
-        workspace, error = _resolve_workspace(
-            self._workspace_resolver,
-            _context,
+        return await _execute_get_record(
+            workspace_resolver=self._workspace_resolver,
+            context=_context,
+            kwargs=kwargs,
             unavailable_message="Task memory retrieval is not available (workspace not resolved).",
+            arg_name="task_id",
+            arg_label="task memory ID",
+            missing_label="Task memory",
+            loader=lambda store, task_id: store.get_task_memory(task_id),
         )
-        if error:
-            return error
-        assert workspace is not None
-
-        task_id, error = _required_text_arg(kwargs, "task_id", "task memory ID")
-        if error:
-            return error
-
-        task = await _load_structured_record(
-            workspace,
-            lambda store: store.get_task_memory(task_id),
-        )
-        if task is None:
-            return f"Task memory '{task_id}' not found."
-        return _dump_json(task)
 
 
 class DomainRuleGetTool(ContextAwareTool):
