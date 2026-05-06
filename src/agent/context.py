@@ -377,7 +377,7 @@ Skills with available="false" need dependencies installed first - you can try in
         """Merge runtime metadata and the current question into one user turn."""
         if isinstance(user_content, str):
             return f"{runtime_ctx}\n\n[Current Question]\n{user_content}"
-        return [{"type": "text", "text": f"{runtime_ctx}\n\n[Current Question]"}] + user_content
+        return [{"type": "text", "text": f"{runtime_ctx}\n\n[Current Question]"}, *user_content]
 
     # Claude API limit: 5 MB for base64 image payload
     _MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -467,7 +467,7 @@ Skills with available="false" need dependencies installed first - you can try in
 
         if not images:
             return text
-        return images + [{"type": "text", "text": text}]
+        return [*images, {"type": "text", "text": text}]
 
     def add_tool_result(
         self,
