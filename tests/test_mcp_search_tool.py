@@ -123,6 +123,27 @@ async def test_mcp_search_supports_server_filter(tmp_path: Path) -> None:
     assert payload["count"] == 1
     assert payload["matches"][0]["server"] == "feishu"
     assert payload["matches"][0]["tool_name"] == "search_wiki"
+    assert set(payload["matches"][0]) == {
+        "wrapper_name",
+        "tool_name",
+        "server",
+        "transport",
+        "description",
+        "connected",
+        "match_reasons",
+        "matched_domains",
+    }
+
+
+@pytest.mark.asyncio
+async def test_mcp_search_limit_controls_count(tmp_path: Path) -> None:
+    tool = _make_tool(tmp_path)
+
+    raw = await tool.execute(server="github", limit=1)
+    payload = json.loads(raw)
+
+    assert payload["count"] == 1
+    assert len(payload["matches"]) == 1
 
 
 @pytest.mark.asyncio
@@ -145,3 +166,28 @@ async def test_mcp_search_returns_unknown_domain_error(tmp_path: Path) -> None:
 
     assert payload["error"] == "Unknown domain: paper"
     assert "coding/github" in payload["available_domains"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_search_requires_search_scope(tmp_path: Path) -> None:
+    tool = _make_tool(tmp_path)
+
+    raw = await tool.execute()
+    payload = json.loads(raw)
+
+    assert payload["error"] == "Provide at least one of 'query', 'domain', or 'server'."
+
+
+@pytest.mark.asyncio
+async def test_mcp_search_reports_no_configured_servers(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    manager = _FakeMCPManager([])
+    tool = MCPToolSearch(workspace=workspace, manager=manager)
+
+    raw = await tool.execute(query="github")
+    payload = json.loads(raw)
+
+    assert payload["count"] == 0
+    assert payload["matches"] == []
+    assert payload["notice"] == "No MCP servers configured."

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -103,76 +104,35 @@ class MCPToolSearch(Tool):
 
         servers = self._manager.catalog_snapshot()
         if not servers:
-            return {
-                "query": query,
-                "domain": domain,
-                "server": server,
-                "count": 0,
-                "matches": [],
-                "notice": "No MCP servers configured.",
-            }
+            return _empty_result(query=query, domain=domain, server=server, notice="No MCP servers configured.")
 
-        server_filter = (server or "").strip().lower()
-        if server_filter:
-            servers = [entry for entry in servers if entry["server"].lower() == server_filter]
-            if not servers:
-                return {
-                    "query": query,
-                    "domain": domain,
-                    "server": server,
-                    "count": 0,
-                    "matches": [],
-                    "error": f"Unknown MCP server: {server}",
-                    "available_servers": sorted(
-                        entry["server"] for entry in self._manager.catalog_snapshot()
-                    ),
-                }
+        servers, server_error = self._filter_servers(
+            servers, query=query, domain=domain, server=server
+        )
+        if server_error is not None:
+            return server_error
 
         domain_catalog = self._skills.get_domain_catalog()
         resolved_domains = self._skills.resolve_domain_labels(domain) if domain else []
         if domain and not resolved_domains:
-            return {
-                "query": query,
-                "domain": domain,
-                "server": server,
-                "count": 0,
-                "matches": [],
-                "error": f"Unknown domain: {domain}",
-                "available_domains": sorted(domain_catalog),
-            }
+            return _empty_result(
+                query=query,
+                domain=domain,
+                server=server,
+                error=f"Unknown domain: {domain}",
+                available_domains=sorted(domain_catalog),
+            )
 
         domain_terms = self._domain_terms(domain_catalog, resolved_domains)
         query_tokens = self._tokenize(query)
-        matches: list[dict[str, Any]] = []
-
-        for entry in servers:
-            for tool in entry.get("tools", []):
-                score, reasons, matched_domains = self._score_tool(
-                    tool,
-                    server_name=entry["server"],
-                    transport=entry["transport"],
-                    query=query,
-                    query_tokens=query_tokens,
-                    domain_terms=domain_terms,
-                    resolved_domains=resolved_domains,
-                )
-                if (query or domain) and score <= 0:
-                    continue
-                matches.append(
-                    {
-                        "score": score,
-                        "match_reasons": reasons,
-                        "matched_domains": matched_domains,
-                        "tool": {
-                            "wrapper_name": tool["wrapper_name"],
-                            "tool_name": tool["tool_name"],
-                            "server": entry["server"],
-                            "transport": entry["transport"],
-                            "description": tool["description"],
-                            "connected": entry["connected"],
-                        },
-                    }
-                )
+        matches = self._matches(
+            servers,
+            query=query,
+            query_tokens=query_tokens,
+            domain=domain,
+            domain_terms=domain_terms,
+            resolved_domains=resolved_domains,
+        )
 
         matches.sort(
             key=lambda item: (
@@ -183,22 +143,97 @@ class MCPToolSearch(Tool):
         )
 
         snapshots = self._manager.catalog_snapshot()
+        return _result(
+            query=query,
+            domain=domain,
+            server=server,
+            resolved_domains=resolved_domains,
+            configured_servers=len(snapshots),
+            connected_servers=sum(1 for entry in snapshots if entry["connected"]),
+            matches=matches[: max(1, int(limit))],
+        )
+
+    def _filter_servers(
+        self,
+        servers: list[dict[str, Any]],
+        *,
+        query: str,
+        domain: str | None,
+        server: str | None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+        server_filter = (server or "").strip().lower()
+        if not server_filter:
+            return servers, None
+
+        filtered = [entry for entry in servers if entry["server"].lower() == server_filter]
+        if filtered:
+            return filtered, None
+
+        return [], _empty_result(
+            query=query,
+            domain=domain,
+            server=server,
+            error=f"Unknown MCP server: {server}",
+            available_servers=sorted(entry["server"] for entry in self._manager.catalog_snapshot()),
+        )
+
+    def _matches(
+        self,
+        servers: list[dict[str, Any]],
+        *,
+        query: str,
+        query_tokens: list[str],
+        domain: str | None,
+        domain_terms: dict[str, set[str]],
+        resolved_domains: list[str],
+    ) -> list[dict[str, Any]]:
+        matches: list[dict[str, Any]] = []
+        for entry in servers:
+            for tool in entry.get("tools", []):
+                match = self._match_tool(
+                    entry,
+                    tool,
+                    query=query,
+                    query_tokens=query_tokens,
+                    domain_terms=domain_terms,
+                    resolved_domains=resolved_domains,
+                )
+                if (query or domain) and match["score"] <= 0:
+                    continue
+                matches.append(match)
+        return matches
+
+    def _match_tool(
+        self,
+        entry: dict[str, Any],
+        tool: dict[str, Any],
+        *,
+        query: str,
+        query_tokens: list[str],
+        domain_terms: dict[str, set[str]],
+        resolved_domains: list[str],
+    ) -> dict[str, Any]:
+        score, reasons, matched_domains = self._score_tool(
+            tool,
+            server_name=entry["server"],
+            transport=entry["transport"],
+            query=query,
+            query_tokens=query_tokens,
+            domain_terms=domain_terms,
+            resolved_domains=resolved_domains,
+        )
         return {
-            "query": query,
-            "domain": domain,
-            "server": server,
-            "resolved_domains": resolved_domains,
-            "configured_servers": len(snapshots),
-            "connected_servers": sum(1 for entry in snapshots if entry["connected"]),
-            "count": len(matches[: max(1, int(limit))]),
-            "matches": [
-                {
-                    **item["tool"],
-                    "match_reasons": item["match_reasons"],
-                    "matched_domains": item["matched_domains"],
-                }
-                for item in matches[: max(1, int(limit))]
-            ],
+            "score": score,
+            "match_reasons": reasons,
+            "matched_domains": matched_domains,
+            "tool": {
+                "wrapper_name": tool["wrapper_name"],
+                "tool_name": tool["tool_name"],
+                "server": entry["server"],
+                "transport": entry["transport"],
+                "description": tool["description"],
+                "connected": entry["connected"],
+            },
         }
 
     def _score_tool(
@@ -282,3 +317,51 @@ class MCPToolSearch(Tool):
     def _tokenize(self, text: str) -> list[str]:
         """Tokenize mixed-language capability text into simple ASCII-ish terms."""
         return [token for token in re.split(r"[^a-zA-Z0-9_\-/]+", text.lower()) if token]
+
+
+def _empty_result(
+    *,
+    query: str,
+    domain: str | None,
+    server: str | None,
+    **extra: Any,
+) -> dict[str, Any]:
+    return {
+        "query": query,
+        "domain": domain,
+        "server": server,
+        "count": 0,
+        "matches": [],
+        **extra,
+    }
+
+
+def _result(
+    *,
+    query: str,
+    domain: str | None,
+    server: str | None,
+    resolved_domains: list[str],
+    configured_servers: int,
+    connected_servers: int,
+    matches: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    public_matches = [_public_match(item) for item in matches]
+    return {
+        "query": query,
+        "domain": domain,
+        "server": server,
+        "resolved_domains": resolved_domains,
+        "configured_servers": configured_servers,
+        "connected_servers": connected_servers,
+        "count": len(public_matches),
+        "matches": public_matches,
+    }
+
+
+def _public_match(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **item["tool"],
+        "match_reasons": item["match_reasons"],
+        "matched_domains": item["matched_domains"],
+    }
