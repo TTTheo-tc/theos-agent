@@ -37,7 +37,7 @@ def load_config(config_path: Path | None = None) -> Config:
 
     if path.exists():
         try:
-            with open(path, encoding="utf-8") as f:
+            with path.open(encoding="utf-8") as f:
                 data = json.load(f)
             data = _migrate_config(data)
             data, had_plaintext = _decrypt_config_data(data)
@@ -78,7 +78,7 @@ def save_config(config: Config, config_path: Path | None = None, *, compact: boo
     data = config.model_dump(by_alias=True, exclude_defaults=compact)
     data = _encrypt_config_data(data)
 
-    with open(path, "w", encoding="utf-8") as f:
+    with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
