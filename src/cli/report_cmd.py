@@ -41,13 +41,13 @@ async def _generate(period: str) -> str:
         await db.close()
 
 
-def daily():
+def daily() -> None:
     """Generate a daily activity report."""
     report = asyncio.run(_generate("daily"))
     console.print(report)
 
 
-def weekly():
+def weekly() -> None:
     """Generate a weekly activity report."""
     report = asyncio.run(_generate("weekly"))
     console.print(report)
