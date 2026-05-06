@@ -456,6 +456,35 @@ class TestFoldRecallJournal:
         assert target["max_score"] == 0.0
         assert target["total_score"] == 0.0
 
+    def test_fold_skips_unhashable_target_kind(self, tmp_path):
+        from src.memory.recall_maintenance import fold_recall_journal
+
+        _write_journal(
+            tmp_path,
+            [
+                {
+                    "target_kind": [],
+                    "target_id": "rule-bad-kind",
+                    "query_hash": "h1",
+                    "day": "2026-04-14",
+                    "score": 0.5,
+                },
+                {
+                    "target_kind": "rule",
+                    "target_id": "rule-good-kind",
+                    "query_hash": "h2",
+                    "day": "2026-04-14",
+                    "score": 0.7,
+                },
+            ],
+        )
+
+        assert fold_recall_journal(tmp_path) == 1
+
+        targets = json.loads((tmp_path / "memory" / "instinct" / "recall_targets.json").read_text())
+        assert "rule-bad-kind" not in targets
+        assert targets["rule-good-kind"]["recall_count"] == 1
+
     @pytest.mark.asyncio
     async def test_fold_accepts_real_structured_search_rule_entries(self, tmp_path):
         from src.agent.tools.context import ToolContext

@@ -13,9 +13,9 @@ from __future__ import annotations
 import fcntl
 import json
 import math
-import os
 import tempfile
 from collections.abc import Iterator
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -28,26 +28,29 @@ _JOURNAL_REL = _INSTINCT_DIR / "recall_journal.jsonl"
 _TARGETS_REL = _INSTINCT_DIR / "recall_targets.json"
 _CHECKPOINT_REL = _INSTINCT_DIR / "recall_targets.checkpoint.json"
 
+_RECALL_TARGET_KINDS = ("kg_rule", "rule")
 _MAX_QUERY_HASHES = 32
 _MAX_DAYS = 16
 
 
 def _atomic_write(path: Path, content: str) -> None:
     """Write content atomically via tmp file + rename."""
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    tmp_path: Path | None = None
     try:
-        os.write(fd, content.encode())
-        os.close(fd)
-        os.replace(tmp, path)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            dir=path.parent,
+            suffix=".tmp",
+            encoding="utf-8",
+            delete=False,
+        ) as tmp_file:
+            tmp_path = Path(tmp_file.name)
+            tmp_file.write(content)
+        tmp_path.replace(path)
     except Exception:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+        if tmp_path is not None:
+            with suppress(OSError):
+                tmp_path.unlink()
         raise
 
 
@@ -132,7 +135,7 @@ def _fold_recall_entry(
 ) -> str | None:
     target_id = entry.get("target_id")
     kind = entry.get("target_kind", "")
-    if not target_id or kind not in ("kg_rule", "rule"):
+    if not target_id or kind not in _RECALL_TARGET_KINDS:
         return None
 
     target_id = str(target_id)
@@ -177,10 +180,13 @@ def fold_recall_journal(workspace: Path) -> int:
     # Single-instance lock
     lock_path = journal_path.parent / "recall_maintenance.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd: TextIO | None = None
     try:
-        lock_fd = open(lock_path, "w")  # noqa: SIM115
+        lock_fd = lock_path.open("w")
         fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except (OSError, BlockingIOError):
+        if lock_fd is not None:
+            lock_fd.close()
         logger.debug("Recall maintenance lock held by another process, skipping")
         return 0
 
@@ -204,7 +210,7 @@ def _fold_recall_journal_locked(workspace: Path) -> int:
 
     updated_ids: set[str] = set()
     try:
-        with open(journal_path, "r") as f:
+        with journal_path.open(encoding="utf-8") as f:
             f.seek(offset)
             for entry in _iter_jsonl(f):
                 target_id = _fold_recall_entry(targets, entry)
