@@ -94,6 +94,7 @@ class AutonomyPolicy:
         return self._level
 
     def check_tool_allowed(self, tool_name: str, risk_level: str) -> str | None:
+        del risk_level
         if self._level == AutonomyLevel.READONLY and tool_name in READONLY_BLOCKED_TOOLS:
             return f"Tool '{tool_name}' blocked: autonomy level is readonly"
         return None

@@ -169,6 +169,7 @@ class _RiskyTool(Tool):
         return "high" if "danger" in command else "medium"
 
     async def execute(self, **kwargs: Any) -> str:
+        del kwargs
         return "ok"
 
 

@@ -23,7 +23,7 @@ def test_resolve_secret_ref_prefers_auth_store(monkeypatch) -> None:
 
 
 def test_resolve_secret_ref_falls_back_to_env(monkeypatch) -> None:
-    monkeypatch.setattr("src.auth.store.get_api_key_for_provider", lambda name: None)
+    monkeypatch.setattr("src.auth.store.get_api_key_for_provider", lambda _: None)
     monkeypatch.setenv("TELEGRAM_BOT", "tg-secret")
 
     assert resolve_secret_ref("secret://telegram-bot") == "tg-secret"
@@ -92,11 +92,12 @@ def test_channel_manager_passes_resolved_channel_config(monkeypatch) -> None:
 
     class _FakeChannel:
         def __init__(self, config, bus, **kwargs):
+            del bus, kwargs
             captured["token"] = config.token
             self.is_running = False
 
     fake_module = SimpleNamespace(TelegramChannel=_FakeChannel)
-    monkeypatch.setattr("importlib.import_module", lambda path: fake_module)
+    monkeypatch.setattr("importlib.import_module", lambda _: fake_module)
 
     config = Config()
     config.channels.telegram.enabled = True
