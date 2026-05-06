@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from loguru import logger
 
@@ -41,7 +40,7 @@ class TurnLifecycle:
 
         Runs message processing with optional policy hooks.
         """
-        turn = TurnRecord(turn_id=uuid4().hex[:12], session_key=msg.session_key)
+        turn = TurnRecord(session_key=msg.session_key)
 
         for p in self.policies:
             await p.before_execute(turn, msg)
