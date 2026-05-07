@@ -7,9 +7,10 @@ import importlib.util
 import json
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Literal
+from typing import Any, Literal
 
 from loguru import logger
 
@@ -57,31 +58,34 @@ def _compute_next_run(schedule: CronSchedule, now_ms: int) -> int | None:
 def _validate_schedule_for_add(schedule: CronSchedule, *, now_ms: int | None = None) -> None:
     """Validate schedule fields that would otherwise create non-runnable jobs."""
     reference_ms = _now_ms() if now_ms is None else now_ms
+
     if schedule.tz and schedule.kind != "cron":
         raise ValueError("tz can only be used with cron schedules")
-
     if schedule.kind == "at":
         if not schedule.at_ms or schedule.at_ms <= reference_ms:
             raise ValueError("at schedule must be in the future")
         return
-
     if schedule.kind == "every":
         if not schedule.every_ms or schedule.every_ms <= 0:
             raise ValueError("every schedule requires every_ms > 0")
         return
 
-    if schedule.kind == "cron" and schedule.tz:
+    _validate_cron_schedule(schedule, reference_ms)
+
+
+def _validate_cron_schedule(schedule: CronSchedule, reference_ms: int) -> None:
+    if schedule.tz:
         try:
             from zoneinfo import ZoneInfo
 
             ZoneInfo(schedule.tz)
         except Exception:
             raise ValueError(f"unknown timezone '{schedule.tz}'") from None
-    if schedule.kind == "cron" and not schedule.expr:
+    if not schedule.expr:
         raise ValueError("cron schedule requires expr")
     if importlib.util.find_spec("croniter") is None:
         raise ValueError("cron schedules require croniter; install the gateway extra")
-    if schedule.kind == "cron" and _compute_next_run(schedule, reference_ms) is None:
+    if _compute_next_run(schedule, reference_ms) is None:
         raise ValueError("cron schedule could not compute next run")
 
 

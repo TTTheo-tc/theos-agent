@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
@@ -55,8 +56,8 @@ class HeartbeatService:
         workspace: Path,
         provider: LLMProvider,
         model: str,
-        on_execute: Callable[[str], Coroutine[Any, Any, str]] | None = None,
-        on_notify: Callable[[str], Coroutine[Any, Any, None]] | None = None,
+        on_execute: Callable[[str], Awaitable[str]] | None = None,
+        on_notify: Callable[[str], Awaitable[None]] | None = None,
         interval_s: int = 30 * 60,
         enabled: bool = True,
     ) -> None:
