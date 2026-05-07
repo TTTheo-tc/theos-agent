@@ -94,6 +94,23 @@ class BaseChannel(ABC):
         """Check if sender is an owner (supports composite 'id|username' format)."""
         return identity_matches(sender_id, self._owner_ids)
 
+    def _can_accept_inbound(self, sender_id: str) -> bool:
+        """Apply inbound pause and allow-list checks consistently."""
+        if not self._accept_inbound:
+            logger.info("Ignoring inbound message on paused channel {}", self.name)
+            return False
+
+        if not self.is_allowed(sender_id):
+            logger.warning(
+                "Access denied for sender {} on channel {}. "
+                "Add them to allowFrom list in config to grant access.",
+                sender_id,
+                self.name,
+            )
+            return False
+
+        return True
+
     async def _handle_message(
         self,
         sender_id: str,
@@ -102,7 +119,7 @@ class BaseChannel(ABC):
         media: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
         session_key: str | None = None,
-    ) -> None:
+    ) -> bool:
         """
         Handle an incoming message from the chat platform.
 
@@ -115,19 +132,12 @@ class BaseChannel(ABC):
             media: Optional list of media URLs.
             metadata: Optional channel-specific metadata.
             session_key: Optional session key override (e.g. thread-scoped sessions).
-        """
-        if not self._accept_inbound:
-            logger.info("Ignoring inbound message on paused channel {}", self.name)
-            return
 
-        if not self.is_allowed(sender_id):
-            logger.warning(
-                "Access denied for sender {} on channel {}. "
-                "Add them to allowFrom list in config to grant access.",
-                sender_id,
-                self.name,
-            )
-            return
+        Returns:
+            True when the message was published, False when it was rejected.
+        """
+        if not self._can_accept_inbound(sender_id):
+            return False
 
         msg = InboundMessage(
             channel=self.name,
@@ -141,6 +151,7 @@ class BaseChannel(ABC):
         )
 
         await self.bus.publish_inbound(msg)
+        return True
 
     def pause_inbound(self) -> None:
         """Stop accepting new inbound messages while allowing outbound sends."""

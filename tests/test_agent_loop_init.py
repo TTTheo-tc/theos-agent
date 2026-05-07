@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -389,6 +390,28 @@ def test_basechannel_composite_owner_ids():
     assert channel._is_owner_sender("12345|alice") is True
     assert channel._is_owner_sender("99999|bob") is False
     assert channel._is_owner_sender("unknown") is False
+
+
+@pytest.mark.asyncio
+async def test_basechannel_handle_message_reports_publish_state():
+    """BaseChannel reports whether inbound routing accepted the message."""
+    from src.channels.base import BaseChannel
+
+    class _Stub(BaseChannel):
+        async def start(self) -> None: ...
+        async def stop(self) -> None: ...
+        async def send(self, msg) -> None: ...
+
+    bus = MessageBus()
+    channel = _Stub(config=SimpleNamespace(allow_from=["12345"]), bus=bus)
+
+    assert await channel._handle_message("unknown", "chat", "blocked") is False
+    assert bus.inbound_size == 0
+
+    assert await channel._handle_message("12345|alice", "chat", "allowed") is True
+    inbound = await bus.consume_inbound()
+    assert inbound.sender_id == "12345|alice"
+    assert inbound.content == "allowed"
 
 
 # --- Test 9: _is_owner composite sender ids in AgentLoop ---

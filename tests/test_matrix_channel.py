@@ -304,8 +304,9 @@ async def test_on_message_sets_typing_for_allowed_sender() -> None:
 
     handled: list[str] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs["sender_id"])
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -317,6 +318,29 @@ async def test_on_message_sets_typing_for_allowed_sender() -> None:
     assert handled == ["@alice:matrix.org"]
     assert client.typing_calls == [
         ("!room:matrix.org", True, TYPING_NOTICE_TIMEOUT_MS),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_on_message_clears_typing_when_publish_is_rejected() -> None:
+    channel = MatrixChannel(_make_config(), MessageBus())
+    client = _FakeAsyncClient("", "", "", None)
+    channel.client = client
+
+    async def _fake_handle_message(**kwargs) -> bool:
+        del kwargs
+        return False
+
+    channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
+
+    room = SimpleNamespace(room_id="!room:matrix.org", display_name="Test room")
+    event = SimpleNamespace(sender="@alice:matrix.org", body="Hello", source={})
+
+    await channel._on_message(room, event)
+
+    assert client.typing_calls == [
+        ("!room:matrix.org", True, TYPING_NOTICE_TIMEOUT_MS),
+        ("!room:matrix.org", False, TYPING_NOTICE_TIMEOUT_MS),
     ]
 
 
@@ -360,8 +384,9 @@ async def test_on_message_skips_typing_for_denied_sender() -> None:
 
     handled: list[str] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs["sender_id"])
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -382,8 +407,9 @@ async def test_on_message_mention_policy_requires_mx_mentions() -> None:
 
     handled: list[str] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs["sender_id"])
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -404,8 +430,9 @@ async def test_on_message_mention_policy_accepts_bot_user_mentions() -> None:
 
     handled: list[str] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs["sender_id"])
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -430,8 +457,9 @@ async def test_on_message_mention_policy_allows_direct_room_without_mentions() -
 
     handled: list[str] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs["sender_id"])
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -455,8 +483,9 @@ async def test_on_message_allowlist_policy_requires_room_id() -> None:
 
     handled: list[str] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs["chat_id"])
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -485,8 +514,9 @@ async def test_on_message_room_mention_requires_opt_in() -> None:
 
     handled: list[str] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs["sender_id"])
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -515,8 +545,9 @@ async def test_on_message_sets_thread_metadata_when_threaded_event() -> None:
 
     handled: list[dict[str, object]] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs)
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -557,8 +588,9 @@ async def test_on_media_message_downloads_attachment_and_sets_metadata(
 
     handled: list[dict[str, object]] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs)
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -610,8 +642,9 @@ async def test_on_media_message_sets_thread_metadata_when_threaded_event(
 
     handled: list[dict[str, object]] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs)
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -652,8 +685,9 @@ async def test_on_media_message_respects_declared_size_limit(monkeypatch, tmp_pa
 
     handled: list[dict[str, object]] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs)
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -688,8 +722,9 @@ async def test_on_media_message_uses_server_limit_when_smaller_than_local_limit(
 
     handled: list[dict[str, object]] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs)
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -722,8 +757,9 @@ async def test_on_media_message_handles_download_error(monkeypatch, tmp_path) ->
 
     handled: list[dict[str, object]] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs)
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -761,8 +797,9 @@ async def test_on_media_message_decrypts_encrypted_media(monkeypatch, tmp_path) 
 
     handled: list[dict[str, object]] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs)
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 
@@ -804,8 +841,9 @@ async def test_on_media_message_handles_decrypt_error(monkeypatch, tmp_path) -> 
 
     handled: list[dict[str, object]] = []
 
-    async def _fake_handle_message(**kwargs) -> None:
+    async def _fake_handle_message(**kwargs) -> bool:
         handled.append(kwargs)
+        return True
 
     channel._handle_message = _fake_handle_message  # type: ignore[method-assign]
 

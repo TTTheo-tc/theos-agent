@@ -57,16 +57,6 @@ class SlackChannel(BaseChannel):
         except Exception as e:
             logger.warning("Slack auth_test failed: {}", e)
 
-        base_allow = getattr(self.config, "allow_from", [])
-        has_slack_acl = (
-            self.config.dm.policy == "allowlist" or self.config.group_policy == "allowlist"
-        )
-        if base_allow and has_slack_acl:
-            logger.warning(
-                "Slack has both global allowFrom and Slack-specific ACL configured. "
-                "Both must pass for a message to be processed."
-            )
-
         logger.info("Starting Slack Socket Mode client...")
         await self._socket_client.connect()
 
@@ -208,6 +198,9 @@ class SlackChannel(BaseChannel):
             logger.opt(exception=True).warning("Error handling Slack message from {}", sender_id)
 
     def _is_allowed(self, sender_id: str, chat_id: str, channel_type: str) -> bool:
+        if not self._can_accept_inbound(sender_id):
+            return False
+
         if channel_type == "im":
             if not self.config.dm.enabled:
                 return False

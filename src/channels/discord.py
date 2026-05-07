@@ -17,7 +17,6 @@ from src.utils.text import split_message as _split_message
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
 MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20MB
-MAX_MESSAGE_LEN = 2000  # Discord message character limit
 
 
 class DiscordChannel(BaseChannel):
@@ -240,7 +239,7 @@ class DiscordChannel(BaseChannel):
         if not sender_id or not channel_id:
             return
 
-        if not self.is_allowed(sender_id):
+        if not self._can_accept_inbound(sender_id):
             return
 
         content_parts = [content] if content else []
@@ -274,7 +273,7 @@ class DiscordChannel(BaseChannel):
 
         await self._start_typing(channel_id)
 
-        await self._handle_message(
+        published = await self._handle_message(
             sender_id=sender_id,
             chat_id=channel_id,
             content="\n".join(p for p in content_parts if p) or "[empty message]",
@@ -285,6 +284,8 @@ class DiscordChannel(BaseChannel):
                 "reply_to": reply_to,
             },
         )
+        if not published:
+            await self._stop_typing(channel_id)
 
     async def _start_typing(self, channel_id: str) -> None:
         """Start periodic typing indicator for a channel."""

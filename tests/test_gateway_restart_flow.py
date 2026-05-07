@@ -69,8 +69,9 @@ async def test_paused_channel_drops_inbound_messages():
     channel = _StubChannel(config=SimpleNamespace(allow_from=[]), bus=bus, owner_ids=["owner"])
     channel.pause_inbound()
 
-    await channel._handle_message("owner", "chat", "hello")
+    published = await channel._handle_message("owner", "chat", "hello")
 
+    assert published is False
     assert bus.inbound_size == 0
 
 

@@ -546,7 +546,7 @@ class MatrixChannel(BaseChannel):
 
     def _should_process_message(self, room: MatrixRoom, event: RoomMessage) -> bool:
         """Apply sender and room policy checks."""
-        if not self.is_allowed(event.sender):
+        if not self._can_accept_inbound(event.sender):
             return False
         if self._is_direct_room(room):
             return True
@@ -747,12 +747,14 @@ class MatrixChannel(BaseChannel):
             return
         await self._start_typing_keepalive(room.room_id)
         try:
-            await self._handle_message(
+            published = await self._handle_message(
                 sender_id=event.sender,
                 chat_id=room.room_id,
                 content=event.body,
                 metadata=self._base_metadata(room, event),
             )
+            if not published:
+                await self._stop_typing_keepalive(room.room_id, clear_typing=True)
         except Exception:
             await self._stop_typing_keepalive(room.room_id, clear_typing=True)
             raise
@@ -771,13 +773,15 @@ class MatrixChannel(BaseChannel):
             meta = self._base_metadata(room, event)
             if attachment:
                 meta["attachments"] = [attachment]
-            await self._handle_message(
+            published = await self._handle_message(
                 sender_id=event.sender,
                 chat_id=room.room_id,
                 content="\n".join(parts),
                 media=[attachment["path"]] if attachment else [],
                 metadata=meta,
             )
+            if not published:
+                await self._stop_typing_keepalive(room.room_id, clear_typing=True)
         except Exception:
             await self._stop_typing_keepalive(room.room_id, clear_typing=True)
             raise

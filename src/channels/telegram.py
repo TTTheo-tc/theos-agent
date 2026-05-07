@@ -340,6 +340,8 @@ class TelegramChannel(BaseChannel):
         user = update.effective_user
         chat_id = message.chat_id
         sender_id = self._sender_id(user)
+        if not self._can_accept_inbound(sender_id):
+            return
 
         # Build content from text and/or media
         content_parts = []
@@ -438,7 +440,7 @@ class TelegramChannel(BaseChannel):
         self._start_typing(str_chat_id)
 
         # Forward to the message bus
-        await self._handle_message(
+        published = await self._handle_message(
             sender_id=sender_id,
             chat_id=str_chat_id,
             content=content,
@@ -451,6 +453,8 @@ class TelegramChannel(BaseChannel):
                 "is_group": message.chat.type != "private",
             },
         )
+        if not published:
+            self._stop_typing(str_chat_id)
 
     async def _flush_media_group(self, key: str) -> None:
         """Wait briefly, then forward buffered media-group as one turn."""
@@ -459,13 +463,15 @@ class TelegramChannel(BaseChannel):
             if not (buf := self._media_group_buffers.pop(key, None)):
                 return
             content = "\n".join(buf["contents"]) or "[empty message]"
-            await self._handle_message(
+            published = await self._handle_message(
                 sender_id=buf["sender_id"],
                 chat_id=buf["chat_id"],
                 content=content,
                 media=list(dict.fromkeys(buf["media"])),
                 metadata=buf["metadata"],
             )
+            if not published:
+                self._stop_typing(buf["chat_id"])
         finally:
             self._media_group_tasks.pop(key, None)
 
