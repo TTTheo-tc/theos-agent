@@ -45,6 +45,25 @@ async def test_emit_event_works_without_callback(writer: DashboardWriter):
     # No error raised — success
 
 
+async def test_emit_event_serializes_non_json_payload_values(writer: DashboardWriter):
+    """Non-JSON-native telemetry payloads should not break best-effort writes."""
+    received = []
+
+    async def on_event(event: dict):
+        received.append(event)
+
+    writer.set_event_callback(on_event)
+    await writer.upsert_session("test:key", "cli")
+    await writer.emit_event(
+        "test:key",
+        "path_seen",
+        payload={"path": Path("/tmp/example.txt")},
+    )
+
+    assert len(received) == 1
+    assert '"/tmp/example.txt"' in received[0]["payload"]
+
+
 async def test_callback_error_does_not_block(writer: DashboardWriter):
     """A failing callback must not prevent the event from being written."""
 

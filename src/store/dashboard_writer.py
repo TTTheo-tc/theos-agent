@@ -86,6 +86,16 @@ def _session_id(session_key: str) -> str:
     return hashlib.sha256(session_key.encode()).hexdigest()[:16]
 
 
+def _payload_json(payload: dict[str, Any] | None) -> str:
+    """Serialize dashboard payloads without letting telemetry block the agent."""
+    try:
+        raw = json.dumps(payload or {}, default=str)
+    except Exception:
+        logger.opt(exception=True).debug("Dashboard payload serialization failed")
+        raw = "{}"
+    return scrub_credentials(raw)
+
+
 class DashboardWriter:
     """Async SQLite writer for the web dashboard DB."""
 
@@ -217,7 +227,7 @@ class DashboardWriter:
         payload: dict[str, Any] | None = None,
     ) -> None:
         sid = _session_id(session_key)
-        scrubbed_payload = scrub_credentials(json.dumps(payload or {}))
+        scrubbed_payload = _payload_json(payload)
         now = _now()
         if not self._conn:
             return
