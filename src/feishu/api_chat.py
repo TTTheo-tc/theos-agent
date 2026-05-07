@@ -26,17 +26,12 @@ from lark_oapi.api.im.v1 import (
     UpdateChatRequestBody,
 )
 
-from src.feishu.api import _call_with_option, _check, _request_option, _unmarshal
+from src.feishu.api import _call_with_option, _check, _extend_items, _request_option, _unmarshal
 from src.feishu.retry import with_retry
 
 # ---------------------------------------------------------------------------
 # Chat CRUD
 # ---------------------------------------------------------------------------
-
-
-def _extend_items(target: list[dict], items) -> None:
-    if items:
-        target.extend(_unmarshal(items))
 
 
 def create_chat(
@@ -175,7 +170,7 @@ def list_chat_members(client: lark.Client, chat_id: str) -> list[dict]:
         _check(response, "list_chat_members")
 
         data = response.data
-        _extend_items(members, data.items)
+        _extend_items(members, data.items, _unmarshal)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -301,7 +296,7 @@ def list_chat_messages(
         _check(response, "list_chat_messages")
 
         data = response.data
-        _extend_items(messages, data.items)
+        _extend_items(messages, data.items, _unmarshal)
         if not data.has_more:
             break
         page_token = data.page_token

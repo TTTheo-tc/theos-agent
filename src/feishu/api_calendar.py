@@ -23,17 +23,12 @@ from lark_oapi.api.calendar.v4 import (
     TimeInfo,
 )
 
-from src.feishu.api import _call_with_option, _check, _request_option, _unmarshal
+from src.feishu.api import _call_with_option, _check, _extend_items, _request_option, _unmarshal
 from src.feishu.retry import with_retry
 
 # ---------------------------------------------------------------------------
 # Read operations
 # ---------------------------------------------------------------------------
-
-
-def _extend_items(target: list[dict], items) -> None:
-    if items:
-        target.extend(_unmarshal(items))
 
 
 def list_calendars(client: lark.Client) -> list[dict]:
@@ -55,7 +50,7 @@ def list_calendars(client: lark.Client) -> list[dict]:
         _check(response, "list_calendars")
 
         data = response.data
-        _extend_items(calendars, data.calendar_list)
+        _extend_items(calendars, data.calendar_list, _unmarshal)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -104,7 +99,7 @@ def list_events(
         _check(response, "list_events")
 
         data = response.data
-        _extend_items(events, data.items)
+        _extend_items(events, data.items, _unmarshal)
         if not data.has_more:
             break
         page_token = data.page_token

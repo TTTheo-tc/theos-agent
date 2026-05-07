@@ -11,7 +11,9 @@ Token precedence for user-scoped APIs:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from contextvars import ContextVar
+from typing import Any, cast
 
 import lark_oapi as lark
 from lark_oapi import RequestOption
@@ -65,6 +67,16 @@ def _unmarshal(obj) -> dict | list:
     if isinstance(raw, str):
         return json.loads(raw)
     return raw
+
+
+def _extend_items(
+    target: list[dict[str, Any]],
+    items: Any,
+    unmarshal: Callable[[Any], Any] = _unmarshal,
+) -> None:
+    """Append SDK item collections to a result list after unmarshalling."""
+    if items:
+        target.extend(cast(list[dict[str, Any]], unmarshal(items)))
 
 
 # Legacy compat — used by extra/bitable.py (httpx raw-call style, to be migrated)

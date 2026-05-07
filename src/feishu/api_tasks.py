@@ -26,17 +26,12 @@ from lark_oapi.api.task.v2 import (
     Reminder,
 )
 
-from src.feishu.api import _call_with_option, _check, _request_option, _unmarshal
+from src.feishu.api import _call_with_option, _check, _extend_items, _request_option, _unmarshal
 from src.feishu.retry import with_retry
 
 # ---------------------------------------------------------------------------
 # Read operations
 # ---------------------------------------------------------------------------
-
-
-def _extend_items(target: list[dict], items) -> None:
-    if items:
-        target.extend(_unmarshal(items))
 
 
 def list_tasks(
@@ -68,7 +63,7 @@ def list_tasks(
         _check(response, "list_tasks")
 
         data = response.data
-        _extend_items(tasks, data.items)
+        _extend_items(tasks, data.items, _unmarshal)
         if not data.has_more:
             break
         page_token = data.page_token

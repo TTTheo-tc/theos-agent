@@ -21,6 +21,7 @@ from lark_oapi.api.contact.v3 import (
 from src.feishu.api import (
     _call_with_option,
     _check,
+    _extend_items,
     _request_option,
     _unmarshal,
     search_users,
@@ -40,11 +41,6 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Department operations
 # ---------------------------------------------------------------------------
-
-
-def _extend_items(target: list[dict], items) -> None:
-    if items:
-        target.extend(_unmarshal(items))
 
 
 def list_departments(
@@ -79,7 +75,7 @@ def list_departments(
         _check(response, "list_departments")
 
         data = response.data
-        _extend_items(departments, data.items)
+        _extend_items(departments, data.items, _unmarshal)
         if not data.has_more:
             break
         page_token = data.page_token
@@ -142,7 +138,7 @@ def list_department_users(
         _check(response, "list_department_users")
 
         data = response.data
-        _extend_items(users, data.items)
+        _extend_items(users, data.items, _unmarshal)
         if not data.has_more:
             break
         page_token = data.page_token
