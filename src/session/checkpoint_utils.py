@@ -69,6 +69,21 @@ def latest_checkpoint_row(path: Path, checkpoint_type: str) -> dict[str, Any] | 
     return latest
 
 
+def latest_checkpoint_by_id(
+    path: Path,
+    checkpoint_type: str,
+    id_key: str,
+) -> dict[Any, dict[str, Any]]:
+    """Read the latest checkpoint row for each id value in *id_key*."""
+    latest: dict[Any, dict[str, Any]] = {}
+    try:
+        for row in iter_checkpoint_rows(path, checkpoint_type):
+            latest[row.get(id_key, "")] = row
+    except Exception:
+        logger.opt(exception=True).warning("Failed to read checkpoint rows from {}", path)
+    return latest
+
+
 def jsonable_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """Return checkpoint metadata converted to JSON-safe values."""
 

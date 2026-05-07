@@ -13,8 +13,8 @@ from src.session.checkpoint_utils import (
     checkpoint_metadata,
     checkpoint_path,
     checkpoint_timestamp,
-    iter_checkpoint_rows,
     jsonable_metadata,
+    latest_checkpoint_by_id,
 )
 from src.utils.helpers import ensure_dir
 
@@ -107,7 +107,11 @@ class SubagentStore:
     def _latest_by_task_from_path(self, path: Path) -> dict[str, SubagentCheckpoint]:
         latest: dict[str, SubagentCheckpoint] = {}
         try:
-            for row in iter_checkpoint_rows(path, "subagent_checkpoint"):
+            for row in latest_checkpoint_by_id(
+                path,
+                "subagent_checkpoint",
+                "task_id",
+            ).values():
                 cp = self._from_row(row)
                 if cp is not None:
                     latest[cp.task_id] = cp

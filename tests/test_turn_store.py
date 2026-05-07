@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.session.checkpoint_utils import latest_checkpoint_row, read_checkpoint_rows
+from src.session.checkpoint_utils import (
+    latest_checkpoint_by_id,
+    latest_checkpoint_row,
+    read_checkpoint_rows,
+)
 from src.session.turn_store import TurnStore
 
 
@@ -143,3 +147,42 @@ def test_latest_checkpoint_row_skips_corrupt_lines(tmp_path: Path):
 
     assert row is not None
     assert row["turn_id"] == "c"
+
+
+def test_latest_checkpoint_by_id_returns_last_row_per_id(tmp_path: Path):
+    path = tmp_path / "checkpoints.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                '{"_type":"subagent_checkpoint","task_id":"a","status":"pending"}',
+                '{"_type":"subagent_checkpoint","task_id":"b","status":"running"}',
+                '{"_type":"subagent_checkpoint","task_id":"a","status":"completed"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = latest_checkpoint_by_id(path, "subagent_checkpoint", "task_id")
+
+    assert rows["a"]["status"] == "completed"
+    assert rows["b"]["status"] == "running"
+
+
+def test_latest_checkpoint_by_id_preserves_legacy_missing_id_keys(tmp_path: Path):
+    path = tmp_path / "checkpoints.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                '{"_type":"subagent_checkpoint","status":"missing"}',
+                '{"_type":"subagent_checkpoint","task_id":null,"status":"null"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = latest_checkpoint_by_id(path, "subagent_checkpoint", "task_id")
+
+    assert rows[""]["status"] == "missing"
+    assert rows[None]["status"] == "null"
