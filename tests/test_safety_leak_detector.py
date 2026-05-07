@@ -182,18 +182,245 @@ def test_high_entropy_ignores_base64_padded():
     assert len(hits) == 0
 
 
+def test_high_entropy_ignores_standard_base64_padded():
+    text = "data=d2ljPDh+QSMmUVRZc28rSz9hICp0aGNHLjBDaj5pKlw="
+    hits = _check_high_entropy(text, sensitivity=0.7)
+    assert len(hits) == 0
+
+
+def test_high_entropy_detects_padded_base64_secret():
+    token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT=="
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"token={token}")
+    assert not result.clean
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_encoded_known_secret_text():
+    token = "YXBpIGtleSBzay1hbnQtc2VjcmV0MTIzNDU2Nzg5MA=="
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.should_block
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_unpadded_standard_base64_with_slash_secret():
+    token = "YXBpIGtleSBzay1hbnQtPz8/P3NlY3JldDEyMzQ1Njc4OTA"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.should_block
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_unpadded_standard_base64_with_multiple_slash_secret():
+    token = "c2stYW50LT8/Pz8/Pz8/c2VjcmV0MTIzNDU2Nzg5MA"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.should_block
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_unpadded_standard_base64_with_slash_opaque_token():
+    token = "e2HqrehIuRqovC2l1mD4Z/dHhdFJFJvyMytFBfYdac0"
+    hits = _check_high_entropy(f"data={token}", sensitivity=0.7)
+    assert len(hits) == 1
+
+
+def test_high_entropy_detects_direct_multi_slash_token():
+    token = "xK9mR2pL7qW4nJ6v/B8cY3hF5gT0sA1dE/Z9qW"
+    hits = _check_high_entropy(f"data={token}", sensitivity=0.7)
+    assert len(hits) == 1
+
+
+def test_high_entropy_detects_encoded_generic_credential_text():
+    token = "YXBpIGtleSBhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ejEyMzQ1Ng=="
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_encoded_credential_prose():
+    token = "YXBpIGtleSBpcyBhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ejEyMzQ1Ng=="
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_encoded_high_entropy_text():
+    token = "aGVyZSBpcyB4SzltUjJwTDdxVzRuSjZ2QjhjWTNoRjVnVDBzQTFkRQ=="
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_encoded_slash_delimited_token_text():
+    token = "aGVyZSBpcyB4SzltUjJwTDdxVzRuSjZ2L0I4Y1kzaEY1Z1Qwc0ExZEU="
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_encoded_path_like_slash_token_text():
+    token = "aGVyZSBpcyB0bXAveEs5bVIycEw3cVc0bko2di9COGNZM2hGNVFnVDBzQTFkRS9aOXFX"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_encoded_low_entropy_credential_text():
+    token = "cGFzc3dvcmQgYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_unpadded_encoded_known_secret_text():
+    token = "c2stYW50LWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.should_block
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_detects_padded_encoded_known_secret_text_without_spaces():
+    token = "c2stYW50LWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"data={token}")
+    assert not result.clean
+    assert result.should_block
+    assert result.redacted_text is not None
+    assert token not in result.redacted_text
+
+
+def test_high_entropy_ignores_safe_base64_with_slash_subtoken():
+    text = (
+        "data=UGxlYXNlIGVuY29kZSB0aGlzIGhhcm1sZXNzIG1lc3NhZ2UgYWI/"
+        "IGZvciB0cmFuc3BvcnQgYmV0d2VlbiBzZXJ2aWNlcyB4eQ=="
+    )
+    hits = _check_high_entropy(text, sensitivity=0.7)
+    assert len(hits) == 0
+
+
+def test_high_entropy_does_not_treat_equals_delimiter_as_padding():
+    token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+    text = f"key={token}=next"
+    hits = _check_high_entropy(text, sensitivity=0.7)
+    assert len(hits) == 1
+    start, end, _tag = hits[0]
+    assert text[start:end] == token
+
+
+def test_high_entropy_invalid_padding_still_detected():
+    token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+    for text in (f"key={token}=", f"key={token}=.", f"key={token}= ", f"key={token}==="):
+        hits = _check_high_entropy(text, sensitivity=0.7)
+        assert len(hits) == 1
+        start, end, _tag = hits[0]
+        assert text[start:end] == token
+
+
+def test_high_entropy_slash_token_invalid_padding_still_detected():
+    token = "xK9mR2pL7qW4nJ6v/B8cY3hF5gT0sA1dE"
+    hits = _check_high_entropy(f"key={token}=", sensitivity=0.7)
+    assert len(hits) == 1
+    start, end, _tag = hits[0]
+    assert f"key={token}="[start:end] == token
+
+
 def test_high_entropy_ignores_url_content():
     text = "visit https://example.com/xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE/page"
     hits = _check_high_entropy(text, sensitivity=0.7)
     assert len(hits) == 0
 
 
-def test_high_entropy_respects_sensitivity():
+def test_high_entropy_ignores_path_like_text():
+    text = "/opt/homebrew/lib/node_modules/openclaw/dist/io-DaEsZ_NY.js"
+    hits = _check_high_entropy(text, sensitivity=0.7)
+    assert len(hits) == 0
+
+
+def test_high_entropy_ignores_path_like_text_with_line_suffix():
+    text = "/opt/homebrew/lib/node_modules/openclaw/dist/io-DaEsZ_NY.js:2888:32"
+    hits = _check_high_entropy(text, sensitivity=0.7)
+    assert len(hits) == 0
+
+
+def test_high_entropy_ignores_relative_asset_path():
+    text = "assets/chunk-A1B2C3D4E5F6G7H8I9J0K1L2.js"
+    hits = _check_high_entropy(text, sensitivity=0.7)
+    assert len(hits) == 0
+
+
+def test_high_entropy_ignores_common_build_asset_paths():
+    for text in (
+        "assets/index-A1B2C3D4E5F6G7H8I9J0K1L2.js",
+        "assets/main-A1B2C3D4E5F6G7H8I9J0K1L2.css",
+        "dist/client/index-A1B2C3D4E5F6G7H8I9J0K1L2.js",
+        "assets/chunk-A1B2C3D4E5F6G7H8I9J0K1L2.js:1:2",
+    ):
+        hits = _check_high_entropy(text, sensitivity=0.7)
+        assert len(hits) == 0
+
+
+def test_high_entropy_detects_path_leaf_token():
     token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+    hits = _check_high_entropy(f"tmp/{token}", sensitivity=0.7)
+    assert len(hits) == 1
+
+
+def test_high_entropy_detects_path_leaf_slash_token():
+    token = "xK9mR2pL7qW4nJ6v/B8cY3hF5gT0sA1dE/Z9qW"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"tmp/{token}")
+    assert not result.clean
+    assert result.redacted_text == "tmp/[REDACTED_HIGH_ENTROPY_TOKEN]"
+
+
+def test_high_entropy_detects_path_intermediate_slash_token_with_extension():
+    token = "xK9mR2pL7qW4nJ6v/B8cY3hF5gT0sA1dE"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"/tmp/{token}/file.txt")
+    assert not result.clean
+    assert result.redacted_text == "/tmp/[REDACTED_HIGH_ENTROPY_TOKEN].txt"
+
+
+def test_high_entropy_detects_path_leaf_token_with_extension():
+    token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"tmp/{token}.txt")
+    assert not result.clean
+    assert result.redacted_text == "tmp/[REDACTED_HIGH_ENTROPY_TOKEN].txt"
+
+
+def test_high_entropy_detects_absolute_path_leaf_token_with_extension():
+    token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"/tmp/{token}.txt")
+    assert not result.clean
+    assert result.redacted_text == "/tmp/[REDACTED_HIGH_ENTROPY_TOKEN].txt"
+
+
+def test_high_entropy_detects_deep_path_leaf_token_with_extension():
+    token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+    result = LeakDetector(entropy_sensitivity=0.7).scan(f"tmp/foo/{token}.txt")
+    assert not result.clean
+    assert result.redacted_text == "tmp/foo/[REDACTED_HIGH_ENTROPY_TOKEN].txt"
+
+
+def test_high_entropy_respects_sensitivity():
+    token = "abcdefghijabcdefghij1234"
     text = f"key={token}"
     hits_low = _check_high_entropy(text, sensitivity=0.0)
     hits_high = _check_high_entropy(text, sensitivity=1.0)
-    assert len(hits_high) >= len(hits_low)
+    assert hits_low == []
+    assert len(hits_high) == 1
+    assert _check_high_entropy(text, sensitivity=-1.0) == hits_low
+    assert _check_high_entropy(text, sensitivity=2.0) == hits_high
 
 
 def test_high_entropy_url_overlap_fully_contained():
@@ -221,6 +448,47 @@ class TestLeakDetectorEntropy:
         assert result.redacted_text is not None
         assert token not in result.redacted_text
         assert "[REDACTED_HIGH_ENTROPY_TOKEN]" in result.redacted_text
+
+    def test_entropy_redaction_preserves_offsets_after_known_secret(self) -> None:
+        d = LeakDetector(entropy_sensitivity=0.7)
+        secret = "sk-ant-secret1234567890"
+        token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+        result = d.scan(f"prefix {secret} token {token} suffix")
+
+        assert not result.clean
+        assert result.redacted_text is not None
+        assert secret not in result.redacted_text
+        assert token not in result.redacted_text
+        assert "sk-ant-[REDACTED]" in result.redacted_text
+        assert "[REDACTED_HIGH_ENTROPY_TOKEN]" in result.redacted_text
+
+    def test_entropy_redaction_preserves_known_secret_style_on_overlap(self) -> None:
+        d = LeakDetector(entropy_sensitivity=0.7)
+        secret = "sk-ant-xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+        result = d.scan(f"prefix {secret} suffix")
+
+        assert not result.clean
+        assert result.redacted_text == "prefix sk-ant-[REDACTED] suffix"
+
+    def test_entropy_redaction_handles_partial_known_secret_overlap(self) -> None:
+        d = LeakDetector(entropy_sensitivity=0.7)
+        token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0sA1dE"
+        result = d.scan(f"prefix {token}sk-ant-secret123456 suffix")
+
+        assert not result.clean
+        assert result.redacted_text is not None
+        assert token not in result.redacted_text
+        assert result.redacted_text == (
+            "prefix [REDACTED_HIGH_ENTROPY_TOKEN]sk-ant-[REDACTED] suffix"
+        )
+
+    def test_entropy_redaction_handles_full_slash_token_once(self) -> None:
+        d = LeakDetector(entropy_sensitivity=0.7)
+        token = "xK9mR2pL7qW4nJ6vB8cY3hF5gT0s/A1dExK9mR2pL7qW4nJ6vB8cY3hF5gT0s"
+        result = d.scan(f"data={token} tail")
+
+        assert not result.clean
+        assert result.redacted_text == "data=[REDACTED_HIGH_ENTROPY_TOKEN] tail"
 
     def test_entropy_enabled_ignores_hex_hash(self) -> None:
         d = LeakDetector(entropy_sensitivity=0.7)

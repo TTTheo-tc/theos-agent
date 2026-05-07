@@ -9,6 +9,8 @@ Reference: ironclaw/src/safety/leak_detector.rs
 
 from __future__ import annotations
 
+import base64
+import binascii
 import math
 import re
 from collections import Counter
@@ -138,18 +140,27 @@ class LeakDetector:
             entropy_hits = _check_high_entropy(text, self._entropy_sensitivity)
             for start, end, _tag in entropy_hits:
                 token = text[start:end]
+                action = _encoded_secret_action(token, self._entropy_sensitivity) or LeakAction.REDACT
                 matches.append(
-                    LeakMatch("high_entropy_token", token[:30] + "...", LeakAction.REDACT)
+                    LeakMatch("high_entropy_token", token[:30] + "...", action)
                 )
 
         if not matches:
             return LeakScanResult(clean=True)
 
-        redacted = _redact_known_patterns(text)
+        known_spans = _known_secret_spans(text)
 
-        # Redact high-entropy tokens (apply in reverse order to preserve offsets)
-        for start, end, tag in sorted(entropy_hits, key=lambda h: h[0], reverse=True):
+        # Redact high-entropy token spans after removing known-secret spans.
+        # Apply in reverse order to preserve offsets against the original text.
+        redacted = text
+        entropy_segments = [
+            (segment_start, segment_end, tag)
+            for start, end, tag in entropy_hits
+            for segment_start, segment_end in _subtract_spans(start, end, known_spans)
+        ]
+        for start, end, tag in sorted(entropy_segments, key=lambda h: h[0], reverse=True):
             redacted = redacted[:start] + tag + redacted[end:]
+        redacted = _redact_known_patterns(redacted)
 
         return LeakScanResult(clean=False, matches=matches, redacted_text=redacted)
 
@@ -164,6 +175,11 @@ def redact(value: str, visible: int = 4) -> str:
 _SENSITIVE_KV_RE = re.compile(
     r"(?i)(token|api[_-]?key|password|secret|user[_-]?key|bearer|credential|authorization)"
     r"""(["']?\s*[:=]\s*)(?:"([^"]{8,})"|'([^']{8,})'|([a-zA-Z0-9_\-\.]{8,}))"""
+)
+_SENSITIVE_PHRASE_RE = re.compile(
+    r"(?i)\b(token|api[\s_-]?key|password|secret|user[\s_-]?key|bearer|credential|authorization)\b"
+    r"(?:(?:\W+)|(?:\s+(?:is|are|was|were|equals?|value|for|as|to)\b)){1,6}"
+    r"\s*[A-Za-z0-9_.~+/=-]{16,}"
 )
 
 
@@ -221,12 +237,74 @@ def _redact_known_patterns(text: str) -> str:
     return redacted
 
 
-_HIGH_ENTROPY_RE = re.compile(r"[a-zA-Z0-9_\-]{24,}")
+def _known_secret_spans(text: str) -> list[tuple[int, int]]:
+    """Return spans covered by configured prefix and regex secrets."""
+    spans: list[tuple[int, int]] = []
+    for prefix, _name, _action in _PREFIX_PATTERNS:
+        start = text.find(prefix)
+        while start != -1:
+            end = start + len(prefix)
+            while end < len(text) and not text[end].isspace():
+                end += 1
+            spans.append((start, end))
+            start = text.find(prefix, start + len(prefix))
+    for regex, _name, _action in _REGEX_PATTERNS:
+        spans.extend(match.span() for match in regex.finditer(text))
+    return spans
+
+
+def _subtract_spans(
+    start: int,
+    end: int,
+    spans: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    """Return portions of [start, end) not covered by any span."""
+    segments = [(start, end)]
+    for span_start, span_end in spans:
+        next_segments: list[tuple[int, int]] = []
+        for seg_start, seg_end in segments:
+            if span_end <= seg_start or seg_end <= span_start:
+                next_segments.append((seg_start, seg_end))
+                continue
+            if seg_start < span_start:
+                next_segments.append((seg_start, min(span_start, seg_end)))
+            if span_end < seg_end:
+                next_segments.append((max(span_end, seg_start), seg_end))
+        segments = next_segments
+        if not segments:
+            break
+    return [(seg_start, seg_end) for seg_start, seg_end in segments if seg_start < seg_end]
+
+
+_HIGH_ENTROPY_RE = re.compile(r"[A-Za-z0-9_+\-]{24,}")
 _URL_RE = re.compile(r"https?://\S+")
-_SAFE_PATTERNS = re.compile(
-    r"^[0-9a-f]{32,}$" r"|^[0-9a-f-]{36}$" r"|.*[=]{1,2}$",
-    re.I,
+_HEX_RE = re.compile(r"^[0-9a-f]{32,}$", re.I)
+_UUID_RE = re.compile(r"^[0-9a-f-]{36}$", re.I)
+_BASE64_RE = re.compile(r"^[A-Za-z0-9_+\-/]+={0,2}$")
+_BASE64_PADDED_RE = re.compile(r"^[A-Za-z0-9_+\-/]+={1,2}$")
+_BASE64_PADDED_CANDIDATE_RE = re.compile(
+    r"(?<![A-Za-z0-9_+\-/])[A-Za-z0-9_+\-/]{24,}={1,2}(?![A-Za-z0-9_+\-/=])"
 )
+_BASE64_UNPADDED_CANDIDATE_RE = re.compile(
+    r"(?<![A-Za-z0-9_+\-/])[A-Za-z0-9_+\-/]{24,}(?![A-Za-z0-9_+\-/])"
+)
+_PATH_EXT_RE = re.compile(r"\.[A-Za-z0-9]{1,8}(?=$|:\d+(?::\d+)?)")
+_PATH_PREFIXES = {
+    "assets",
+    "build",
+    "dist",
+    "lib",
+    "node_modules",
+    "opt",
+    "private",
+    "public",
+    "src",
+    "static",
+    "tmp",
+    "Users",
+    "var",
+    "vendor",
+}
 
 
 def _shannon_entropy(s: str) -> float:
@@ -238,20 +316,310 @@ def _shannon_entropy(s: str) -> float:
     return -sum((c / length) * math.log2(c / length) for c in freq.values())
 
 
-def _check_high_entropy(text: str, sensitivity: float = 0.7) -> list[tuple[int, int, str]]:
+def _check_high_entropy(
+    text: str,
+    sensitivity: float = 0.7,
+    *,
+    inspect_padded_base64: bool = True,
+    inspect_encoded_text: bool = True,
+) -> list[tuple[int, int, str]]:
     """Return ``[(start, end, tag)]`` for high-entropy tokens in *text*."""
     ignored_spans = [(m.start(), m.end()) for m in _URL_RE.finditer(text)]
-    threshold = 3.5 + sensitivity * 1.25
+    sensitivity = max(0.0, min(sensitivity, 1.0))
+    threshold = 4.75 - sensitivity * 1.25
     hits: list[tuple[int, int, str]] = []
-    for m in _HIGH_ENTROPY_RE.finditer(text):
-        if any(s < m.end() and m.start() < e for s, e in ignored_spans):
+    base64_candidates = (
+        _padded_base64_candidates(text) if inspect_padded_base64 else []
+    )
+    base64_spans = [(start, end) for start, end, _token in base64_candidates]
+
+    for start, end, token in base64_candidates:
+        if any(s < end and start < e for s, e in ignored_spans):
             continue
-        token = m.group()
-        if _SAFE_PATTERNS.match(token):
+        decoded = _decode_base64_text(token, require_padding=True)
+        if decoded is not None:
+            if _decoded_secret_action(decoded, sensitivity) is not None:
+                hits.append((start, end, "[REDACTED_HIGH_ENTROPY_TOKEN]"))
+            elif _looks_like_natural_text(decoded):
+                continue
+            elif _shannon_entropy(token) >= threshold:
+                hits.append((start, end, "[REDACTED_HIGH_ENTROPY_TOKEN]"))
             continue
         if _shannon_entropy(token) >= threshold:
-            hits.append((m.start(), m.end(), "[REDACTED_HIGH_ENTROPY_TOKEN]"))
+            hits.append((start, end, "[REDACTED_HIGH_ENTROPY_TOKEN]"))
+
+    if inspect_encoded_text:
+        for start, end, token in _unpadded_base64_candidates(text):
+            if any(s < end and start < e for s, e in ignored_spans):
+                continue
+            if any(s <= start and end <= e for s, e in base64_spans):
+                continue
+            path_like = _looks_like_path_token(token)
+            path_has_ext = path_like and _path_span_has_file_extension(text, end)
+            decoded = _decode_base64_text(token, require_padding=False)
+            if decoded is not None and _decoded_secret_action(decoded, sensitivity) is not None:
+                hits.append((start, end, "[REDACTED_HIGH_ENTROPY_TOKEN]"))
+                base64_spans.append((start, end))
+                continue
+            if decoded is not None and _looks_like_natural_text(decoded):
+                base64_spans.append((start, end))
+                continue
+            if path_has_ext and _looks_like_skippable_file_path(token):
+                base64_spans.append((start, end))
+                continue
+            path_segments = _path_entropy_segments(token, file_extension=path_has_ext) if path_like else []
+            for segment_offset, segment in path_segments:
+                if _shannon_entropy(segment) >= threshold:
+                    segment_start = start + segment_offset
+                    hits.append((segment_start, end, "[REDACTED_HIGH_ENTROPY_TOKEN]"))
+                    base64_spans.append((segment_start, end))
+                    break
+            if path_like:
+                continue
+            if _shannon_entropy(token) >= threshold:
+                hits.append((start, end, "[REDACTED_HIGH_ENTROPY_TOKEN]"))
+                base64_spans.append((start, end))
+
+    for start, end, token in _regular_entropy_candidates(text):
+        if any(s < end and start < e for s, e in ignored_spans):
+            continue
+        if any(s <= start and end <= e for s, e in base64_spans):
+            continue
+        if _is_safe_entropy_token(token):
+            continue
+        decoded = _decode_base64_text(token, require_padding=False) if inspect_encoded_text else None
+        if decoded is not None and _decoded_secret_action(decoded, sensitivity) is not None:
+            hits.append((start, end, "[REDACTED_HIGH_ENTROPY_TOKEN]"))
+            continue
+        if _shannon_entropy(token) >= threshold:
+            hits.append((start, end, "[REDACTED_HIGH_ENTROPY_TOKEN]"))
     return hits
+
+
+def _regular_entropy_candidates(text: str) -> list[tuple[int, int, str]]:
+    return [_entropy_candidate(text, match) for match in _HIGH_ENTROPY_RE.finditer(text)]
+
+
+def _padded_base64_candidates(text: str) -> list[tuple[int, int, str]]:
+    return [
+        (match.start(), match.end(), match.group())
+        for match in _BASE64_PADDED_CANDIDATE_RE.finditer(text)
+        if _has_valid_base64_padding(match.group())
+    ]
+
+
+def _unpadded_base64_candidates(text: str) -> list[tuple[int, int, str]]:
+    return [
+        (match.start(), match.end(), match.group())
+        for match in _BASE64_UNPADDED_CANDIDATE_RE.finditer(text)
+        if "/" in match.group()
+    ]
+
+
+def _entropy_candidate(text: str, match: re.Match[str]) -> tuple[int, int, str]:
+    """Return candidate span, including base64 padding only at token boundaries."""
+    start, end = match.start(), match.end()
+    pad_end = end
+    while pad_end < len(text) and text[pad_end] == "=":
+        pad_end += 1
+    pad_count = pad_end - end
+    if (
+        0 < pad_count <= 2
+        and (pad_end == len(text) or not _is_entropy_body_char(text[pad_end]))
+        and _has_valid_base64_padding(text[start:pad_end])
+    ):
+        end = pad_end
+    return start, end, text[start:end]
+
+
+def _is_entropy_body_char(ch: str) -> bool:
+    return ch.isascii() and (ch.isalnum() or ch in "_+-/")
+
+
+def _is_safe_entropy_token(token: str) -> bool:
+    return bool(_HEX_RE.match(token) or _UUID_RE.match(token))
+
+
+def _looks_like_path_token(token: str) -> bool:
+    if "/" not in token:
+        return False
+    if token.startswith(("/", "./", "../", "~/")):
+        return True
+    segments = [segment for segment in token.split("/") if segment]
+    if not segments:
+        return False
+    return segments[0] in _PATH_PREFIXES or any(_PATH_EXT_RE.search(segment) for segment in segments)
+
+
+def _path_span_has_file_extension(text: str, end: int) -> bool:
+    return bool(_PATH_EXT_RE.match(text[end:]))
+
+
+def _looks_like_build_asset_path(token: str) -> bool:
+    segments = [segment for segment in token.split("/") if segment]
+    if len(segments) < 2 or segments[0] not in {"assets", "build", "dist", "public", "static"}:
+        return False
+    leaf = segments[-1].lower()
+    return leaf.startswith(("app-", "bundle-", "chunk-", "index-", "main-", "vendor-"))
+
+
+def _looks_like_skippable_file_path(token: str) -> bool:
+    return _looks_like_build_asset_path(token)
+
+
+def _path_entropy_segments(token: str, *, file_extension: bool) -> list[tuple[int, str]]:
+    segments: list[tuple[int, str]] = []
+    offset = 0
+    for segment in token.split("/"):
+        segment_start = offset
+        offset += len(segment) + 1
+        segments.append((segment_start, segment))
+
+    candidates: list[tuple[int, str]] = []
+    meaningful = [
+        (start, segment)
+        for start, segment in segments
+        if segment not in {"", ".", "..", "~"} and segment not in _PATH_PREFIXES
+    ]
+    if not meaningful:
+        return []
+
+    if file_extension:
+        leaf_start, leaf = meaningful[-1]
+        if _looks_like_entropy_path_segment(leaf):
+            candidates.append((leaf_start, leaf))
+
+        run_start: int | None = None
+        run_end = 0
+        for start, segment in meaningful[:-1]:
+            if _looks_like_entropy_path_segment(segment):
+                if run_start is None:
+                    run_start = start
+                run_end = start + len(segment)
+                continue
+            if run_start is not None:
+                candidates.append((run_start, token[run_start:run_end]))
+                run_start = None
+        if run_start is not None:
+            candidates.append((run_start, token[run_start:run_end]))
+        return candidates
+
+    first_start, _first_segment = meaningful[0]
+    return [(first_start, token[first_start:])]
+
+
+def _looks_like_entropy_path_segment(segment: str) -> bool:
+    if len(segment) < 16:
+        return False
+    classes = sum(
+        (
+            any(ch.islower() for ch in segment),
+            any(ch.isupper() for ch in segment),
+            any(ch.isdigit() for ch in segment),
+            any(ch in "_+-" for ch in segment),
+        )
+    )
+    return classes >= 2
+
+
+def _has_valid_base64_padding(token: str) -> bool:
+    if not _BASE64_PADDED_RE.match(token):
+        return False
+    padding = len(token) - len(token.rstrip("="))
+    body = token[:-padding]
+    return bool(body) and len(token) % 4 == 0
+
+
+def _decode_base64_text(token: str, *, require_padding: bool) -> str | None:
+    if require_padding and not _has_valid_base64_padding(token):
+        return None
+    if not _BASE64_RE.match(token):
+        return None
+    body = token.rstrip("=")
+    if not body:
+        return None
+    padded = body + "=" * (-len(body) % 4)
+    try:
+        raw = base64.b64decode(padded, altchars=b"-_", validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    return _decode_printable_text(raw)
+
+
+def _decode_printable_text(raw: bytes) -> str | None:
+    if not raw:
+        return None
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    printable = sum(ch.isprintable() or ch.isspace() for ch in text)
+    if printable / len(text) < 0.95:
+        return None
+    return text
+
+
+def _looks_like_natural_text(text: str) -> bool:
+    return any(ch.isspace() for ch in text)
+
+
+def _encoded_secret_action(token: str, sensitivity: float) -> LeakAction | None:
+    decoded = _decode_base64_text(token, require_padding=False)
+    if decoded is None:
+        return None
+    return _decoded_secret_action(decoded, sensitivity)
+
+
+def _decoded_secret_action(text: str, sensitivity: float) -> LeakAction | None:
+    action = _known_secret_action(text)
+    if action is not None:
+        return action
+    if _SENSITIVE_KV_RE.search(text) or _SENSITIVE_PHRASE_RE.search(text):
+        return LeakAction.REDACT
+    if _contains_slash_high_entropy_token(text, sensitivity):
+        return LeakAction.REDACT
+    if _check_high_entropy(
+        text,
+        sensitivity,
+        inspect_padded_base64=False,
+        inspect_encoded_text=False,
+    ):
+        return LeakAction.REDACT
+    return None
+
+
+def _contains_slash_high_entropy_token(text: str, sensitivity: float) -> bool:
+    threshold = 4.75 - max(0.0, min(sensitivity, 1.0)) * 1.25
+    for _start, end, token in _unpadded_base64_candidates(text):
+        if _path_span_has_file_extension(text, end) and _looks_like_skippable_file_path(token):
+            continue
+        path_segments = (
+            _path_entropy_segments(
+                token,
+                file_extension=_path_span_has_file_extension(text, end),
+            )
+            if _looks_like_path_token(token)
+            else []
+        )
+        entropy_texts = [segment for _offset, segment in path_segments] or [token]
+        if any(_shannon_entropy(entropy_text) >= threshold for entropy_text in entropy_texts):
+            return True
+    return False
+
+
+def _known_secret_action(text: str) -> LeakAction | None:
+    action: LeakAction | None = None
+    for prefix, _name, prefix_action in _PREFIX_PATTERNS:
+        if prefix in text:
+            if prefix_action == LeakAction.BLOCK:
+                return LeakAction.BLOCK
+            action = prefix_action
+    for regex, _name, regex_action in _REGEX_PATTERNS:
+        if regex.search(text):
+            if regex_action == LeakAction.BLOCK:
+                return LeakAction.BLOCK
+            action = regex_action
+    return action
 
 
 def _redact_after_prefix(text: str, prefix: str) -> str:
