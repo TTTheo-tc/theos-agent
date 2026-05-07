@@ -6,12 +6,14 @@ ranges to Feishu block operations.
 
 from __future__ import annotations
 
+from typing import Any
+
 
 def _find_affected_blocks(
-    annotations: dict,
+    annotations: dict[str, Any],
     edit_start_line: int,
     edit_end_line: int,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Find all annotated blocks whose line ranges overlap the edit region."""
     blocks = annotations.get("blocks", [])
     return [
@@ -21,7 +23,7 @@ def _find_affected_blocks(
     ]
 
 
-def _strip_table_merge_info(blocks: list[dict]) -> list[dict]:
+def _strip_table_merge_info(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Remove merge_info from table cell blocks (not supported by create API)."""
     for block in blocks:
         if block.get("block_type") == 32:  # table cell

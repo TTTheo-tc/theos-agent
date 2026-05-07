@@ -12,7 +12,7 @@ class FeishuAPIError(Exception):
     retry/classification logic can inspect them without string parsing.
     """
 
-    def __init__(self, message: str, code: int | None = None, response: Any = None):
+    def __init__(self, message: str, code: int | None = None, response: Any = None) -> None:
         super().__init__(message)
         self.code = code
         self.response = response

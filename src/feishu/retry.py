@@ -6,8 +6,9 @@ import asyncio
 import inspect
 import random
 import re
+from collections.abc import Callable
 from enum import StrEnum
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from loguru import logger
 
