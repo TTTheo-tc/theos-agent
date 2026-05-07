@@ -30,8 +30,7 @@ def refresh_feishu_token(
     from src.feishu.token import (
         get_refresh_token,
         refresh_token_from_api,
-        save_access_token,
-        save_refresh_token,
+        save_oauth_tokens,
     )
 
     lock_path = Path(token_dir).expanduser() / ".refresh.lock"
@@ -51,23 +50,17 @@ def refresh_feishu_token(
             data = refresh_token_from_api(old_refresh, app_id=app_id, app_secret=app_secret)
 
             epoch_now = int(time.time())
-            save_access_token(
-                data["access_token"],
-                epoch_now + data["expires_in"],
+            _access_token, at_ttl, rt_ttl, _refresh_saved = save_oauth_tokens(
+                data,
                 token_dir=token_dir,
-            )
-            save_refresh_token(
-                data["refresh_token"],
-                epoch_now + data["refresh_token_expires_in"],
-                token_dir=token_dir,
+                epoch=epoch_now,
+                require_refresh_token=True,
             )
     except (ValueError, RuntimeError) as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"Unexpected error: {e}"}
 
-    at_ttl = data.get("expires_in", 7200)
-    rt_ttl = data.get("refresh_token_expires_in", 2592000)
     logger.info(
         "Feishu token refreshed: access_token TTL={}s, refresh_token TTL={}s ({:.1f}d)",
         at_ttl,

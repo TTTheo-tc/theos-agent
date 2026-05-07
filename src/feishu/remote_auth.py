@@ -124,7 +124,7 @@ def exchange_auth_code(
     Returns ``{"ok": True, "access_token_ttl": ..., "refresh_token_ttl": ...}``
     on success, or ``{"ok": False, "error": "..."}`` on failure.
     """
-    from src.feishu.token import save_access_token, save_refresh_token
+    from src.feishu.token import save_oauth_tokens
 
     token_url = "https://open.feishu.cn/open-apis/authen/v2/oauth/token"
     payload = {
@@ -154,21 +154,11 @@ def exchange_auth_code(
     if not access_token:
         return {"ok": False, "error": f"No access_token in response: {resp}"}
 
-    save_access_token(
-        access_token,
-        epoch + data.get("expires_in", 7200),
+    _access_token, at_ttl, rt_ttl, _refresh_saved = save_oauth_tokens(
+        data,
         token_dir=token_dir,
+        epoch=epoch,
     )
-
-    rt_ttl = data.get("refresh_token_expires_in", 2592000)
-    if "refresh_token" in data:
-        save_refresh_token(
-            data["refresh_token"],
-            epoch + rt_ttl,
-            token_dir=token_dir,
-        )
-
-    at_ttl = data.get("expires_in", 7200)
     logger.info(
         "Remote auth: tokens saved. access_token TTL={}s, refresh_token TTL={}s ({:.1f}d)",
         at_ttl,

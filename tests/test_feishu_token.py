@@ -9,7 +9,12 @@ from unittest.mock import patch
 
 import pytest
 
-from src.feishu.token import get_access_token, save_access_token, save_refresh_token
+from src.feishu.token import (
+    get_access_token,
+    save_access_token,
+    save_oauth_tokens,
+    save_refresh_token,
+)
 
 
 def test_save_token_files_use_expected_schema_and_permissions(tmp_path: Path):
@@ -33,6 +38,37 @@ def test_save_token_files_use_expected_schema_and_permissions(tmp_path: Path):
     assert "expires_datetime" in refresh_data
     assert oct(os.stat(access_path).st_mode & 0o777) == "0o600"
     assert oct(os.stat(refresh_path).st_mode & 0o777) == "0o600"
+
+
+def test_save_oauth_tokens_persists_access_and_optional_refresh(tmp_path: Path):
+    epoch = int(time.time())
+
+    token, at_ttl, rt_ttl, refresh_saved = save_oauth_tokens(
+        {
+            "access_token": "access-123",
+            "refresh_token": "refresh-123",
+            "expires_in": 7200,
+            "refresh_token_expires_in": 2592000,
+        },
+        token_dir=str(tmp_path),
+        epoch=epoch,
+    )
+
+    assert (token, at_ttl, rt_ttl, refresh_saved) == ("access-123", 7200, 2592000, True)
+    assert json.loads((tmp_path / "access_token.json").read_text(encoding="utf-8"))[
+        "expires_epoch"
+    ] == epoch + 7200
+    assert json.loads((tmp_path / "refresh_token.json").read_text(encoding="utf-8"))[
+        "expires_epoch"
+    ] == epoch + 2592000
+
+    _, _, _, refresh_saved = save_oauth_tokens(
+        {"access_token": "access-only", "expires_in": 3600},
+        token_dir=str(tmp_path / "access-only"),
+        epoch=epoch,
+    )
+    assert refresh_saved is False
+    assert not (tmp_path / "access-only" / "refresh_token.json").exists()
 
 
 def test_get_access_token_uses_valid_cached_token(tmp_path: Path):

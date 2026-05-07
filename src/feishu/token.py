@@ -111,6 +111,46 @@ def save_access_token(
     _write_token_json(path, _token_payload("access_token", access_token, expires_epoch))
 
 
+def save_oauth_tokens(
+    data: dict,
+    *,
+    token_dir: str = DEFAULT_TOKEN_DIR,
+    epoch: int | None = None,
+    require_refresh_token: bool = False,
+) -> tuple[str, int, int, bool]:
+    """Persist access/refresh tokens from a Feishu OAuth response.
+
+    Returns ``(access_token, access_token_ttl, refresh_token_ttl, refresh_saved)``.
+    """
+    if require_refresh_token:
+        required = {"access_token", "expires_in", "refresh_token", "refresh_token_expires_in"}
+        missing = required.difference(data)
+        if missing:
+            msg = f"OAuth response missing required fields: {', '.join(sorted(missing))}"
+            raise KeyError(msg)
+
+    epoch_now = int(time.time()) if epoch is None else epoch
+    access_token = data["access_token"]
+    access_token_ttl = data.get("expires_in", 7200)
+    refresh_token_ttl = data.get("refresh_token_expires_in", 2592000)
+
+    save_access_token(
+        access_token,
+        epoch_now + access_token_ttl,
+        token_dir=token_dir,
+    )
+
+    refresh_saved = "refresh_token" in data
+    if refresh_saved:
+        save_refresh_token(
+            data["refresh_token"],
+            epoch_now + refresh_token_ttl,
+            token_dir=token_dir,
+        )
+
+    return access_token, access_token_ttl, refresh_token_ttl, refresh_saved
+
+
 def _read_valid_access_token(token_path: Path, min_ttl: int) -> str | None:
     if not token_path.exists():
         return None
@@ -347,26 +387,20 @@ def init_token(
         raise RuntimeError(msg)
     data = resp.get("data") or resp
 
-    access_token = data["access_token"]
-    save_access_token(
-        access_token,
-        epoch + data.get("expires_in", 7200),
+    access_token, access_token_ttl, _refresh_token_ttl, refresh_saved = save_oauth_tokens(
+        data,
         token_dir=token_dir,
+        epoch=epoch,
     )
 
-    if "refresh_token" in data:
-        save_refresh_token(
-            data["refresh_token"],
-            epoch + data.get("refresh_token_expires_in", 2592000),
-            token_dir=token_dir,
-        )
+    if refresh_saved:
         logger.info("Token initialized with refresh_token")
     else:
         logger.warning(
             "No refresh_token in response (scope: {}). "
             "Token will expire in {}s and require re-auth.",
             data.get("scope", "?"),
-            data.get("expires_in", "?"),
+            access_token_ttl,
         )
 
     return access_token
