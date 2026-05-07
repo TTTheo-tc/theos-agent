@@ -7,6 +7,7 @@ V3 metadata uses the existing ``list_spreadsheet_sheets`` from api.py.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import lark_oapi as lark
 
@@ -23,18 +24,22 @@ def _raw_get(client: lark.Client, uri: str) -> dict:
     return _raw_request(client, lark.HttpMethod.GET, "GET", uri)
 
 
-def _raw_put(client: lark.Client, uri: str, body: dict) -> dict:
+def _raw_put(client: lark.Client, uri: str, body: dict[str, Any]) -> dict:
     """Issue a raw PUT with JSON body and return the ``data`` dict."""
     return _raw_request(client, lark.HttpMethod.PUT, "PUT", uri, body=body)
 
 
-def _raw_post(client: lark.Client, uri: str, body: dict) -> dict:
+def _raw_post(client: lark.Client, uri: str, body: dict[str, Any]) -> dict:
     """Issue a raw POST with JSON body and return the ``data`` dict."""
     return _raw_request(client, lark.HttpMethod.POST, "POST", uri, body=body)
 
 
 def _raw_request(
-    client: lark.Client, method, action_method: str, uri: str, body: dict | None = None
+    client: lark.Client,
+    method: Any,
+    action_method: str,
+    uri: str,
+    body: dict[str, Any] | None = None,
 ) -> dict:
     """Issue a raw sheets request and return the ``data`` dict."""
     req = lark.BaseRequest()
@@ -137,7 +142,7 @@ def write_sheet_values(
     spreadsheet_token: str,
     sheet_id: str,
     range: str,
-    values: list[list],
+    values: list[list[Any]],
 ) -> dict:
     """Write cell values to a sheet range.
 
@@ -158,7 +163,7 @@ def append_sheet_values(
     client: lark.Client,
     spreadsheet_token: str,
     sheet_id: str,
-    values: list[list],
+    values: list[list[Any]],
 ) -> dict:
     """Append rows to the end of a sheet.
 
@@ -204,7 +209,7 @@ def get_sheet_metadata(
 # ---------------------------------------------------------------------------
 
 
-def _escape_md_cell(value) -> str:
+def _escape_md_cell(value: Any) -> str:
     """Escape a cell value for use inside a markdown table."""
     if value is None:
         return ""
@@ -214,7 +219,11 @@ def _escape_md_cell(value) -> str:
     return text
 
 
-def values_to_markdown(values: list[list], sheet_name: str = "", range_str: str = "") -> str:
+def values_to_markdown(
+    values: list[list[Any]],
+    sheet_name: str = "",
+    range_str: str = "",
+) -> str:
     """Format a 2D values grid as a markdown table.
 
     First row is treated as the header.
@@ -274,7 +283,7 @@ async def write_sheet_values_with_retry(
     spreadsheet_token: str,
     sheet_id: str,
     range: str,
-    values: list[list],
+    values: list[list[Any]],
     **retry_kwargs,
 ) -> dict:
     """write_sheet_values with automatic retry on transient/rate-limit errors."""
@@ -294,7 +303,7 @@ async def append_sheet_values_with_retry(
     client: lark.Client,
     spreadsheet_token: str,
     sheet_id: str,
-    values: list[list],
+    values: list[list[Any]],
     **retry_kwargs,
 ) -> dict:
     """append_sheet_values with automatic retry on transient/rate-limit errors."""

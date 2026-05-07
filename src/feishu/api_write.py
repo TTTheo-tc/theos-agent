@@ -10,6 +10,7 @@ import json
 import threading
 import time
 import uuid
+from typing import Any
 
 import lark_oapi as lark
 from lark_oapi.api.docx.v1 import (
@@ -59,7 +60,7 @@ class PreemptiveThrottle:
     Prevents rate-limit errors proactively; the retry module handles them reactively.
     """
 
-    def __init__(self, max_per_second: float = 3.0):
+    def __init__(self, max_per_second: float = 3.0) -> None:
         self._min_interval = 1.0 / max_per_second
         self._last_call = 0.0
         self._lock = threading.Lock()
@@ -354,11 +355,11 @@ def delete_comment(
 
 def _raw_request(
     client: lark.Client,
-    method,
+    method: Any,
     uri: str,
     action: str,
     *,
-    body: dict | None = None,
+    body: dict[str, Any] | None = None,
     query: dict[str, str] | None = None,
 ) -> dict:
     req = lark.BaseRequest()
@@ -1332,7 +1333,7 @@ def _feishu_http_json(
     method: str,
     url: str,
     action: str,
-    **kwargs,
+    **kwargs: Any,
 ) -> dict:
     import httpx
 
@@ -1518,7 +1519,7 @@ def get_wiki_task_result(task_id: str) -> dict:
 def _patch_block_with_retry(
     document_id: str,
     block_id: str,
-    body: dict,
+    body: dict[str, Any],
     *,
     max_retries: int = 3,
 ) -> dict:
@@ -1620,7 +1621,7 @@ def update_table(
     document_id: str,
     table_block_id: str,
     operation: str,
-    **params,
+    **params: Any,
 ) -> dict:
     """Perform a table structure or property operation via PATCH.
 
