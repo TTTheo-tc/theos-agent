@@ -79,6 +79,24 @@ The memory system has four conceptual layers:
 
 **MemoryScopeResolver** maps `session_key` to a workspace path, supporting global memory (single workspace) or per-group memory (per-`channel:chat_id` directory under `groups/`) (`scope.py:14-57`).
 
+### Runtime Defaults
+
+The core runtime keeps markdown memory on and structured systems off:
+
+| Config path | Default | Effect |
+|---|---|---|
+| `memory.enabled` | `true` | MEMORY.md/HISTORY.md recall can be injected |
+| `memory.search.enabled` | `true` | `memory_search` is available in the minimal profile |
+| `memory.compaction.enabled` | `true` | long sessions can be summarized |
+| `memory.flush.enabled` | `false` | pre-compaction durable-fact flush is opt-in |
+| `memory.gc.enabled` | `false` | markdown GC/time decay is opt-in |
+| `memory.telemetry.recallEnabled` | `false` | recall journal/maintenance data is opt-in |
+| `knowledgeGraph.enabled` | `false` | structured KG memory and KG tools are opt-in |
+| `memory.search.hybrid.enabled` | `false` | vector/hybrid search is opt-in |
+
+This preserves TheOS's long-term markdown memory as a core feature while
+keeping KG/vector/maintenance pipelines out of the default runtime.
+
 ## Data Flow
 
 **Consolidation (old messages -> long-term memory):**
@@ -95,11 +113,13 @@ The memory system has four conceptual layers:
 1. `MemoryRecallService.get_memory_context()` reads MEMORY.md via `MemoryStore` (`recall.py:62-104`)
 2. In `full` mode: returns entire content with freshness annotations (`recall.py:96-97`)
 3. In `retrieval` mode: scores sections by keyword overlap with query, selects by token budget, optionally falls back to full (`recall.py:145-204`)
-4. Structured recall: `build_structured_recall()` searches KG via `StructuredMemoryStore.search()` and formats top results (`recall.py:210-252`)
+4. Structured recall: when `knowledgeGraph.enabled=true`,
+   `build_structured_recall()` searches KG via `StructuredMemoryStore.search()`
+   and formats top results (`recall.py:210-252`)
 
 **Recall telemetry and maintenance:**
 
-1. `memory_search`, `structured_memory_search`, and `domain_rule_get` append best-effort recall telemetry to `memory/instinct/recall_journal.jsonl` (`recall_journal.py:1-77`)
+1. When recall telemetry is enabled, `memory_search`, `structured_memory_search`, and `domain_rule_get` append best-effort recall telemetry to `memory/instinct/recall_journal.jsonl` (`recall_journal.py:1-77`)
 2. The journal is append-only and records one line per recalled result, including `target_kind`, `target_id`, `query_hash`, `day`, `score`, and (when content is supplied) a normalized `claim_hash` for grounding
 3. During the 6-hour maintenance window, `fold_recall_journal()` folds new journal tail entries into `recall_targets.json` plus a checkpoint file and emits `memory.recall.folded` into the unified event log (`recall_maintenance.py:50-189`)
 4. `recall_targets.json` entries carry both v1 signals (`recall_count`, `distinct_query_hashes`, `distinct_days`, `last_recalled_at`, `max_score`) and v2.1 aggregates (`total_score`, `daily_count`, `daily_counts`) for downstream ranking
@@ -155,7 +175,7 @@ The memory system has four conceptual layers:
 
 1. **Markdown is the memory truth source**: MEMORY.md and HISTORY.md are the authoritative long-term memory. FTS indexes and SQLite tiers are derived/buffer layers that can be rebuilt (`store.py:1-11`, `tiers.py:1-19`).
 2. **Consolidation reads Session.messages, not SQLite**: The short-term SQLite tier is a buffer/audit layer. `mark_consolidated()` is bookkeeping, not the consolidation input (`consolidation.py:5-8`, `sql.py:1-13`).
-3. **SQLite is not a retrieval source**: `MemoryRecallService` reads from markdown and structured memory. If SQLite data is ever surfaced for recall, it must go through a normalization seam (`recall.py:14-19`, `sql.py:9-12`).
+3. **SQLite is not a retrieval source**: `MemoryRecallService` reads from markdown and structured memory. If SQLite data is ever surfaced for recall, it must go through a normalization boundary (`recall.py:14-19`, `sql.py:9-12`).
 4. **KG uses separate database**: `kg.db` is distinct from `theos.db` to avoid `row_factory` conflicts (`structured.py:96-97`).
 5. **Dashboard schema owned by Python**: `DashboardWriter` in `src/store/dashboard_writer.py` owns the dashboard SQLite schema. UI reads are read-only (`dashboard_writer.py:1-4`).
 6. **Atomic markdown writes**: `MemoryStore.write_long_term()` uses tmp file + rename (`store.py:47-49`).

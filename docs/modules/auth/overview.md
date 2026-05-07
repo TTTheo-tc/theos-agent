@@ -24,6 +24,10 @@ src/auth/
 
 Adjacent: `src/security/crypto.py` and `src/security/keychain.py` provide the encryption layer used by the store.
 
+API-key profile storage is part of the core runtime. OAuth login/refresh flows
+for OpenAI Codex and GitHub Copilot require the `auth-oauth` optional
+dependency extra because they use `oauth-cli-kit`, `keyring`, and `filelock`.
+
 ## Entry Points
 
 | Entry point | Purpose |

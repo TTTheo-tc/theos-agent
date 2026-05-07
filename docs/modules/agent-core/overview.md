@@ -93,12 +93,15 @@ The `Tool` ABC (`src/agent/tools/base.py:7`) defines the contract:
 - **Deferred pool** (`_deferred`): registered but hidden until explicitly
   activated via `tool_search` or a direct call (`registry.py:173-175`).
 
-The split is governed by `ALWAYS_ON_TOOLS` in `tool_profiles.py:95`.
-This keeps the API tool list small (~20 definitions) while 40+ tools
-remain discoverable.
+The split is governed by `ALWAYS_ON_TOOLS` in `tool_profiles.py`.
+The default visible tool surface is deliberately small: `read_file`,
+`list_dir`, `glob`, `grep`, `memory_search`, and `tool_search`. Everything
+else is registered as allowed by `tools.profile`, then kept deferred until
+`tool_search` or automatic activation brings it into the active pool.
 
 `register_standard_tools()` (`src/agent/tool_sets.py:42`) is the single
-registration site. It handles four modes:
+registration site. It combines feature gates, optional dependency availability,
+agent mode, role restrictions, and `tools.profile`.
 
 Advanced agent modes are opt-in. The default config keeps
 `agents.teamEnabled=false`, `agents.genverEnabled=false`, and
@@ -107,10 +110,20 @@ flag unless the config already explicitly starts in that mode.
 
 | Mode | Purpose | Key constraint |
 |---|---|---|
-| `single` | Root agent, full toolset | All tools available |
+| `single` | Root agent | Tool surface governed by `tools.profile`; default is `minimal` |
 | `team` | Orchestrator root | Write tools restricted (`DocWriteFileTool`, `SafeExecTool`) |
 | `subagent` | Delegated worker | Filtered by role's `allowed_tools` |
 | `verifier` | GenVer verification | Read-only fs + bash only |
+
+Named tool profiles:
+
+| Profile | Runtime shape |
+|---|---|
+| `minimal` | Six always-on tools only |
+| `coding` | FS write/edit, shell/process, web, memory, task tools, read-only Feishu, selected analysis tools |
+| `messaging` | Memory, discovery, basic web, Feishu knowledge tools, message send |
+| `readonly` | Read-only local, web, and browser exploration |
+| `full` | No profile restriction; feature gates and policy still apply |
 
 Tool groups (`tool_profiles.py:13`) provide symbolic aliases like `group:fs`
 that expand to concrete tool names, used in role `allowed_tools` configs.
@@ -242,7 +255,7 @@ interrupted (`loop.py:159`, `subagent.py:103-105`).
 - **Add an execution policy**: Subclass `ExecutionPolicy` in
   `src/orchestrator/policies.py`, append to `TurnLifecycle.policies` in
   `AgentLoop.__init__`.
-- **Add a tool profile**: Add to `PROFILES` dict in `tool_profiles.py:148`.
+- **Add a tool profile**: Add to the `PROFILES` dict in `tool_profiles.py`.
 - **MCP server integration**: Tools from MCP servers are registered via
   `MCPManager.connect()` (`loop.py:357-359`), which dynamically adds them
   to the existing `ToolRegistry`.

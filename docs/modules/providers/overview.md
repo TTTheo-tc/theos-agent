@@ -26,6 +26,10 @@ src/providers/
 
 Adjacent but not owned: `src/auth/store.py` (credential storage), `src/security/secret_refs.py` (secret reference resolution).
 
+The core Python dependency set includes Anthropic and OpenAI-compatible SDK
+support. OAuth-backed providers such as OpenAI Codex and GitHub Copilot depend
+on the `auth-oauth` extra for `oauth-cli-kit`, `keyring`, and `filelock`.
+
 ## Entry Points
 
 | Entry point | Purpose |
@@ -48,6 +52,10 @@ LLMProvider (ABC)
 ```
 
 `factory._build_provider()` routes by `ProviderSpec.backend` (`factory.py:79`). The backend string is the branching key -- all providers must declare one of `anthropic`, `openai_compat`, or `codex`.
+
+Provider modules are imported on demand by backend. Keeping Codex/Copilot OAuth
+dependencies optional means the default `theos agent` path can run with only
+Anthropic/OpenAI-compatible dependencies installed.
 
 `credentials.resolve_credentials()` implements a three-tier cascade (`credentials.py:30`):
 1. Auth profile store (`~/.theos/auth-profiles.enc`)

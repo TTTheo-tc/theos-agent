@@ -80,6 +80,7 @@ LeakDetector
     |-- Aho-Corasick automaton (prefix patterns: sk-ant-, ghp_, AKIA, ...)
     |-- Regex patterns (JWT, Bearer, DB connection strings)
     |-- High-entropy token detection (opt-in, Shannon entropy threshold)
+    |-- Encoded-text inspection for base64/base64url-wrapped secrets
     |-- Actions: BLOCK / REDACT
 
 PolicyEngine
@@ -131,6 +132,24 @@ CredentialInjector.prepare_request(url, headers, query_params)
 
 `AutonomyPolicy` checks four dimensions: tool allowlist (READONLY blocks write tools), path restrictions (write-protected + forbidden + workspace-only), command whitelist, and sliding-window rate limit (1 hour window). SUPERVISED level adds approval gating based on risk level and `auto_approve`/`always_ask` config lists (`autonomy.py:94-139`).
 
+### Leak detection details
+
+Leak scanning has two tiers:
+
+1. Known prefix/regex patterns detect explicit secrets such as `sk-ant-`,
+   `sk-proj-`, Slack tokens, GitHub PATs, AWS access keys, private key headers,
+   JWTs, bearer tokens, and database URLs.
+2. High-entropy detection is opt-in through `entropy_sensitivity > 0`. The
+   sensitivity is clamped to `0..1`; the threshold is
+   `4.75 - sensitivity * 1.25`, so higher sensitivity catches lower-entropy
+   candidates.
+
+The entropy scanner ignores URLs, suppresses common path/build artifact
+patterns, and treats markdown/file path tokens differently from standalone
+secret-like tokens. It also decodes padded and unpadded base64/base64url
+candidates: readable prose is ignored, generic credential prose is redacted,
+and decoded known blocking prefixes remain blocking.
+
 ## State & Persistence
 
 | State | Location | Lifecycle |
@@ -149,7 +168,8 @@ CredentialInjector.prepare_request(url, headers, query_params)
 3. **Ciphertext integrity.** AES-256-GCM provides authenticated encryption. Tampered ciphertext raises `InvalidTag` (`crypto.py:46`).
 4. **Secret injection is per-request, not per-tool.** `CredentialInjector.prepare_request()` resolves `secret://` references into HTTP headers/params and returns them to the calling tool (`credential_injector.py:135`). The tool implementation (e.g., `web_http.py:179`) does receive the resolved values in order to make the HTTP call. The boundary is at the config layer (secrets stored as `secret://` refs), not at the tool execution layer.
 5. **Injection detection does not modify by default.** `Sanitizer(block=False)` returns warnings only; the caller decides whether to block or proceed (`sanitizer.py:98`).
-6. **Leak redaction preserves prefix.** `_redact_after_prefix()` keeps the prefix visible for debugging while replacing the secret portion (`leak_detector.py:244`).
+6. **Leak redaction preserves prefix.** `_redact_after_prefix()` keeps the prefix visible for debugging while replacing the secret portion.
+7. **Encoded blocking secrets remain blocking.** If a base64/base64url token decodes to a known blocking secret prefix, the scan result keeps `LeakAction.BLOCK` instead of downgrading to redaction.
 
 ## Extension Points
 
@@ -167,7 +187,7 @@ CredentialInjector.prepare_request(url, headers, query_params)
 | Master key too short | `ValueError` raised immediately (`crypto.py:31`, `keychain.py:48`). |
 | Ciphertext tampered | `cryptography.exceptions.InvalidTag` raised by `decrypt()`. |
 | Aho-Corasick unavailable | Falls back to linear scan of patterns. Functionally equivalent, just slower (`sanitizer.py:126`, `leak_detector.py:134`). |
-| High-entropy false positives | Entropy detection is opt-in (`entropy_sensitivity > 0`). Threshold scales with sensitivity: `3.5 + sensitivity * 1.25` (`leak_detector.py:231`). URLs are excluded. |
+| High-entropy false positives | Entropy detection is opt-in (`entropy_sensitivity > 0`). Threshold scales with sensitivity: `4.75 - sensitivity * 1.25`; higher sensitivity lowers the threshold. URLs and common path/build artifacts are excluded. |
 | Rate limit exceeded | `check_rate_limit()` returns a blocking message. Does not raise. |
 | Path outside workspace | `check_path_allowed()` returns a blocking message when `workspace_only=True`. |
 

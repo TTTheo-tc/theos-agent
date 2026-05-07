@@ -11,7 +11,7 @@ docs/
 │   ├── providers/              # LLM provider abstraction, streaming, recovery
 │   ├── auth/                   # OAuth plugin framework, token lifecycle
 │   ├── security-safety/        # Encryption, keychain, injection detection, leak scan
-│   ├── channels-integrations/  # 12+ platform adapters, Feishu deep integration, bridge
+│   ├── channels-integrations/  # 10 platform adapters, Feishu deep integration, bridge
 │   ├── learning/               # Dream exploration, instinct (reflect/evolve/reflex), hooks
 │   ├── genver/                 # Generator-Verifier loop
 │   ├── automation/             # Cron scheduler, poller, daemon (systemd/launchd)
@@ -42,3 +42,19 @@ docs/
 | shared-infra | `src/utils/`, `src/templates/` |
 
 详见 `BOT.md` 的 Documentation Routing 和 Development Workflow 章节。
+
+## Runtime Shape
+
+The default install is intentionally `core`: local CLI agent, providers,
+session persistence, markdown memory, basic tools, and safety/security. Larger
+systems are still in source, but they are opened through config gates and
+optional dependency extras:
+
+- default runtime: `agents.mode=single`, `tools.profile=minimal`
+- default disabled: team/subagent switching, GenVer, learning hooks, browser,
+  KG memory, gateway heartbeat, dashboard UI, stock, pollers
+- packaging: the core wheel excludes `ui/`, `bridge/`, and `instinct/`; the
+  sdist and full Docker target retain those sources for full installs
+
+Use `theos config features` to inspect the current feature flags and
+`theos config full-access` only on a trusted personal development machine.

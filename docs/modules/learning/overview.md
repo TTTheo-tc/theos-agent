@@ -42,6 +42,12 @@ Learning is opt-in at runtime. The default config sets `learning.enabled=false`,
 TheOS does not inject `instinct/core.md`, instantiate `HookRunner`, or execute
 `/instinct` commands unless the feature is explicitly enabled.
 
+Packaging is also slim by default: the core wheel does not include
+`instinct/`, while the sdist and full Docker target retain the Node.js learning
+pipeline sources. The `learning` extra is currently a marker extra with no
+additional Python dependencies. Dream remains an active first-class subsystem;
+its default-off status is a runtime/packaging boundary, not a dead-code signal.
+
 ## Architecture
 
 ### Three Subsystems

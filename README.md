@@ -4,16 +4,18 @@ Theo's Agentic Operating System.
 
 A personal agentic OS for code, memory, tools, and automation.
 
-基于 Python 的个人 agentic OS，面向个人部署和持续开发。它把聊天入口、
-代码工作流、工具调用、长期记忆、认证管理和多模型编排放在同一套运行时里。
+基于 Python 的个人 agentic OS，面向个人部署和持续开发。默认安装面是
+`core`：本地 CLI、LLM provider、基础工具、session、markdown memory 和安全层。
+Gateway、渠道、UI、浏览器、KG memory、MCP、stock、learning、WhatsApp bridge 等
+都作为显式配置或 optional extras 打开。
 
 ## What It Does
 
-- 多入口: CLI 对话 + Gateway 平台接入
-- 多模型: Anthropic、OpenAI 兼容供应商、Codex、GitHub Copilot 等
-- 多平台: Telegram、Discord、WhatsApp、Slack、Feishu、DingTalk、QQ、Matrix、Email、Mochat
-- 多模式: `single`、`multi`、`genver`
-- 持久化: 加密认证、workspace 记忆、per-group 隔离、session 历史
+- 本地 CLI agent，默认 `single` mode + minimal tool profile
+- Gateway 平台接入，按需启用 Telegram、Discord、WhatsApp、Slack、Feishu、DingTalk、QQ、Matrix、Email、Mochat
+- 多模型 provider：Anthropic、OpenAI-compatible、OpenAI Codex、GitHub Copilot 等
+- 可选高级运行：team/subagent、GenVer、orchestrator、learning、browser、MCP、KG memory、UI
+- 持久化：加密认证、workspace 记忆、per-group 隔离、session 历史
 
 ## Quick Start
 
@@ -42,6 +44,20 @@ uv sync --extra web
 uv sync --extra ui
 uv sync --extra channels-telegram
 uv sync --extra channels-feishu
+```
+
+常用 extras：
+
+```bash
+uv sync --extra auth-oauth          # OAuth/keyring/filelock support
+uv sync --extra gateway             # gateway scheduling support
+uv sync --extra web                 # DuckDuckGo/readability web helpers
+uv sync --extra mcp                 # MCP client support
+uv sync --extra memory-kg           # sqlite-vec + tokenizer memory extras
+uv sync --extra ui                  # dashboard backend
+uv sync --extra channels-telegram
+uv sync --extra channels-feishu
+uv sync --all-extras                # full Python optional dependency set
 ```
 
 不安装直接运行（仅开发时使用）:
@@ -78,6 +94,26 @@ uv run theos gateway
 uv run theos status
 ```
 
+Default runtime:
+
+- `agents.mode = "single"`
+- `tools.profile = "minimal"`
+- `learning.enabled = false`
+- `knowledgeGraph.enabled = false`
+- `gateway.ui.enabled = false`
+- `gateway.heartbeat.enabled = false`
+- `tools.browser.enabled = false`
+
+For a trusted personal development machine:
+
+```bash
+theos config full-access   # tools.profile=full, autonomy=full, workspace guardrails opened
+theos config safe          # restore conservative default tool permissions
+theos config features      # list feature flags, current values, defaults, and config paths
+theos config show --full   # show merged runtime config with secrets masked
+theos config compact       # rewrite config.json with only non-default values
+```
+
 ### Docker Targets
 
 ```bash
@@ -99,7 +135,25 @@ theos gateway
 theos status
 theos auth list
 theos auth add --provider anthropic --key sk-ant-...
+theos config features
+theos config full-access
+theos config safe
 ```
+
+## Tool Profiles
+
+`tools.profile` controls which tools are registered by default:
+
+| Profile | Intent |
+|---|---|
+| `minimal` | Default. Read/list/grep/glob, `memory_search`, and `tool_search`; everything else is discoverable/deferred. |
+| `coding` | Filesystem writes, shell/process, web, memory, task tools, read-only Feishu, selected analysis tools. |
+| `messaging` | Memory, discovery, basic web, Feishu knowledge tools, message send. |
+| `readonly` | Read-only local/web/browser exploration. |
+| `full` | No tool profile restriction. Use with explicit local trust. |
+
+Optional feature gates still apply. For example, `browser` requires both
+`tools.browser.enabled=true` and a profile that allows browser tools.
 
 ## Runtime Data
 

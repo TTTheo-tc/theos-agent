@@ -18,6 +18,13 @@ src/feishu/            # Feishu/Lark API client, token management, doc conversio
 bridge/                # Node.js WhatsApp bridge (Baileys + WebSocket server)
 ```
 
+The Python package default install does not include channel SDKs. Each adapter is
+paired with an optional dependency extra such as `channels-telegram`,
+`channels-feishu`, `channels-slack`, `channels-discord`, `channels-whatsapp`,
+`channels-dingtalk`, `channels-qq`, `channels-mochat`, or `matrix`.
+The core wheel also excludes the WhatsApp bridge source; the sdist and full
+Docker target retain `bridge/`.
+
 ## Entry Points
 
 | Entry Point | Role |
@@ -35,6 +42,10 @@ bridge/                # Node.js WhatsApp bridge (Baileys + WebSocket server)
 `registry.py` defines a tuple of `ChannelSpec` dataclasses (`registry.py:33-95`). Each spec declares `name`, `config_attr`, `module`, `class_name`, and optional `extra_kwargs` (config dotpaths resolved at init time). The manager uses `importlib.import_module` for lazy loading -- a channel's dependencies are only imported if enabled.
 
 Registered channels: `telegram`, `whatsapp`, `discord`, `feishu`, `mochat`, `dingtalk`, `email`, `slack`, `qq`, `matrix`.
+
+All top-level channel configs default to `enabled=false`. Enabling a channel
+without installing its extra should fail at channel startup without preventing
+other enabled channels from starting.
 
 ### BaseChannel Contract
 
@@ -59,7 +70,7 @@ The base class provides:
 
 The WhatsApp channel uses a two-process architecture:
 
-1. **Bridge process** (`bridge/src/`): Node.js WebSocket server using `@whiskeysockets/baileys` for WhatsApp Web protocol. `BridgeServer` (`server.ts:20`) binds to `127.0.0.1` only, with optional `BRIDGE_TOKEN` auth. It wraps `WhatsAppClient` (`whatsapp.ts:36`) which handles connection lifecycle, QR auth, reconnection, and message extraction.
+1. **Bridge process** (`bridge/src/`): Node.js WebSocket server using `@whiskeysockets/baileys` for WhatsApp Web protocol. `BridgeServer` (`server.ts:20`) binds to `127.0.0.1` only, with optional `BRIDGE_TOKEN` auth. It wraps `WhatsAppClient` (`whatsapp.ts:36`) which handles connection lifecycle, QR auth, reconnection, and message extraction. Node.js is required only for this bridge/full image path, not for the core Python runtime.
 
 2. **Python adapter** (`channels/whatsapp.py:13`): Connects to the bridge via `websockets`. Handles `message`, `status`, `qr`, and `error` events from the bridge. Outbound sends are JSON `{type: "send", to, text}` over the WebSocket.
 
@@ -120,6 +131,7 @@ Platform SDK/WS
 4. Feishu dedup cache is bounded at 1000 entries (`feishu.py:812-813`).
 5. `InboundMessage.session_key` defaults to `"{channel}:{chat_id}"` unless overridden (e.g., Slack thread-scoped sessions use `"slack:{chat_id}:{thread_ts}"`).
 6. Config secret refs are resolved at channel init time via `resolve_data_secret_refs` (`manager.py:47`).
+7. Channel imports stay lazy; adding a channel-specific dependency must not make `theos agent` require that dependency.
 
 ## Extension Points
 
@@ -132,6 +144,7 @@ Platform SDK/WS
 | Failure | Impact | Mitigation |
 |---|---|---|
 | Channel start fails | Channel excluded, others continue (`manager.py:63-68`) | Logged as warning, no crash |
+| Channel extra not installed | That channel fails during lazy import/startup | Install the matching `channels-*` extra or disable the channel |
 | Outbound send fails | Message lost for that delivery | Logged with context; no retry queue |
 | WhatsApp bridge disconnect | Auto-reconnect in both bridge (`whatsapp.ts:88-106`) and Python adapter (`whatsapp.py:61-68`) with 5s backoff |
 | Feishu WS disconnect | Daemon thread auto-reconnects with 5s sleep (`feishu.py:354-362`) |

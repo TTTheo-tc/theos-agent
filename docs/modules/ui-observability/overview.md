@@ -49,6 +49,11 @@ ui/                   # React SPA (separate build artifact)
 
 **Frontend stack** (from `ui/package.json`): React 19, React Router 7, Radix UI + shadcn (components), Lucide (icons), and cmdk (command palette). Built with Vite. In development, the Vite server runs on port 5173 and proxies `/api` to `http://localhost:8080` (`ui/vite.config.ts`).
 
+UI is opt-in. The default config has `gateway.ui.enabled=false`, the core
+wheel does not package `ui/dist`, and the `ui` Python extra installs the
+Starlette/Uvicorn backend dependency set. The full Docker target builds and
+ships the React frontend.
+
 ## Current Frontend Outline
 
 The active UI is a four-page personal knowledge workspace:

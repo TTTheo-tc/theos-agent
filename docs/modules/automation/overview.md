@@ -44,6 +44,11 @@ src/daemon/
 
 Callers: `src/cli/commands.py` (gateway command) creates CronService and HeartbeatService. PollerService is wired by the gateway startup. Daemon commands (`theos gateway install/uninstall`) use `resolve_service()`.
 
+Runtime defaults are slim: cron service wiring is available, but heartbeat is
+disabled by `gateway.heartbeat.enabled=false` and pollers are disabled until
+their individual config flags are enabled. X/Twitter polling additionally
+requires the `pollers` optional dependency extra.
+
 ## Architecture
 
 Three independent subsystems, no coupling between them:

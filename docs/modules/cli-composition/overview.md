@@ -4,7 +4,7 @@
 
 ## Purpose
 
-- **Owns**: The Typer CLI application, all user-facing commands (`agent`, `gateway`, `init`, `status`, `channels`, `feishu-auth`, `report`, `ui`, `cron`, `auth`, `provider`), the interactive REPL, the Pydantic configuration schema, and config file I/O (load/save/migrate/encrypt).
+- **Owns**: The Typer CLI application, all user-facing commands (`agent`, `gateway`, `init`, `status`, `channels`, `feishu-auth`, `report`, `ui`, `cron`, `auth`, `provider`, `config`), the interactive REPL, the Pydantic configuration schema, and config file I/O (load/save/migrate/encrypt).
 - **Does Not Own**: Agent loop execution logic (`src/agent/`), channel adapters (`src/channels/`), daemon lifecycle management (`src/daemon/`), or the dashboard HTTP server (`src/ui/`). The CLI wires these together but does not implement their internals.
 
 ## Source Scope
@@ -26,6 +26,7 @@ src/cli/
   cron_cmd.py          # `theos cron` sub-commands
   report_cmd.py        # `theos report daily/weekly`
   ui_cmd.py            # `theos ui` standalone dashboard viewer
+  config_cmd.py        # `theos config` presets, feature listing, compact/show
 
 src/config/
   schema.py            # Root Config (BaseSettings), all nested Pydantic models
@@ -41,6 +42,7 @@ src/config/
 | `agent()` | `theos agent [-m MSG]` | `src/cli/agent_cmd.py:23` |
 | `gateway()` | `theos gateway` | `src/cli/gateway_cmd.py:269` |
 | `init()` | `theos init [--reset] [--no-daemon]` | `src/cli/init_cmd.py:199` |
+| `config` sub-app | `theos config ...` | `src/cli/commands.py` + `src/cli/config_cmd.py` |
 | `status()` | `theos status` | `src/cli/commands.py:483` |
 | `load_config()` | Any command that reads config | `src/config/loader.py:26` |
 
@@ -60,10 +62,10 @@ Config (BaseSettings)
   +-- ChannelsConfig (WhatsApp, Discord, Feishu, Telegram, Slack, DingTalk, QQ, Email, ...)
   +-- ProvidersConfig (16 provider slots, each a ProviderConfig with api_key/api_base/extra_headers)
   +-- GatewayConfig (host, port, HeartbeatConfig, PollersConfig, UIConfig)
-  +-- ToolsConfig (web search/fetch, exec, stock, browser, MCP servers)
+  +-- ToolsConfig (profile, web search/fetch, exec, stock, browser, MCP servers)
   +-- SecurityConfig + AutonomyConfig
   +-- MemoryConfig (injection, search, compaction, flush, GC)
-  +-- KnowledgeGraphConfig, EmbeddingConfig, ResponseCacheConfig
+  +-- LearningConfig, KnowledgeGraphConfig, EmbeddingConfig, ResponseCacheConfig
 ```
 
 All models extend a `Base(BaseModel)` with `alias_generator=to_camel` and `populate_by_name=True`, accepting both camelCase and snake_case in JSON (`schema.py:37-40`).
@@ -75,6 +77,29 @@ All models extend a `Base(BaseModel)` with `alias_generator=to_camel` and `popul
 3. **Agent command**: loads config, creates `MessageBus`, `make_provider()`, optional `CronService`, then constructs `AgentLoop`. Single-message mode calls `process_direct()`; interactive mode starts the bus consumer loop (`agent_cmd.py:90-352`).
 4. **Gateway command**: loads config, runs startup checks, creates `AgentLoop`, `ChannelManager`, `CronService`, `HeartbeatService`, `PollerService`, optional OAuth callback server, optional UI server, then enters the async event loop (`gateway_cmd.py:269-750`).
 5. **Init wizard**: sequential steps -- reset (optional), config create/refresh, symlinks, hooks, proxy, workspace+soul, providers, channels, web search, orchestration mode, daemon install (`init_cmd.py:199-426`).
+6. **Config presets**: `theos config full-access` and `theos config safe` mutate only the local permission/tool profile boundary; `features`, `show`, and `compact` are read/serialization helpers.
+
+### Config Defaults and Presets
+
+The source default is conservative:
+
+| Path | Default | Meaning |
+|---|---|---|
+| `agents.mode` | `single` | local single-agent runtime |
+| `agents.teamEnabled` | `false` | `/agent team` is gated |
+| `agents.genverEnabled` | `false` | `/agent genver` is gated |
+| `tools.profile` | `minimal` | six always-on tools |
+| `learning.enabled` | `false` | no hooks/instinct context |
+| `knowledgeGraph.enabled` | `false` | markdown memory remains enabled; KG is opt-in |
+| `tools.browser.enabled` | `false` | browser automation is opt-in |
+| `gateway.ui.enabled` | `false` | dashboard server is opt-in |
+| `gateway.heartbeat.enabled` | `false` | no scheduled heartbeat prompts |
+
+`theos config full-access` is the one-command preset for a trusted personal
+development machine. It sets `tools.profile=full`, enables browser registration,
+opens workspace/path restrictions, switches autonomy to `full`, and disables
+orchestrator approval/risk gates. `theos config safe` restores the conservative
+tool/security defaults without touching provider or channel credentials.
 
 ## State & Persistence
 
@@ -94,6 +119,7 @@ All models extend a `Base(BaseModel)` with `alias_generator=to_camel` and `popul
 3. All provider matching uses the `PROVIDERS` registry order; explicit prefix match wins over keyword match (`schema.py:493-515`).
 4. The `gateway` command supports graceful restart via `SIGHUP` -- it drains pending outbound, waits for channels, then `os.execv()` restarts the process (`gateway_cmd.py:563-749`).
 5. Encrypted config values fail loudly if the master key is wrong or missing, never silently falling back to encrypted ciphertext (`loader.py:55-66`).
+6. Runtime defaults must stay slim; new advanced systems should default off and appear in `theos config features`.
 
 ## Extension Points
 
