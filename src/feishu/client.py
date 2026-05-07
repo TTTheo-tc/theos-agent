@@ -46,7 +46,7 @@ class FeishuClient:
         cache_dir: str = _DEFAULT_CACHE_DIR,
         token_dir: str = _DEFAULT_TOKEN_DIR,
         domain: str = "feishu.cn",
-    ):
+    ) -> None:
         self._app_id = app_id
         self._app_secret = app_secret
         self._cache_dir = Path(cache_dir).expanduser()
@@ -115,7 +115,7 @@ class FeishuClient:
         except (json.JSONDecodeError, OSError):
             return None
 
-    def _cache_set(self, key: str, data) -> None:
+    def _cache_set(self, key: str, data: dict[str, Any] | list[Any]) -> None:
         path = self._cache_dir / f"{key}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -294,7 +294,7 @@ class FeishuClient:
 
     # -- renderer factories (closures for feishu2md callbacks) --
 
-    def _make_bitable_renderer(self, max_age):
+    def _make_bitable_renderer(self, max_age: int | None) -> Callable[[str], str]:
         def render(token: str) -> str:
             try:
                 if "_tbl" in token:
@@ -308,7 +308,7 @@ class FeishuClient:
 
         return render
 
-    def _make_sheet_renderer(self, max_age):
+    def _make_sheet_renderer(self, max_age: int | None) -> Callable[[str], str]:
         def render(token: str) -> str:
             try:
                 parts = token.rsplit("_", 1)
@@ -321,7 +321,7 @@ class FeishuClient:
 
         return render
 
-    def _make_subpage_renderer(self):
+    def _make_subpage_renderer(self) -> Callable[[str], str]:
         def render(wiki_token: str) -> str:
             try:
                 children = self.list_pages(f"{self.base_url}/wiki/{wiki_token}")
@@ -756,7 +756,7 @@ class FeishuClient:
         self,
         user_or_chat: str,
         msg_type: str,
-        payload: dict,
+        payload: dict[str, Any],
         *,
         ensure_ascii: bool = True,
     ) -> dict:
@@ -771,7 +771,7 @@ class FeishuClient:
         user_or_chat: str,
         title: str,
         content: str,
-        buttons: list[dict] | None = None,
+        buttons: list[dict[str, Any]] | None = None,
     ) -> dict:
         """Send an interactive card message.
 
@@ -824,7 +824,7 @@ class FeishuClient:
         """
         return self._send_json_message(user_or_chat, "file", {"file_key": file_key})
 
-    def send_post(self, user_or_chat: str, title: str, content: list[list[dict]]) -> dict:
+    def send_post(self, user_or_chat: str, title: str, content: list[list[dict[str, Any]]]) -> dict:
         """Send a rich text (post) message.
 
         Args:
@@ -1043,7 +1043,7 @@ class FeishuClient:
         md += f"\n\n*{rows} rows x {cols} cols*"
         return md
 
-    def write_sheet(self, url: str, range: str, values: list[list]) -> dict:
+    def write_sheet(self, url: str, range: str, values: list[list[Any]]) -> dict:
         """Write values to spreadsheet cells.
 
         Args:
@@ -1059,7 +1059,7 @@ class FeishuClient:
         sheet_id, _ = self._resolve_sheet_id(token, sheet_id)
         return api_sheets.write_sheet_values(self._client, token, sheet_id, range, values)
 
-    def append_sheet(self, url: str, values: list[list]) -> dict:
+    def append_sheet(self, url: str, values: list[list[Any]]) -> dict:
         """Append rows to the end of a spreadsheet.
 
         Args:
@@ -1113,13 +1113,15 @@ class FeishuClient:
 
         If start/end not provided, defaults to today 00:00-23:59 local time.
         """
-        self.ensure_token()
         if not start or not end:
             default_start, default_end = self._default_day_range()
             start = start or default_start
             end = end or default_end
-        return api_calendar.list_events(
-            self._client, calendar_id=calendar_id, start_time=start, end_time=end
+        return self._call_api(
+            api_calendar.list_events,
+            calendar_id=calendar_id,
+            start_time=start,
+            end_time=end,
         )
 
     def calendar_get_event(self, event_id: str, calendar_id: str = "primary") -> dict:
@@ -1132,7 +1134,7 @@ class FeishuClient:
         start_time: str,
         end_time: str,
         calendar_id: str = "primary",
-        **kwargs,
+        **kwargs: Any,
     ) -> dict:
         """Create a calendar event.
 
