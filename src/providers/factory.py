@@ -123,8 +123,8 @@ def _is_codex_provider(
     provider_name: str | None,
     model: str,
 ) -> bool:
-    return (
-        (spec and spec.backend == "codex")
+    return bool(
+        (spec is not None and spec.backend == "codex")
         or provider_name == "openai_codex"
         or model.startswith("openai-codex/")
     )

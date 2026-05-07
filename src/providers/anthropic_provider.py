@@ -34,10 +34,6 @@ def _gen_tool_id() -> str:
     return "toolu_" + "".join(secrets.choice(_ALNUM) for _ in range(22))
 
 
-def _parse_tool_input(raw: Any) -> dict[str, Any]:
-    return parse_tool_arguments_object(raw)
-
-
 def _chat_error_response(exc: Exception, model_name: str) -> LLMResponse:
     import anthropic as _anthropic
 
@@ -260,7 +256,7 @@ class AnthropicProvider(LLMProvider):
                     "type": "tool_use",
                     "id": tc.get("id") or _gen_tool_id(),
                     "name": func.get("name", ""),
-                    "input": _parse_tool_input(func.get("arguments", "{}")),
+                    "input": parse_tool_arguments_object(func.get("arguments", "{}")),
                 }
             )
 
@@ -598,7 +594,7 @@ class AnthropicProvider(LLMProvider):
                         tc = ToolCallRequest(
                             id=current_tool["id"],
                             name=current_tool["name"],
-                            arguments=_parse_tool_input(raw_args) if raw_args else {},
+                            arguments=parse_tool_arguments_object(raw_args) if raw_args else {},
                         )
                         tool_calls.append(tc)
                         current_tool = None

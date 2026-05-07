@@ -39,10 +39,6 @@ def _short_tool_id() -> str:
     return "".join(secrets.choice(_ALNUM) for _ in range(9))
 
 
-def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
-    return parse_tool_arguments_object(raw)
-
-
 def _usage_dict(usage: Any, *, include_cache: bool = False) -> dict[str, int]:
     if not usage:
         return {}
@@ -157,7 +153,7 @@ def _build_stream_tool_calls(tc_accum: dict[int, dict[str, str]]) -> list[ToolCa
                 ToolCallRequest(
                     id=entry["id"] or _short_tool_id(),
                     name=name,
-                    arguments=_parse_tool_arguments(raw_args) if raw_args else {},
+                    arguments=parse_tool_arguments_object(raw_args) if raw_args else {},
                 )
             )
     return tool_calls
@@ -301,7 +297,7 @@ class OpenAICompatProvider(LLMProvider):
             ToolCallRequest(
                 id=tc.id or _short_tool_id(),
                 name=tc.function.name,
-                arguments=_parse_tool_arguments(tc.function.arguments),
+                arguments=parse_tool_arguments_object(tc.function.arguments),
             )
             for tc in msg.tool_calls or []
         ]
