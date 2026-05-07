@@ -14,11 +14,12 @@ distinct_queries >= 2.
 
 from __future__ import annotations
 
-import json
 import math
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from src.memory.json_utils import read_json_object
 
 _TARGETS_REL = Path("memory") / "instinct" / "recall_targets.json"
 
@@ -121,11 +122,8 @@ def rank_recall_candidates(
     if not targets_path.exists():
         return []
 
-    try:
-        targets = json.loads(targets_path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return []
-    if not isinstance(targets, dict):
+    targets, valid_targets = read_json_object(targets_path)
+    if not valid_targets:
         return []
 
     candidates: list[dict[str, Any]] = []

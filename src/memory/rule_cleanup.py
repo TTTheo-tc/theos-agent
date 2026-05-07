@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +10,7 @@ from loguru import logger
 
 from src.cron.service import CronService
 from src.cron.types import CronSchedule
+from src.memory.json_utils import read_json_object
 from src.memory.structured_models import is_noise_response, is_transferable_rule_text
 from src.utils.helpers import ensure_dir
 
@@ -206,11 +206,8 @@ def _source_task_reason(source_task_ids: list[str], task_statuses: dict[str, str
 
 
 def _load_json_object(path: Path) -> dict | None:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    return payload if isinstance(payload, dict) else None
+    payload, valid = read_json_object(path)
+    return payload if valid else None
 
 
 def _string_list(value: object) -> list[str]:

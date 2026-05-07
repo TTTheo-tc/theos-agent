@@ -21,6 +21,7 @@ from typing import Any, TextIO
 
 from loguru import logger
 
+from src.memory.json_utils import read_json_object
 from src.memory.memory_events import append_memory_event
 
 _INSTINCT_DIR = Path("memory") / "instinct"
@@ -54,21 +55,11 @@ def _atomic_write(path: Path, content: str) -> None:
         raise
 
 
-def _read_json_object(path: Path) -> tuple[dict[str, Any], bool]:
-    if not path.exists():
-        return {}, False
-    try:
-        data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return {}, False
-    return (data, True) if isinstance(data, dict) else ({}, False)
-
-
 def _checkpoint_offset(path: Path, targets: dict[str, dict[str, Any]]) -> tuple[int, bool]:
     if not path.exists() or not targets:
         return 0, False
 
-    checkpoint, valid_json = _read_json_object(path)
+    checkpoint, valid_json = read_json_object(path)
     if not valid_json:
         return 0, False
     if "byte_offset" not in checkpoint:
@@ -203,7 +194,7 @@ def _fold_recall_journal_locked(workspace: Path) -> int:
     targets_path = workspace / _TARGETS_REL
     checkpoint_path = workspace / _CHECKPOINT_REL
 
-    targets, _targets_valid = _read_json_object(targets_path)
+    targets, _targets_valid = read_json_object(targets_path)
     offset, checkpoint_valid = _checkpoint_offset(checkpoint_path, targets)
     if targets and not checkpoint_valid:
         targets = {}
@@ -244,9 +235,8 @@ async def ingest_recall_to_kg(workspace: Path) -> int:
     if not targets_path.exists():
         return 0
 
-    try:
-        targets = json.loads(targets_path.read_text())
-    except (json.JSONDecodeError, OSError):
+    targets, targets_valid = read_json_object(targets_path)
+    if not targets_valid:
         return 0
 
     from src.memory.structured import StructuredMemoryStore, _coerce_metadata

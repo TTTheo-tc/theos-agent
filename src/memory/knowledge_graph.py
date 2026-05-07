@@ -18,6 +18,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.memory.json_utils import coerce_json_object
 from src.store.database import Database
 
 _SCHEMA_SQL = """\
@@ -141,24 +142,12 @@ def _join_list(items: list[str] | None) -> str:
     return ",".join(s.strip() for s in items if s and s.strip())
 
 
-def _json_dict(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return dict(value)
-    if not isinstance(value, str):
-        return {}
-    try:
-        parsed = json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
 def _metadata_json(existing: dict[str, Any] | None, patch: Any) -> str:
     if existing is None:
         return patch if isinstance(patch, str) else json.dumps(patch, ensure_ascii=False)
 
-    metadata = _json_dict(existing.get("metadata") or "{}")
-    metadata.update(_json_dict(patch))
+    metadata = coerce_json_object(existing.get("metadata") or "{}")
+    metadata.update(coerce_json_object(patch))
     return json.dumps(metadata, ensure_ascii=False)
 
 

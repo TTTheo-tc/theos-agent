@@ -533,6 +533,16 @@ class TestFoldRecallJournal:
 
 class TestIngestRecallToKg:
     @pytest.mark.asyncio
+    async def test_ingest_ignores_non_object_targets(self, tmp_path):
+        from src.memory.recall_maintenance import ingest_recall_to_kg
+
+        targets_path = tmp_path / "memory" / "instinct" / "recall_targets.json"
+        targets_path.parent.mkdir(parents=True, exist_ok=True)
+        targets_path.write_text("[]")
+
+        assert await ingest_recall_to_kg(tmp_path) == 0
+
+    @pytest.mark.asyncio
     async def test_ingest_tolerates_invalid_existing_rule_metadata(self, tmp_path):
         from src.memory.recall_maintenance import ingest_recall_to_kg
         from src.memory.structured import StructuredMemoryStore, _coerce_metadata

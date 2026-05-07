@@ -12,7 +12,6 @@ This is a pure structured backend. It does NOT write markdown files
 from __future__ import annotations
 
 import asyncio
-import json
 import shutil
 import uuid
 from contextlib import suppress
@@ -27,6 +26,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from src.memory.embeddings import EmbeddingProvider
 
+from src.memory.json_utils import coerce_json_object, read_json_object
 from src.memory.knowledge_graph import KnowledgeGraph, compute_importance
 from src.memory.knowledge_search import KnowledgeSearch
 from src.memory.mmr import mmr_rerank
@@ -113,15 +113,7 @@ def _now_iso() -> str:
 
 def _coerce_metadata(value: Any) -> dict[str, Any]:
     """Return parsed metadata dict from KG rows, tolerating legacy bad JSON."""
-    if isinstance(value, dict):
-        return value
-    if not isinstance(value, str):
-        return {}
-    try:
-        parsed = json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+    return coerce_json_object(value)
 
 
 def _clean_deduped_strings(items: list[Any] | None) -> list[str]:
@@ -175,11 +167,8 @@ def _legacy_json_files(directory: Path) -> list[tuple[Path, dict[str, Any]]]:
 
     payloads: list[tuple[Path, dict[str, Any]]] = []
     for path in sorted(directory.glob("*.json")):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if isinstance(data, dict):
+        data, valid = read_json_object(path)
+        if valid:
             payloads.append((path, data))
     return payloads
 

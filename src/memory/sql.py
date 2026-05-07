@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from src.memory.json_utils import coerce_json_object
 from src.store.database import Database
 
 _MESSAGE_COLUMNS = "id, session_key, role, content, timestamp, metadata, consolidated"
@@ -108,12 +109,4 @@ class ShortTermMemoryStore:
 def _metadata_dict(value: Any) -> dict[str, Any]:
     if not value:
         return {}
-    if isinstance(value, dict):
-        return dict(value)
-    if not isinstance(value, str):
-        return {}
-    try:
-        parsed = json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+    return coerce_json_object(value)
