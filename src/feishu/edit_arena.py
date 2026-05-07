@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import difflib
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
+from typing import Any
 
 from loguru import logger
 
@@ -59,7 +61,7 @@ class CommitResult:
     skipped: list[dict] = field(default_factory=list)
     final_revision_id: int | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         d = {
             "success": self.success,
             "applied": self.applied,
@@ -91,9 +93,9 @@ class EditArena:
         page_block_id: str,
         annotations: dict,
         original_md: str,
-        client=None,
+        client: Any | None = None,
         block_map: dict[str, dict] | None = None,
-    ):
+    ) -> None:
         self._document_id = document_id
         self._page_block_id = page_block_id
         self._original_md = original_md
@@ -107,7 +109,7 @@ class EditArena:
         self._block_map: dict[str, dict] = block_map or {}
 
     @classmethod
-    def from_url(cls, fs, url: str) -> EditArena:
+    def from_url(cls, fs: Any, url: str) -> EditArena:
         """Create an EditArena from a Feishu URL.
 
         Args:
@@ -657,7 +659,7 @@ def _build_table_patch_ops(
     return table_patch_ops, opcode_consumed
 
 
-def _format_dry_run_op(op: dict) -> dict:
+def _format_dry_run_op(op: dict) -> dict[str, Any]:
     if op.get("type") == "table_cell_patch":
         return {
             "type": "table_cell_patch",
@@ -836,7 +838,7 @@ def _iter_changed_table_cells(
     new_grid: list[list[str]],
     row_size: int,
     col_size: int,
-):
+) -> Iterator[tuple[int, int, str, str]]:
     patch_rows = min(len(old_grid), len(new_grid), row_size)
     old_cols = len(old_grid[0]) if old_grid else 0
     new_cols = len(new_grid[0]) if new_grid else 0

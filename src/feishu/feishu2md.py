@@ -14,9 +14,13 @@ from __future__ import annotations
 import contextlib
 import json
 import urllib.parse
-from typing import Callable
+from collections.abc import Callable
 
 from loguru import logger
+
+
+def _blocks_by_id(blocks: list[dict]) -> dict[str, dict]:
+    return {block["block_id"]: block for block in blocks if "block_id" in block}
 
 
 class FeishuParser:
@@ -30,7 +34,7 @@ class FeishuParser:
         sub_page_list_renderer: Callable[[str], str] | None = None,
         output_annotations: dict | None = None,
         mention_user_resolver: Callable[[str], str] | None = None,
-    ):
+    ) -> None:
         self.block_map: dict[str, dict] = {}
         self.source_docs = source_docs or {}
         self.bitable_renderer = bitable_renderer
@@ -39,13 +43,9 @@ class FeishuParser:
         self.output_annotations = output_annotations
         self.mention_user_resolver = mention_user_resolver
         # 为每个 source document 构建 block_map
-        self.source_block_maps: dict[str, dict[str, dict]] = {}
-        for doc_id, blocks in self.source_docs.items():
-            block_map = {}
-            for block in blocks:
-                if "block_id" in block:
-                    block_map[block["block_id"]] = block
-            self.source_block_maps[doc_id] = block_map
+        self.source_block_maps: dict[str, dict[str, dict]] = {
+            doc_id: _blocks_by_id(blocks) for doc_id, blocks in self.source_docs.items()
+        }
 
     def parse_document(self, doc: list[dict]) -> str:
         """解析飞书文档"""
@@ -54,9 +54,7 @@ class FeishuParser:
             return ""
 
         # 构建block映射表
-        for block in doc:
-            if "block_id" in block:
-                self.block_map[block["block_id"]] = block
+        self.block_map.update(_blocks_by_id(doc))
 
         # 找到根节点（page类型）
         root_block = None
@@ -760,15 +758,7 @@ class FeishuParser:
 
     def parse_quote_container_block(self, block: dict) -> str:
         children = block.get("children", [])
-        result = []
-        for child_id in children:
-            if child_id not in self.block_map:
-                continue
-            child_block = self.block_map[child_id]
-            child_content = self.parse_block(child_block, 0)
-            if child_content.strip():
-                result.append(child_content)
-
+        result = self._parse_child_parts(children, 0)
         return ">   " + ">   ".join(result)
 
     def parse_task_block(self, block: dict) -> str:

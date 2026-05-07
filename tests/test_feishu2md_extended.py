@@ -215,6 +215,32 @@ class TestViewBlock:
 
 
 # ---------------------------------------------------------------------------
+# Quote container (type 34)
+# ---------------------------------------------------------------------------
+
+
+class TestQuoteContainerBlock:
+    def test_quote_container_reuses_child_parser(self):
+        quoted = {
+            "block_id": "q_c1",
+            "block_type": 2,
+            "text": {"elements": [{"text_run": {"content": "Quoted text"}}]},
+        }
+        empty = {
+            "block_id": "q_c2",
+            "block_type": 2,
+            "text": {"elements": []},
+        }
+        block = {
+            "block_id": "q1",
+            "block_type": 34,
+            "children": ["q_c1", "missing", "q_c2"],
+        }
+        parser = _make_parser([block, quoted, empty])
+        assert parser.parse_block(block) == ">   Quoted text\n"
+
+
+# ---------------------------------------------------------------------------
 # Iframe (type 26)
 # ---------------------------------------------------------------------------
 

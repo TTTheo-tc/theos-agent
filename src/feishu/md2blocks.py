@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from types import SimpleNamespace
 from typing import Any
 
 from markdown_it import MarkdownIt
@@ -226,19 +227,12 @@ def _parse_inline_tokens(tokens: list) -> list[dict]:
         elif tok.type == "s_close":
             _remove_last(style_stack, "strikethrough")
         elif tok.type == "link_open":
-            href = ""
-            for attr_name, attr_val in (tok.attrs or {}).items():
-                if attr_name == "href":
-                    href = attr_val
-            link_href = href
+            link_href = _attr_value(tok, "href")
         elif tok.type == "link_close":
             link_href = None
         elif tok.type == "image":
             # Inline image — emit as text with URL for now
-            src = ""
-            for attr_name, attr_val in (tok.attrs or {}).items():
-                if attr_name == "src":
-                    src = attr_val
+            src = _attr_value(tok, "src")
             alt = tok.content or ""
             if src:
                 elements.append(_text_element(f"![{alt}]({src})"))
@@ -250,6 +244,13 @@ def _parse_inline_tokens(tokens: list) -> list[dict]:
             elements.append(_text_element(tok.content))
         # Ignore unknown inline tokens silently
     return elements
+
+
+def _attr_value(tok: Any, name: str) -> str:
+    for attr_name, attr_val in (tok.attrs or {}).items():
+        if attr_name == name:
+            return attr_val
+    return ""
 
 
 def _styled_element(content: str, styles: list[str], link_href: str | None) -> dict:
@@ -268,7 +269,7 @@ def _styled_element(content: str, styles: list[str], link_href: str | None) -> d
     return _text_element(content, style if style else None)
 
 
-def _remove_last(lst: list, value: str) -> None:
+def _remove_last(lst: list[str], value: str) -> None:
     """Remove last occurrence of *value* from *lst*."""
     for i in range(len(lst) - 1, -1, -1):
         if lst[i] == value:
@@ -841,11 +842,6 @@ def _find_close(tokens: list, start: int, open_type: str, close_type: str) -> in
 def _clone_inline_without_checkbox(tok) -> Any:
     """Create a modified inline token with checkbox prefix stripped from children."""
 
-    class _FakeToken:
-        def __init__(self, children, content):
-            self.children = children
-            self.content = content
-
     if not tok.children:
         return tok
 
@@ -873,7 +869,10 @@ def _clone_inline_without_checkbox(tok) -> Any:
             )
             break
 
-    return _FakeToken(new_children, re.sub(r"^\[[ xX]\]\s*", "", tok.content or ""))
+    return SimpleNamespace(
+        children=new_children,
+        content=re.sub(r"^\[[ xX]\]\s*", "", tok.content or ""),
+    )
 
 
 # ---------------------------------------------------------------------------
