@@ -162,14 +162,12 @@ class ContextBuilder:
 
         skills_summary = self.skills.build_skills_summary()
         if skills_summary:
-            static.append(
-                f"""# Skills
+            static.append(f"""# Skills
 
 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
 Skills with available="false" need dependencies installed first - you can try installing them with apt/brew.
 
-{skills_summary}"""
-            )
+{skills_summary}""")
 
         roles_section = self._build_roles_section()
         if roles_section:
@@ -183,11 +181,7 @@ Skills with available="false" need dependencies installed first - you can try in
 
         tool_list = ", ".join(f"`{name}`" for name in tools)
         policy = self._memory_recall_policy(names)
-        return (
-            "# Memory Tools\n\n"
-            f"You have {tool_list} tools available.\n\n"
-            f"{policy}"
-        )
+        return "# Memory Tools\n\n" f"You have {tool_list} tools available.\n\n" f"{policy}"
 
     def _selected_memory_tool_names(self, memory_tool_names: Iterable[str] | None) -> set[str]:
         return set(self.MEMORY_TOOL_ORDER if memory_tool_names is None else memory_tool_names)
@@ -299,7 +293,9 @@ Skills with available="false" need dependencies installed first - you can try in
         except Exception:
             pass  # Fall through to hardcoded default
 
-        return "# theos\n\n## Runtime\n{runtime}\n\n## Workspace\nYour workspace is at: {group_path}"
+        return (
+            "# theos\n\n## Runtime\n{runtime}\n\n## Workspace\nYour workspace is at: {group_path}"
+        )
 
     @staticmethod
     def _build_runtime_context(
@@ -316,7 +312,12 @@ Skills with available="false" need dependencies installed first - you can try in
         return ContextBuilder._RUNTIME_CONTEXT_TAG + "\n" + "\n".join(lines)
 
     def _load_bootstrap_files(self) -> str:
-        """Load bootstrap files: per-group first, fallback to global workspace."""
+        """Load bootstrap files plus gitignored local overlays.
+
+        Public repo instructions live at the group workspace root. Private,
+        machine-specific instructions can live in ``.theos/BOT.md`` under the
+        same workspace and are appended after the public bootstrap files.
+        """
         parts = []
 
         for filename in self.BOOTSTRAP_FILES:
@@ -327,6 +328,11 @@ Skills with available="false" need dependencies installed first - you can try in
             if file_path.exists():
                 content = file_path.read_text(encoding="utf-8")
                 parts.append(f"## {filename}\n\n{content}")
+
+        local_bot = self.group_workspace / ".theos" / "BOT.md"
+        if local_bot.exists():
+            content = local_bot.read_text(encoding="utf-8")
+            parts.append(f"## .theos/BOT.md\n\n{content}")
 
         return "\n\n".join(parts) if parts else ""
 

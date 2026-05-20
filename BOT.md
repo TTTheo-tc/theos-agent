@@ -17,6 +17,7 @@ Instruction-source mapping:
 - Repo-root `CLAUDE.md`, `GEMINI.md`, and `AGENTS.md` should remain symlinks to `BOT.md`.
 - `theos agent` reads workspace bootstrap files, so `src/templates/AGENTS.md` is the bridge that points runtime agent sessions back to repo-local instructions.
 - If you change durable development rules that `theos agent` should also follow, update both `BOT.md` and `src/templates/AGENTS.md`.
+- Personal or machine-specific instructions must not be committed to public repo docs. Put them in the gitignored local overlay `./.theos/BOT.md`; `theos agent` appends that overlay after repo bootstrap files when present.
 
 ## Reading Order
 

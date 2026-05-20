@@ -158,6 +158,25 @@ def test_system_prompt_only_loads_merged_bootstrap_files(tmp_path) -> None:
     assert "## IDENTITY.md" not in prompt
 
 
+def test_system_prompt_loads_local_theos_bot_after_project_bootstrap(tmp_path) -> None:
+    workspace = _make_workspace(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    local_dir = project / ".theos"
+    local_dir.mkdir()
+    (workspace / "AGENTS.md").write_text("global agents", encoding="utf-8")
+    (project / "AGENTS.md").write_text("project agents", encoding="utf-8")
+    (local_dir / "BOT.md").write_text("private local bot", encoding="utf-8")
+
+    builder = ContextBuilder(workspace, group_workspace=project)
+    prompt = builder.build_system_prompt()
+
+    assert "project agents" in prompt
+    assert "private local bot" in prompt
+    assert "global agents" not in prompt
+    assert prompt.index("project agents") < prompt.index("private local bot")
+
+
 def test_instinct_core_is_gated_by_learning_config(tmp_path) -> None:
     workspace = _make_workspace(tmp_path)
 

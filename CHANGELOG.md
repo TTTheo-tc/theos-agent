@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-05-09
+- **feat(agent)**: load gitignored `.theos/BOT.md` bootstrap overlays after repo bootstrap files, and document the public/project vs private/local instruction split
+
 ## 2026-04-14
 - **feat(memory)**: extend recall journal entries with normalized `claim_hash` (SHA1[:12]) for grounding, and extend `recall_targets.json` with cumulative `total_score` plus per-day `daily_count` / `daily_counts` aggregates for downstream ranking
 - **feat(memory)**: add unified memory event log at `memory/instinct/memory_events.jsonl` with `memory.recall.folded`, `memory.recall.ingested`, and `memory.flush.completed` emissions wired into fold / ingest / pre-compaction flush

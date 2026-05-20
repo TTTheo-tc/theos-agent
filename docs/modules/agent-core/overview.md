@@ -168,7 +168,7 @@ A single turn (non-GenVer) flows through:
 4. `_process_message` (`loop.py:1213`):
    - Inits session, runs safety inbound scan
    - Builds context via `ContextBuilder.build_messages()` (system prompt
-     with identity + bootstrap + memory + skills, plus conversation history)
+     with identity + bootstrap + gitignored `.theos/BOT.md` local overlay + memory + skills, plus conversation history)
    - The `# Memory Tools` section now includes a mandatory recall policy:
      historical questions not covered by injected memory must search before answering (`context.py:125-138`)
    - Calls `_run_inference` -> `_run_agent_loop` -> `run_tool_loop`
